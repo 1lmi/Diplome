@@ -1,5 +1,5 @@
 :root {
-  --bg: #fff5eb;
+  --bg: #ffffff;
   --bg-card: #ffffff;
   --accent: #ff6900;
   --accent-soft: #ffe1c2;
@@ -148,25 +148,28 @@ button {
 .product-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 24px;
+  gap: 32px;
 }
 
+/* карточка без видимых границ */
 .product-card {
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  padding: 18px 18px 16px;
-  box-shadow: var(--shadow-soft);
+  background: transparent;       /* не рисуем фон */
+  border-radius: 0;              /* убираем скругление */
+  padding: 10px 6px 18px;        /* оставляем немного отступа */
+
+  box-shadow: none;              /* без тени */
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition: transform var(--transition-fast);
 }
 
 .product-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);   /* лёгкий подъём при hover */
+  box-shadow: none;
 }
+
 
 .product-card__image-wrap {
   display: flex;
@@ -484,4 +487,13 @@ button {
   .main {
     padding-inline: 16px;
   }
+}
+
+.menu-category-section {
+  margin-bottom: 48px;
+}
+
+.menu-category-title {
+  font-size: 26px;
+  margin: 32px 0 18px;
 }
