@@ -2,20 +2,22 @@ import React, { useState } from "react";
 import { useCart } from "../cartContext";
 import { QuantityControl } from "./QuantityControl";
 import { api } from "../api";
+import type { Order } from "../types";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  onTrack?: (orderId: number, phone: string) => void;
 }
 
-export const CartDrawer: React.FC<Props> = ({ open, onClose }) => {
+export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
   const { items, totalPrice, changeQuantity, removeItem, clear } = useCart();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
-  const [successId, setSuccessId] = useState<number | null>(null);
+  const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const disabled = !items.length || !phone.trim() || loading;
@@ -37,8 +39,8 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose }) => {
           quantity: i.quantity,
         })),
       };
-      const res: any = await api.createOrder(body);
-      setSuccessId(res.id);
+      const res: Order = await api.createOrder(body);
+      setSuccessOrder(res);
       clear();
     } catch (e: any) {
       setError(e.message);
@@ -57,8 +59,8 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose }) => {
       </div>
 
       <div className="cart-drawer__content">
-        {items.length === 0 && !successId && (
-          <p className="cart-drawer__empty">Корзина пуста 🙂</p>
+        {items.length === 0 && !successOrder && (
+          <p className="cart-drawer__empty">Добавьте блюда из меню</p>
         )}
 
         {items.length > 0 && (
@@ -86,19 +88,27 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose }) => {
           </ul>
         )}
 
-        {successId && (
+        {successOrder && (
           <div className="cart-drawer__success">
-            Заказ №{successId} успешно создан!
+            Заказ №{successOrder.id} принят! Мы свяжемся, как только курьер выедет.
+            {onTrack && (
+              <button
+                className="link-btn"
+                onClick={() => onTrack(successOrder.id, phone.trim())}
+              >
+                Отследить статус
+              </button>
+            )}
           </div>
         )}
 
         {error && <div className="cart-drawer__error">{error}</div>}
 
         <div className="cart-drawer__form">
-          <h3>Данные для доставки</h3>
+          <h3>Ваши контакты</h3>
           <input
             className="input"
-            placeholder="Имя (необязательно)"
+            placeholder="Имя (по желанию)"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -116,7 +126,7 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose }) => {
           />
           <textarea
             className="textarea"
-            placeholder="Комментарий к заказу"
+            placeholder="Комментарий для кухни или курьера"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
           />
@@ -125,7 +135,7 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose }) => {
 
       <div className="cart-drawer__footer">
         <div className="cart-drawer__total">
-          <span>Сумма заказа</span>
+          <span>Итого</span>
           <span>{totalPrice} ₽</span>
         </div>
         <button
@@ -133,7 +143,7 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose }) => {
           disabled={disabled}
           onClick={handleOrder}
         >
-          {loading ? "Оформляем..." : "К оформлению заказа"}
+          {loading ? "Отправляем..." : "Оформить заказ"}
         </button>
       </div>
     </div>

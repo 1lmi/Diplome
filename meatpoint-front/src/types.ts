@@ -2,10 +2,12 @@ export interface Category {
   id: number;
   name: string;
   description?: string | null;
+  sort_order: number;
+  is_hidden?: boolean;
 }
 
 export interface MenuItem {
-  id: number;            // id product_sizes (v_menu_items.id)
+  id: number; // id product_sizes (v_menu_items.id)
   category_id: number;
   name: string;
   price: number;
@@ -14,6 +16,8 @@ export interface MenuItem {
   protein?: number | null;
   fat?: number | null;
   carbs?: number | null;
+  image_path: string;
+  image_url: string;
 }
 
 export interface CartItem {
@@ -36,4 +40,100 @@ export interface OrderCreate {
   };
   comment?: string | null;
   items: OrderCreateItem[];
+}
+
+export interface ProductSize {
+  id: number;
+  name?: string | null;
+  grams?: number | null;
+  price: number;
+  calories?: number | null;
+  protein?: number | null;
+  fat?: number | null;
+  carbs?: number | null;
+  is_hidden: boolean;
+}
+
+export interface AdminProduct {
+  id: number;
+  category_id: number;
+  name: string;
+  description?: string | null;
+  image_path: string;
+  image_url: string;
+  is_hidden: boolean;
+  is_active: boolean;
+  sort_order: number;
+  sizes: ProductSize[];
+}
+
+export interface AdminCategory {
+  id: number;
+  name: string;
+  description?: string | null;
+  sort_order: number;
+  is_hidden: boolean;
+  products: AdminProduct[];
+}
+
+export interface OrderHistoryItem {
+  status: string;
+  status_name: string;
+  changed_at: string;
+  comment?: string | null;
+}
+
+export interface OrderLine {
+  product_size_id: number;
+  product_name: string;
+  size_name?: string | null;
+  price: number;
+  quantity: number;
+  line_total: number;
+}
+
+export interface Order {
+  id: number;
+  status: string;
+  status_name: string;
+  created_at: string;
+  comment?: string | null;
+  total_price: number;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_address?: string | null;
+  items: OrderLine[];
+  history: OrderHistoryItem[];
+}
+
+export interface User {
+  id: number;
+  name: string;
+  phone: string;
+  is_admin: boolean;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface StatusOption {
+  code: string;
+  name: string;
+}
+
+export interface SettingsMap {
+  [key: string]: string;
+}
+
+export interface AdminOrder {
+  id: number;
+  status: string;
+  status_name: string;
+  created_at: string;
+  comment?: string | null;
+  total_price: number;
+  customer_name?: string | null;
+  customer_phone?: string | null;
 }

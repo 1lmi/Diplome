@@ -32,18 +32,18 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
         </button>
         <div className="modal__content">
           <div className="modal__image-wrap">
-            <div className="modal__image" />
+            <img className="modal__image" src={product.image_url} alt={product.name} />
           </div>
           <div className="modal__info">
             <h2 className="modal__title">{product.name}</h2>
             <p className="modal__subtitle">
-              {product.description || "Вкуснейшее блюдо от Meat Point"}
+              {product.description || "Позиция из меню Meat Point"}
             </p>
 
             {product.calories && (
               <p className="modal__kbzu">
-                {product.calories} ккал • Б {product.protein} • Ж{" "}
-                {product.fat} • У {product.carbs}
+                {product.calories} ккал · Б {product.protein} · Ж {product.fat} · У{" "}
+                {product.carbs}
               </p>
             )}
 
@@ -52,7 +52,7 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
             </div>
 
             <button className="btn btn--primary btn--full" onClick={handleAdd}>
-              В корзину за {product.price * qty} ₽
+              Добавить за {product.price * qty} ₽
             </button>
           </div>
         </div>
