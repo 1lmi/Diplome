@@ -4,11 +4,12 @@ import { CategoryTabs } from "./CategoryTabs";
 import type { User, Category } from "../types";
 
 interface Props {
-  activeView: "menu" | "orders" | "admin" | "auth";
+  activeView: "menu" | "profile" | "admin";
   onChange: (view: Props["activeView"]) => void;
   onCartClick: () => void;
   user: User | null;
   onLogout: () => void;
+  onAuthOpen: () => void;
   categories: Category[];
   activeCategoryId?: number;
   onCategoryChange: (id: number) => void;
@@ -21,6 +22,7 @@ export const Header: React.FC<Props> = ({
   onCartClick,
   user,
   onLogout,
+  onAuthOpen,
   categories,
   activeCategoryId,
   onCategoryChange,
@@ -30,55 +32,59 @@ export const Header: React.FC<Props> = ({
 
   return (
     <header className={"header" + (compact ? " header--compact" : "")}>
-      <div className="header__row">
-        <div className="header__cluster">
-          <div className="logo">Meat&nbsp;Point</div>
-          <div className="header__categories">
-            <CategoryTabs
-              categories={categories}
-              activeId={activeCategoryId}
-              onChange={onCategoryChange}
-            />
+      <div className="header__inner">
+        <div className="header__row">
+          <div className="header__cluster">
+            <div className="logo">Meat&nbsp;Point</div>
+            <div className="header__categories">
+              <CategoryTabs
+                categories={categories}
+                activeId={activeCategoryId}
+                onChange={onCategoryChange}
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="header__actions">
-          {user ? (
-            <>
-              <button
-                className={
-                  "nav__link" + (activeView === "orders" ? " nav__link--active" : "")
-                }
-                onClick={() => onChange("orders")}
-              >
-                Профиль
-              </button>
-              {user?.is_admin && (
+          <div className="header__actions">
+            {user ? (
+              <>
                 <button
                   className={
-                    "nav__link" + (activeView === "admin" ? " nav__link--active" : "")
+                    "nav__link" + (activeView === "profile" ? " nav__link--active" : "")
                   }
-                  onClick={() => onChange("admin")}
+                  onClick={() => onChange("profile")}
                 >
-                  Админ
+                  Профиль
                 </button>
-              )}
-              <button className="link-btn" onClick={onLogout}>
-                Выйти
+                {user?.is_admin && (
+                  <button
+                    className={
+                      "nav__link" + (activeView === "admin" ? " nav__link--active" : "")
+                    }
+                    onClick={() => onChange("admin")}
+                  >
+                    Админка
+                  </button>
+                )}
+                <button className="link-btn" onClick={onLogout}>
+                  Выйти
+                </button>
+              </>
+            ) : (
+              <button className="link-btn" onClick={onAuthOpen}>
+                Вход / Регистрация
               </button>
-            </>
-          ) : (
-            <button className="link-btn" onClick={() => onChange("auth")}>
-              Вход / Регистрация
+            )}
+            <button className="cart-button" onClick={onCartClick}>
+              <span className="cart-button__price">
+                {totalPrice ? `${totalPrice} руб.` : "Корзина"}
+              </span>
+              <span className="cart-button__divider" />
+              <span className="cart-button__count">
+                {totalCount ? `${totalCount} поз.` : "Пусто"}
+              </span>
             </button>
-          )}
-          <button className="cart-button" onClick={onCartClick}>
-            <span className="cart-button__price">{totalPrice || 0} ₽</span>
-            <span className="cart-button__divider" />
-            <span className="cart-button__count">
-              {totalCount ? `${totalCount} позиций` : "Корзина"}
-            </span>
-          </button>
+          </div>
         </div>
       </div>
     </header>

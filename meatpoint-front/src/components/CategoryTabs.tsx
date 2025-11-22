@@ -13,7 +13,7 @@ export const CategoryTabs: React.FC<Props> = ({
   onChange,
 }) => {
   return (
-    <div className="tabs">
+    <div className="tabs tabs--scrollable">
       {categories.map((c) => (
         <button
           key={c.id}

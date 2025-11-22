@@ -157,10 +157,13 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     await refreshAll();
   };
 
-  const categoriesOptions = useMemo(() => menu.map((m) => ({ id: m.id, name: m.name })), [menu]);
+  const categoriesOptions = useMemo(
+    () => menu.map((m) => ({ id: m.id, name: m.name })),
+    [menu]
+  );
 
   if (loading) {
-    return <div className="panel">Загружаем админку...</div>;
+    return <div className="panel">Загружаем данные...</div>;
   }
 
   if (error) {
@@ -172,8 +175,8 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
       <section className="panel">
         <div className="panel__header">
           <div>
-            <h2>Настройки сайта</h2>
-            <p className="muted">Тексты приветствия и контактов для клиентов.</p>
+            <h2>Витрина</h2>
+            <p className="muted">Заголовок, подзаголовок и контакты на главной.</p>
           </div>
           <button className="btn btn--primary" onClick={handleSettingsSave} disabled={saving}>
             Сохранить
@@ -201,7 +204,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             />
           </label>
           <label className="field">
-            <span>Телефон для связи</span>
+            <span>Телефон</span>
             <input
               className="input"
               value={settings.contact_phone || ""}
@@ -211,7 +214,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             />
           </label>
           <label className="field">
-            <span>Подсказка по доставке</span>
+            <span>Подсказка доставки</span>
             <input
               className="input"
               value={settings.delivery_hint || ""}
@@ -227,86 +230,43 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
         <div className="panel__header">
           <div>
             <h2>Категории</h2>
-            <p className="muted">Добавляйте и скрывайте разделы в меню.</p>
+            <p className="muted">Название и описание разделов.</p>
           </div>
           <button className="btn btn--outline" onClick={handleCreateCategory}>
-            Создать категорию
+            Добавить
           </button>
         </div>
-        <div className="stack gap-8">
-          <div className="grid2">
-            <input
-              className="input"
-              placeholder="Название"
-              value={newCategory.name}
-              onChange={(e) =>
-                setNewCategory((c) => ({ ...c, name: e.target.value }))
-              }
-            />
-            <input
-              className="input"
-              placeholder="Описание"
-              value={newCategory.description}
-              onChange={(e) =>
-                setNewCategory((c) => ({ ...c, description: e.target.value }))
-              }
-            />
-          </div>
-          <div className="stack gap-6">
-            {menu.map((cat) => (
-              <div key={cat.id} className="admin-row">
-                <div>
-                  <div className="admin-row__title">
-                    {cat.name} {cat.is_hidden && <span className="chip">Скрыто</span>}
-                  </div>
-                  {cat.description && (
-                    <div className="admin-row__meta">{cat.description}</div>
-                  )}
-                </div>
-                <div className="admin-row__controls">
-                  <label className="field-inline">
-                    <span>Порядок</span>
-                    <input
-                      className="input input--sm"
-                      type="number"
-                      value={cat.sort_order}
-                      onChange={(e) =>
-                        api
-                          .updateCategory(cat.id, {
-                            sort_order: Number(e.target.value),
-                          })
-                          .then(refreshAll)
-                      }
-                    />
-                  </label>
-                  <button
-                    className="btn btn--outline"
-                    onClick={() =>
-                      api
-                        .updateCategory(cat.id, { is_hidden: !cat.is_hidden })
-                        .then(refreshAll)
-                    }
-                  >
-                    {cat.is_hidden ? "Показать" : "Скрыть"}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="stack gap-6">
+          <input
+            className="input"
+            placeholder="Название категории"
+            value={newCategory.name}
+            onChange={(e) =>
+              setNewCategory((c) => ({ ...c, name: e.target.value }))
+            }
+          />
+          <input
+            className="input"
+            placeholder="Описание"
+            value={newCategory.description}
+            onChange={(e) =>
+              setNewCategory((c) => ({ ...c, description: e.target.value }))
+            }
+          />
         </div>
       </section>
 
       <section className="panel">
         <div className="panel__header">
           <div>
-            <h2>Новая позиция</h2>
-            <p className="muted">Создайте блюдо с ценой и картинкой.</p>
+            <h2>Новое блюдо</h2>
+            <p className="muted">Загрузите фото, задайте цену и размер.</p>
           </div>
           <button className="btn btn--primary" onClick={handleCreateProduct} disabled={saving}>
-            Добавить
+            Создать
           </button>
         </div>
-        <div className="grid2">
+        <div className="grid grid-2 gap-8">
           <select
             className="input"
             value={newProduct.categoryId}
@@ -314,7 +274,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
               setNewProduct((p) => ({ ...p, categoryId: e.target.value }))
             }
           >
-            <option value="">Категория</option>
+            <option value="">Выберите категорию</option>
             {categoriesOptions.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -339,7 +299,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
           />
           <input
             className="input"
-            placeholder="Размер (например, 300 г)"
+            placeholder="Размер (например, 30 см)"
             value={newProduct.sizeLabel}
             onChange={(e) =>
               setNewProduct((p) => ({ ...p, sizeLabel: e.target.value }))
@@ -357,7 +317,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
           <input
             className="input"
             type="number"
-            placeholder="Порядок"
+            placeholder="Порядок сортировки"
             value={newProduct.sortOrder}
             onChange={(e) =>
               setNewProduct((p) => ({ ...p, sortOrder: e.target.value }))
@@ -378,7 +338,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
         <div className="panel__header">
           <div>
             <h2>Меню</h2>
-            <p className="muted">Редактируйте цены, картинки и видимость.</p>
+            <p className="muted">Редактируйте цены, скрывайте позиции.</p>
           </div>
           <button className="btn btn--outline" onClick={refreshAll}>
             Обновить
@@ -426,7 +386,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                     </div>
                     <div className="admin-card__controls">
                       <label className="field-inline">
-                        <span>Порядок</span>
+                        <span>Сортировка</span>
                         <input
                           className="input input--sm"
                           type="number"
@@ -478,7 +438,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             <div key={order.id} className="admin-row">
               <div>
                 <div className="admin-row__title">
-                  №{order.id} · {order.total_price} ₽
+                  №{order.id} · {order.total_price} руб.
                 </div>
                 <div className="admin-row__meta">
                   {order.customer_name || "Без имени"} · {order.customer_phone}
@@ -505,7 +465,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                   className="btn btn--primary btn--sm"
                   onClick={() => handleOrderStatusChange(order.id)}
                 >
-                  Обновить
+                  Применить
                 </button>
               </div>
             </div>

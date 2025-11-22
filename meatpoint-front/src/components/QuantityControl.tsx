@@ -15,7 +15,7 @@ export const QuantityControl: React.FC<Props> = ({ value, onChange }) => {
           onChange(Math.max(1, value - 1));
         }}
       >
-        −
+        –
       </button>
       <span className="qty__value">{value}</span>
       <button

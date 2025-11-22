@@ -60,7 +60,7 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
 
       <div className="cart-drawer__content">
         {items.length === 0 && !successOrder && (
-          <p className="cart-drawer__empty">Добавьте блюда из меню</p>
+          <p className="cart-drawer__empty">Добавьте блюда из меню.</p>
         )}
 
         {items.length > 0 && (
@@ -70,7 +70,7 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
                 <div className="cart-item__info">
                   <div className="cart-item__title">{item.name}</div>
                   <div className="cart-item__price">
-                    {item.price * item.quantity} ₽
+                    {item.price * item.quantity} руб.
                   </div>
                 </div>
                 <div className="cart-item__controls">
@@ -90,13 +90,13 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
 
         {successOrder && (
           <div className="cart-drawer__success">
-            Заказ №{successOrder.id} принят! Мы свяжемся, как только курьер выедет.
+            Заказ №{successOrder.id} оформлен! Мы скоро свяжемся.
             {onTrack && (
               <button
                 className="link-btn"
                 onClick={() => onTrack(successOrder.id, phone.trim())}
               >
-                Отследить статус
+                Смотреть статус
               </button>
             )}
           </div>
@@ -105,16 +105,16 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
         {error && <div className="cart-drawer__error">{error}</div>}
 
         <div className="cart-drawer__form">
-          <h3>Ваши контакты</h3>
+          <h3>Данные для доставки</h3>
           <input
             className="input"
-            placeholder="Имя (по желанию)"
+            placeholder="Имя (необязательно)"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <input
             className="input"
-            placeholder="Телефон"
+            placeholder="Контактный телефон или логин"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
           />
@@ -126,7 +126,7 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
           />
           <textarea
             className="textarea"
-            placeholder="Комментарий для кухни или курьера"
+            placeholder="Комментарий для курьера"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
           />
@@ -135,8 +135,8 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
 
       <div className="cart-drawer__footer">
         <div className="cart-drawer__total">
-          <span>Итого</span>
-          <span>{totalPrice} ₽</span>
+          <span>Сумма</span>
+          <span>{totalPrice} руб.</span>
         </div>
         <button
           className="btn btn--primary btn--full"

@@ -5,8 +5,8 @@ import type { User } from "./types";
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login(phone: string, password: string): Promise<void>;
-  register(name: string, phone: string, password: string): Promise<void>;
+  login(login: string, password: string): Promise<void>;
+  register(name: string, login: string, password: string): Promise<void>;
   logout(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -50,10 +50,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setUser(res.user);
   };
 
-  const login = (phone: string, password: string) =>
-    handleAuth(() => api.login(phone, password));
-  const register = (name: string, phone: string, password: string) =>
-    handleAuth(() => api.register(name, phone, password));
+  const login = (login: string, password: string) =>
+    handleAuth(() => api.login(login, password));
+  const register = (name: string, login: string, password: string) =>
+    handleAuth(() => api.register(name, login, password));
   const logout = async () => {
     await api.logout();
     setAuthToken(null);

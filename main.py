@@ -89,10 +89,10 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -
 def seed_statuses(conn: sqlite3.Connection) -> None:
     statuses = [
         ("new", "Новый"),
-        ("cooking", "Готовим"),
-        ("on_way", "Курьер в пути"),
-        ("done", "Доставлен"),
-        ("canceled", "Отменен"),
+        ("cooking", "Готовится"),
+        ("on_way", "В пути"),
+        ("done", "Готов"),
+        ("canceled", "Отменён"),
     ]
     for code, name in statuses:
         row = conn.execute(
@@ -239,9 +239,9 @@ def apply_migrations() -> None:
 
     default_settings = {
         "hero_title": "Meat Point",
-        "hero_subtitle": "Сочные стейки и закуски с доставкой.",
+        "hero_subtitle": "Свежие блюда и десерты с быстрой доставкой.",
         "contact_phone": "+7 (900) 000-00-00",
-        "delivery_hint": "Быстрая доставка по городу и предзаказ к нужному времени.",
+        "delivery_hint": "Доставляем по городу с 10:00 до 23:00.",
     }
     for key, value in default_settings.items():
         row = conn.execute("SELECT 1 FROM site_settings WHERE key = ?", (key,)).fetchone()
