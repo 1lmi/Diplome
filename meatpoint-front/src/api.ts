@@ -159,7 +159,7 @@ export const api = {
           }))
         : [
             {
-              size_name: payload.size_name ?? "Стандарт",
+            size_name: payload.size_name ?? "Стандарт",
               price: payload.price ?? 0,
               is_hidden: false,
             },
@@ -214,4 +214,6 @@ export const api = {
     });
   },
 };
+
+
 

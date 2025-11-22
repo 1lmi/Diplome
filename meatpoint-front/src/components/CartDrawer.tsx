@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useCart } from "../cartContext";
 import { QuantityControl } from "./QuantityControl";
 import { api } from "../api";
 import type { Order } from "../types";
+import { useAuth } from "../authContext";
 
 interface Props {
   open: boolean;
@@ -12,6 +13,7 @@ interface Props {
 
 export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
   const { items, totalPrice, changeQuantity, removeItem, clear } = useCart();
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -19,17 +21,41 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
   const [loading, setLoading] = useState(false);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
 
-  const disabled = !items.length || !phone.trim() || loading;
+  useEffect(() => {
+    if (user?.phone) {
+      setPhone(user.phone);
+    }
+    if (open) {
+      setClosing(false);
+      setError(null);
+    }
+  }, [user, open]);
+
+  const visible = open || closing;
+  const disabled = !items.length || !phone.trim() || loading || !user;
+
+  const handleClose = () => {
+    setClosing(true);
+    setTimeout(() => {
+      onClose();
+      setClosing(false);
+    }, 180);
+  };
 
   const handleOrder = async () => {
+    if (!user) {
+      setError("Авторизуйтесь, чтобы оформить заказ.");
+      return;
+    }
     if (disabled) return;
     try {
       setLoading(true);
       setError(null);
       const body = {
         customer: {
-          name: name || undefined,
+          name: name || user.name || undefined,
           phone: phone.trim(),
           address: address || undefined,
         },
@@ -49,102 +75,122 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
     }
   };
 
+  if (!visible) return null;
+
   return (
-    <div className={"cart-drawer" + (open ? " cart-drawer--open" : "")}>
-      <div className="cart-drawer__header">
-        <h2>Корзина</h2>
-        <button className="icon-btn" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      data-leave={closing ? "true" : undefined}
+      onClick={handleClose}
+    >
+      <div
+        className="modal cart-modal"
+        data-leave={closing ? "true" : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button className="modal__close" onClick={handleClose}>
           ×
         </button>
-      </div>
 
-      <div className="cart-drawer__content">
-        {items.length === 0 && !successOrder && (
-          <p className="cart-drawer__empty">Добавьте блюда из меню.</p>
-        )}
-
-        {items.length > 0 && (
-          <ul className="cart-list">
-            {items.map((item) => (
-              <li key={item.productSizeId} className="cart-item">
-                <div className="cart-item__info">
-                  <div className="cart-item__title">{item.name}</div>
-                  <div className="cart-item__price">
-                    {item.price * item.quantity} руб.
-                  </div>
-                </div>
-                <div className="cart-item__controls">
-                  <QuantityControl
-                    value={item.quantity}
-                    onChange={(value) =>
-                      value <= 0
-                        ? removeItem(item.productSizeId)
-                        : changeQuantity(item.productSizeId, value)
-                    }
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {successOrder && (
-          <div className="cart-drawer__success">
-            Заказ №{successOrder.id} оформлен! Мы скоро свяжемся.
-            {onTrack && (
-              <button
-                className="link-btn"
-                onClick={() => onTrack(successOrder.id, phone.trim())}
-              >
-                Смотреть статус
-              </button>
+        <div className="cart-modal__content">
+          <div className="cart-modal__items">
+            <h2>Корзина</h2>
+            {items.length === 0 && !successOrder && (
+              <p className="cart-modal__empty">Добавьте блюда из меню.</p>
             )}
+
+            {items.length > 0 && (
+              <ul className="cart-list">
+                {items.map((item) => (
+                  <li key={item.productSizeId} className="cart-item">
+                    <div className="cart-item__info">
+                      <div className="cart-item__title">{item.name}</div>
+                      <div className="cart-item__price">
+                        {item.price * item.quantity} руб.
+                      </div>
+                    </div>
+                    <div className="cart-item__controls">
+                      <QuantityControl
+                        value={item.quantity}
+                        onChange={(value) =>
+                          value <= 0
+                            ? removeItem(item.productSizeId)
+                            : changeQuantity(item.productSizeId, value)
+                        }
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {successOrder && (
+              <div className="cart-modal__success">
+                Заказ №{successOrder.id} оформлен! Мы скоро свяжемся.
+                {onTrack && (
+                  <button
+                    className="link-btn"
+                    onClick={() => onTrack(successOrder.id, phone.trim())}
+                  >
+                    Смотреть статус
+                  </button>
+                )}
+              </div>
+            )}
+
+            {error && <div className="cart-modal__error">{error}</div>}
           </div>
-        )}
 
-        {error && <div className="cart-drawer__error">{error}</div>}
+          <div className="cart-modal__sidebar">
+            <div className="cart-modal__summary">
+              <div className="cart-modal__row">
+                <span>Итого</span>
+                <span>{totalPrice} руб.</span>
+              </div>
+            </div>
 
-        <div className="cart-drawer__form">
-          <h3>Данные для доставки</h3>
-          <input
-            className="input"
-            placeholder="Имя (необязательно)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            className="input"
-            placeholder="Контактный телефон или логин"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          <input
-            className="input"
-            placeholder="Адрес"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-          />
-          <textarea
-            className="textarea"
-            placeholder="Комментарий для курьера"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-          />
+            <div className="cart-modal__form">
+              <h3>Данные для доставки</h3>
+              <input
+                className="input"
+                placeholder="Имя (необязательно)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <input
+                className="input"
+                placeholder="Телефон"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              <input
+                className="input"
+                placeholder="Адрес"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+              <textarea
+                className="textarea"
+                placeholder="Комментарий для курьера"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+              />
+              {!user && (
+                <div className="alert">
+                  Войдите или зарегистрируйтесь, чтобы оформить заказ.
+                </div>
+              )}
+            </div>
+
+            <button
+              className="btn btn--primary btn--full"
+              disabled={disabled}
+              onClick={handleOrder}
+            >
+              {loading ? "Отправляем..." : "Оформить заказ"}
+            </button>
+          </div>
         </div>
-      </div>
-
-      <div className="cart-drawer__footer">
-        <div className="cart-drawer__total">
-          <span>Сумма</span>
-          <span>{totalPrice} руб.</span>
-        </div>
-        <button
-          className="btn btn--primary btn--full"
-          disabled={disabled}
-          onClick={handleOrder}
-        >
-          {loading ? "Отправляем..." : "Оформить заказ"}
-        </button>
       </div>
     </div>
   );

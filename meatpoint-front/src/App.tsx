@@ -410,12 +410,10 @@ const AppContent: React.FC = () => {
             }
           />
           <Route
-            path="/admin"
+            path="/admin/*"
             element={
               user?.is_admin ? (
-                <section className="panel">
-                  <AdminPanel statuses={statuses} />
-                </section>
+                <AdminPanel statuses={statuses} />
               ) : (
                 <div className="panel">
                   <div className="alert">
@@ -528,3 +526,4 @@ const App: React.FC = () => (
 );
 
 export default App;
+

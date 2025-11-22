@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api } from "../api";
 import type {
@@ -9,6 +9,7 @@ import type {
   SettingsMap,
   StatusOption,
 } from "../types";
+import "../admin.css";
 import AdminDashboard from "./admin/AdminDashboard";
 import AdminCategoriesPage from "./admin/AdminCategoriesPage";
 import AdminMenuPage from "./admin/AdminMenuPage";
@@ -82,9 +83,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
   };
 
   const patchCategoryInMenu = (category: Partial<Category> & { id: number }) => {
-    setMenu((prev) =>
-      prev.map((cat) => (cat.id === category.id ? { ...cat, ...category } : cat))
-    );
+    setMenu((prev) => prev.map((cat) => (cat.id === category.id ? { ...cat, ...category } : cat)));
   };
 
   const refreshAll = async () => {
@@ -196,11 +195,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     if (!status) return;
     const updated = await api.updateOrderStatus(orderId, status);
     setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? { ...o, status: updated.status, status_name: updated.status_name }
-          : o
-      )
+      prev.map((o) => (o.id === orderId ? { ...o, status: updated.status, status_name: updated.status_name } : o))
     );
   };
 
@@ -221,7 +216,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     patch: { name: string; price: number }
   ) => {
     const updated = await api.updateProduct(product.id, {
-      sizes: [{ id: sizeId, size_name: patch.name || "????????", price: patch.price }],
+      sizes: [{ id: sizeId, size_name: patch.name || "Стандарт", price: patch.price }],
     });
     patchProductInMenu(updated);
   };
@@ -233,13 +228,10 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     patchProductInMenu(updated);
   };
 
-  const categoriesOptions = useMemo(
-    () => menu.map((m) => ({ id: m.id, name: m.name })),
-    [menu]
-  );
+  const categoriesOptions = useMemo(() => menu.map((m) => ({ id: m.id, name: m.name })), [menu]);
 
   if (loading) {
-    return <div className="panel">????????? ???????...</div>;
+    return <div className="panel">Загружаем админку...</div>;
   }
 
   return (
@@ -248,8 +240,8 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
         <div className="admin-brand">
           <div className="logo-sm">MP</div>
           <div>
-            <div className="admin-brand__title">??????</div>
-            <div className="admin-brand__subtitle">??????????</div>
+            <div className="admin-brand__title">Панель</div>
+            <div className="admin-brand__subtitle">Управление</div>
           </div>
         </div>
         <nav className="admin-nav">
@@ -259,7 +251,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
               "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
             }
           >
-            ???????
+            Дашборд
           </NavLink>
           <NavLink
             to="/admin/categories"
@@ -267,7 +259,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
               "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
             }
           >
-            ?????????? ???????????
+            Управление категориями
           </NavLink>
           <NavLink
             to="/admin/menu"
@@ -275,7 +267,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
               "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
             }
           >
-            ?????????? ????
+            Управление меню
           </NavLink>
           <NavLink
             to="/admin/orders"
@@ -283,11 +275,11 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
               "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
             }
           >
-            ??????
+            Заказы
           </NavLink>
         </nav>
         <button className="btn btn--ghost" onClick={refreshAll}>
-          ???????? ??????
+          Обновить данные
         </button>
       </aside>
 
@@ -302,9 +294,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 orders={orders}
                 statuses={statuses}
                 settings={settings}
-                onSettingChange={(key, value) =>
-                  setSettings((s) => ({ ...s, [key]: value }))
-                }
+                onSettingChange={(key, value) => setSettings((s) => ({ ...s, [key]: value }))}
                 onSaveSettings={handleSettingsSave}
                 onRefresh={refreshAll}
                 saving={saving}
@@ -317,9 +307,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
               <AdminCategoriesPage
                 categories={menu}
                 newCategory={newCategory}
-                onNewCategoryChange={(field, value) =>
-                  setNewCategory((c) => ({ ...c, [field]: value }))
-                }
+                onNewCategoryChange={(field, value) => setNewCategory((c) => ({ ...c, [field]: value }))}
                 onCreateCategory={handleCreateCategory}
                 onUpdateCategory={handleUpdateCategory}
                 onRefresh={refreshAll}
@@ -333,9 +321,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 categories={menu}
                 categoriesOptions={categoriesOptions}
                 newProduct={newProduct}
-                onNewProductChange={(field, value) =>
-                  setNewProduct((p) => ({ ...p, [field]: value }))
-                }
+                onNewProductChange={(field, value) => setNewProduct((p) => ({ ...p, [field]: value }))}
                 onCreateProduct={handleCreateProduct}
                 onToggleProduct={handleToggleProduct}
                 onSortChange={handleSortChange}
@@ -355,9 +341,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 orders={orders}
                 statuses={statuses}
                 orderStatuses={orderStatuses}
-                onStatusChange={(id, status) =>
-                  setOrderStatuses((s) => ({ ...s, [id]: status }))
-                }
+                onStatusChange={(id, status) => setOrderStatuses((s) => ({ ...s, [id]: status }))}
                 onApplyStatus={handleOrderStatusChange}
                 onRefresh={refreshAll}
               />

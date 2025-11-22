@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+п»їimport React, { useEffect, useState } from "react";
 import type { AdminCategory, AdminProduct, ProductSize } from "../../types";
 
 interface NewSizeForm {
@@ -99,29 +99,29 @@ const AdminMenuPage: React.FC<Props> = ({
     <div className="admin-page">
       <div className="admin-page__header">
         <div>
-          <p className="eyebrow">Управление меню</p>
-          <h2 className="admin-page__title">Блюда, размеры и цены</h2>
+          <p className="eyebrow">РЈРїСЂР°РІР»РµРЅРёРµ РјРµРЅСЋ</p>
+          <h2 className="admin-page__title">Р‘Р»СЋРґР°, СЂР°Р·РјРµСЂС‹ Рё С†РµРЅС‹</h2>
           <p className="muted">
-            Задайте несколько размеров (например, S/M/L), их цены и меняйте состав прямо здесь.
+            Р—Р°РґР°Р№С‚Рµ РЅРµСЃРєРѕР»СЊРєРѕ СЂР°Р·РјРµСЂРѕРІ (РЅР°РїСЂРёРјРµСЂ, S/M/L), РёС… С†РµРЅС‹ Рё РјРµРЅСЏР№С‚Рµ СЃРѕСЃС‚Р°РІ РїСЂСЏРјРѕ Р·РґРµСЃСЊ.
           </p>
         </div>
         <button className="btn btn--outline" onClick={onRefresh}>
-          Перезагрузить
+          РџРµСЂРµР·Р°РіСЂСѓР·РёС‚СЊ
         </button>
       </div>
 
       <div className="panel">
         <div className="panel__header">
           <div>
-            <h3>Новое блюдо</h3>
-            <p className="muted">Добавьте позицию и сразу задайте размеры</p>
+            <h3>РќРѕРІРѕРµ Р±Р»СЋРґРѕ</h3>
+            <p className="muted">Р”РѕР±Р°РІСЊС‚Рµ РїРѕР·РёС†РёСЋ Рё СЃСЂР°Р·Сѓ Р·Р°РґР°Р№С‚Рµ СЂР°Р·РјРµСЂС‹</p>
           </div>
           <button
             className="btn btn--primary"
             onClick={onCreateProduct}
             disabled={saving}
           >
-            Добавить блюдо
+            Р”РѕР±Р°РІРёС‚СЊ Р±Р»СЋРґРѕ
           </button>
         </div>
         <div className="grid grid-3 gap-8">
@@ -130,7 +130,7 @@ const AdminMenuPage: React.FC<Props> = ({
             value={newProduct.categoryId}
             onChange={(e) => onNewProductChange("categoryId", e.target.value)}
           >
-            <option value="">Категория</option>
+            <option value="">РљР°С‚РµРіРѕСЂРёСЏ</option>
             {categoriesOptions.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -139,20 +139,20 @@ const AdminMenuPage: React.FC<Props> = ({
           </select>
           <input
             className="input"
-            placeholder="Название"
+            placeholder="РќР°Р·РІР°РЅРёРµ"
             value={newProduct.name}
             onChange={(e) => onNewProductChange("name", e.target.value)}
           />
           <input
             className="input"
-            placeholder="Описание"
+            placeholder="РћРїРёСЃР°РЅРёРµ"
             value={newProduct.description}
             onChange={(e) => onNewProductChange("description", e.target.value)}
           />
           <input
             className="input"
             type="number"
-            placeholder="Сортировка"
+            placeholder="РЎРѕСЂС‚РёСЂРѕРІРєР°"
             value={newProduct.sortOrder}
             onChange={(e) => onNewProductChange("sortOrder", e.target.value)}
           />
@@ -164,12 +164,12 @@ const AdminMenuPage: React.FC<Props> = ({
           />
         </div>
         <div className="stack gap-8">
-          <div className="panel__subhead">Размеры и цены</div>
+          <div className="panel__subhead">Р Р°Р·РјРµСЂС‹ Рё С†РµРЅС‹</div>
           {newProduct.sizes.map((s, idx) => (
             <div key={idx} className="grid grid-3 gap-8">
               <input
                 className="input"
-                placeholder="Размер (например, S, M, L)"
+                placeholder="Р Р°Р·РјРµСЂ (РЅР°РїСЂРёРјРµСЂ, S, M, L)"
                 value={s.name}
                 onChange={(e) => {
                   const next = [...newProduct.sizes];
@@ -180,7 +180,7 @@ const AdminMenuPage: React.FC<Props> = ({
               <input
                 className="input"
                 type="number"
-                placeholder="Цена"
+                placeholder="Р¦РµРЅР°"
                 value={s.price}
                 onChange={(e) => {
                   const next = [...newProduct.sizes];
@@ -194,7 +194,7 @@ const AdminMenuPage: React.FC<Props> = ({
                     className="btn btn--ghost"
                     onClick={() => onNewProductChange("sizes", newProduct.sizes.filter((_, i) => i !== idx))}
                   >
-                    Удалить
+                    РЈРґР°Р»РёС‚СЊ
                   </button>
                 )}
                 {idx === newProduct.sizes.length - 1 && (
@@ -202,7 +202,7 @@ const AdminMenuPage: React.FC<Props> = ({
                     className="btn btn--outline"
                     onClick={() => onNewProductChange("sizes", [...newProduct.sizes, { name: "", price: "" }])}
                   >
-                    + Размер
+                    + Р Р°Р·РјРµСЂ
                   </button>
                 )}
               </div>
@@ -230,7 +230,7 @@ const AdminMenuPage: React.FC<Props> = ({
                     <div className="admin-card__body">
                       <div className="admin-card__title">
                         {product.name}
-                        {product.is_hidden && <span className="chip">Скрыто</span>}
+                        {product.is_hidden && <span className="chip">РЎРєСЂС‹С‚Рѕ</span>}
                       </div>
                       {product.description && (
                         <div className="admin-card__meta">{product.description}</div>
@@ -240,7 +240,7 @@ const AdminMenuPage: React.FC<Props> = ({
                           <div key={s.id} className="field-inline field-inline--grow">
                             <input
                               className="input input--sm"
-                              placeholder="Размер"
+                              placeholder="Р Р°Р·РјРµСЂ"
                               value={s.name || ""}
                               onChange={(e) =>
                                 updateSizeDraft(product.id, s.id, "name", e.target.value)
@@ -249,7 +249,7 @@ const AdminMenuPage: React.FC<Props> = ({
                             <input
                               className="input input--sm"
                               type="number"
-                              placeholder="Цена"
+                              placeholder="Р¦РµРЅР°"
                               value={s.price}
                               onChange={(e) =>
                                 updateSizeDraft(product.id, s.id, "price", Number(e.target.value))
@@ -259,14 +259,14 @@ const AdminMenuPage: React.FC<Props> = ({
                               className="btn btn--outline btn--sm"
                               onClick={() => handleSaveSizeClick(product, s.id)}
                             >
-                              Сохранить
+                              РЎРѕС…СЂР°РЅРёС‚СЊ
                             </button>
                           </div>
                         ))}
                         <div className="field-inline field-inline--grow">
                           <input
                             className="input input--sm"
-                            placeholder="Новый размер"
+                            placeholder="РќРѕРІС‹Р№ СЂР°Р·РјРµСЂ"
                             value={newSizeForms[product.id]?.name || ""}
                             onChange={(e) =>
                               updateNewSizeForm(product.id, "name", e.target.value)
@@ -275,7 +275,7 @@ const AdminMenuPage: React.FC<Props> = ({
                           <input
                             className="input input--sm"
                             type="number"
-                            placeholder="Цена"
+                            placeholder="Р¦РµРЅР°"
                             value={newSizeForms[product.id]?.price || ""}
                             onChange={(e) =>
                               updateNewSizeForm(product.id, "price", e.target.value)
@@ -285,7 +285,7 @@ const AdminMenuPage: React.FC<Props> = ({
                             className="btn btn--ghost btn--sm"
                             onClick={() => handleAddSizeClick(product)}
                           >
-                            + Добавить размер
+                            + Р”РѕР±Р°РІРёС‚СЊ СЂР°Р·РјРµСЂ
                           </button>
                         </div>
                       </div>
@@ -293,7 +293,7 @@ const AdminMenuPage: React.FC<Props> = ({
                   </div>
                   <div className="admin-card__controls">
                     <label className="field-inline">
-                      <span>Сортировка</span>
+                      <span>РЎРѕСЂС‚РёСЂРѕРІРєР°</span>
                       <input
                         className="input input--sm"
                         type="number"
@@ -311,19 +311,19 @@ const AdminMenuPage: React.FC<Props> = ({
                       className="btn btn--outline"
                       onClick={() => onToggleProduct(product)}
                     >
-                      {product.is_hidden ? "Показать" : "Скрыть"}
+                      {product.is_hidden ? "РџРѕРєР°Р·Р°С‚СЊ" : "РЎРєСЂС‹С‚СЊ"}
                     </button>
                     <button
                       className="btn btn--ghost"
                       onClick={() => onDelete(product.id)}
                     >
-                      Удалить
+                      РЈРґР°Р»РёС‚СЊ
                     </button>
                   </div>
                 </div>
               ))}
               {cat.products.length === 0 && (
-                <div className="muted">Пока нет блюд в этой категории.</div>
+                <div className="muted">РџРѕРєР° РЅРµС‚ Р±Р»СЋРґ РІ СЌС‚РѕР№ РєР°С‚РµРіРѕСЂРёРё.</div>
               )}
             </div>
           </div>
