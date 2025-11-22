@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import type { MenuItem } from "../types";
-import { QuantityControl } from "./QuantityControl";
 import { useCart } from "../cartContext";
 
 interface ProductDisplay {
@@ -17,13 +16,13 @@ interface Props {
 
 export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
   const { addProduct } = useCart();
-  const [qty, setQty] = useState(1);
   const [variantId, setVariantId] = useState<number | null>(null);
+  const [closing, setClosing] = useState(false);
 
   useEffect(() => {
     if (product?.variants?.length) {
       setVariantId(product.variants[0].id);
-      setQty(1);
+      setClosing(false);
     }
   }, [product]);
 
@@ -32,21 +31,34 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
   const variant =
     product.variants.find((v) => v.id === variantId) || product.variants[0];
 
+  const sizeMatch = variant?.name.match(/\(([^)]+)\)$/);
+  const sizeLabel = sizeMatch ? sizeMatch[1] : "Размер";
+  const weightMatch = sizeLabel.match(/(\d+)\s*(г|гр|ml|мл)/i);
+  const weightLabel = weightMatch ? `${weightMatch[1]} ${weightMatch[2]}` : "—";
+
   const handleAdd = () => {
     if (!variant) return;
-    addProduct(variant, qty);
-    onClose();
+    addProduct(variant, 1);
+    handleClose();
+  };
+
+  const handleClose = () => {
+    setClosing(true);
+    setTimeout(onClose, 180);
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      data-leave={closing ? "true" : undefined}
+      onClick={handleClose}
+    >
       <div
-        className="modal"
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
+        className="modal modal--wide"
+        data-leave={closing ? "true" : undefined}
+        onClick={(e) => e.stopPropagation()}
       >
-        <button className="modal__close" onClick={onClose}>
+        <button className="modal__close" onClick={handleClose}>
           ×
         </button>
         <div className="modal__content">
@@ -67,31 +79,51 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
             )}
 
             {product.variants.length > 1 && (
-              <div className="chip-row">
+              <div className="size-tabs">
                 {product.variants.map((v) => {
-                  const sizeMatch = v.name.match(/\(([^)]+)\)$/);
-                  const sizeLabel = sizeMatch ? sizeMatch[1] : "Размер";
+                  const label = v.name.match(/\(([^)]+)\)$/)?.[1] || "Размер";
                   return (
                     <button
                       key={v.id}
                       className={
-                        "chip" + (variantId === v.id ? " chip--active" : "")
+                        "size-tab" + (variantId === v.id ? " size-tab--active" : "")
                       }
                       onClick={() => setVariantId(v.id)}
                     >
-                      {sizeLabel} · {v.price} руб.
+                      {label}
                     </button>
                   );
                 })}
               </div>
             )}
 
-            <div className="modal__controls">
-              <QuantityControl value={qty} onChange={setQty} />
+            <div className="stat-cards">
+              <div className="stat-card">
+                <div className="stat-card__value">{variant?.carbs ?? "—"}</div>
+                <div className="stat-card__label">Углеводы</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card__value">{variant?.calories ?? "—"}</div>
+                <div className="stat-card__label">Ккал</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card__value">{variant?.protein ?? "—"}</div>
+                <div className="stat-card__label">Белки</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card__value">{variant?.fat ?? "—"}</div>
+                <div className="stat-card__label">Жиры</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card__value">{weightLabel}</div>
+                <div className="stat-card__label">Вес</div>
+              </div>
             </div>
 
+            <div className="stat-note">*Пищевая ценность на 100 г</div>
+
             <button className="btn btn--primary btn--full" onClick={handleAdd}>
-              В корзину за {(variant?.price || 0) * qty} руб.
+              В корзину за {variant?.price || 0} руб.
             </button>
           </div>
         </div>

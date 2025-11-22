@@ -31,6 +31,7 @@ type ProductDisplay = {
 const AppContent: React.FC = () => {
   const [compactHeader, setCompactHeader] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authClosing, setAuthClosing] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loadingMenu, setLoadingMenu] = useState(false);
@@ -98,14 +99,43 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Подсветка категории при скролле
+  useEffect(() => {
+    if (!categories.length) return;
+    const offset = 120;
+    const handleScroll = () => {
+      let bestId: number | null = categories[0]?.id ?? null;
+      let bestDelta = Number.POSITIVE_INFINITY;
+      categories.forEach((cat) => {
+        const el = sectionRefs.current[cat.id];
+        if (!el) return;
+        const top = el.getBoundingClientRect().top - offset;
+        const delta = Math.abs(top);
+        // берем секцию, которая ближе всего к верхней границе и уже достигла её
+        if (top <= 0 && delta < bestDelta) {
+          bestDelta = delta;
+          bestId = cat.id;
+        }
+      });
+      if (bestId !== null) {
+        setActiveCategoryId((prev) => (prev === bestId ? prev : bestId));
+      }
+    };
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [categories]);
+
   useEffect(() => {
     if (location.pathname === "/auth") {
+      setAuthClosing(false);
       setAuthModalOpen(true);
       if (user) {
         navigate("/profile", { replace: true });
       }
     }
     if (location.pathname === "/profile" && !user) {
+      setAuthClosing(false);
       setAuthModalOpen(true);
     }
   }, [location.pathname, navigate, user]);
@@ -158,14 +188,18 @@ const AppContent: React.FC = () => {
   const openAuth = (mode: "login" | "register" = "login") => {
     setAuthForm((f) => ({ ...f, mode }));
     setAuthError(null);
+    setAuthClosing(false);
     setAuthModalOpen(true);
   };
 
   const closeAuth = () => {
-    setAuthModalOpen(false);
-    if (location.pathname === "/auth") {
-      navigate("/", { replace: true });
-    }
+    setAuthClosing(true);
+    setTimeout(() => {
+      setAuthModalOpen(false);
+      if (location.pathname === "/auth") {
+        navigate("/", { replace: true });
+      }
+    }, 180);
   };
 
   const handleAuthSubmit = async () => {
@@ -263,7 +297,6 @@ const AppContent: React.FC = () => {
   const MenuPanel = (
     <section className="menu-section">
       <div className="section-header">
-        <h2 className="section-title">Меню</h2>
       </div>
 
       {loadingMenu && <p className="loading">Загружаем блюда...</p>}
@@ -407,9 +440,14 @@ const AppContent: React.FC = () => {
       />
 
       {authModalOpen && (
-        <div className="modal-backdrop" onClick={closeAuth}>
+        <div
+          className="modal-backdrop"
+          data-leave={authClosing ? "true" : undefined}
+          onClick={closeAuth}
+        >
           <div
             className="modal auth-modal"
+            data-leave={authClosing ? "true" : undefined}
             onClick={(e) => e.stopPropagation()}
           >
             <button className="modal__close" onClick={closeAuth}>

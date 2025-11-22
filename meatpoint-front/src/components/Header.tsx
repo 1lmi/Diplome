@@ -35,7 +35,13 @@ export const Header: React.FC<Props> = ({
       <div className="header__inner">
         <div className="header__row">
           <div className="header__cluster">
-            <div className="logo">Meat&nbsp;Point</div>
+            <div
+              className="logo"
+              role="button"
+              onClick={() => onChange("menu")}
+            >
+              Meat&nbsp;Point
+            </div>            
             <div className="header__categories">
               <CategoryTabs
                 categories={categories}
