@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AdminCategory,
   AdminOrder,
   AdminProduct,
@@ -146,9 +146,24 @@ export const api = {
     is_hidden?: boolean;
     is_active?: boolean;
     sort_order?: number;
-    price: number;
+    price?: number;
     size_name?: string;
+    sizes?: { size_name: string; price: number; is_hidden?: boolean }[];
   }): Promise<AdminProduct> {
+    const sizes =
+      payload.sizes && payload.sizes.length
+        ? payload.sizes.map((s) => ({
+            size_name: s.size_name,
+            price: s.price,
+            is_hidden: s.is_hidden ?? false,
+          }))
+        : [
+            {
+              size_name: payload.size_name ?? "Стандарт",
+              price: payload.price ?? 0,
+              is_hidden: false,
+            },
+          ];
     const body = {
       category_id: payload.category_id,
       name: payload.name,
@@ -157,13 +172,7 @@ export const api = {
       is_hidden: payload.is_hidden ?? false,
       is_active: payload.is_active ?? true,
       sort_order: payload.sort_order ?? 0,
-      sizes: [
-        {
-          size_name: payload.size_name ?? "Стандарт",
-          price: payload.price,
-          is_hidden: false,
-        },
-      ],
+      sizes,
     };
     return request("/admin/products", {
       method: "POST",
@@ -205,3 +214,4 @@ export const api = {
     });
   },
 };
+
