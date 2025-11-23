@@ -10,6 +10,10 @@ interface Props {
     description: string;
     sortOrder: string;
     file?: File;
+    calories: string;
+    protein: string;
+    fat: string;
+    carbs: string;
     sizes: { name: string; amount: string; unit: string; price: string }[];
   };
   onNewProductChange: (field: string, value: any) => void;
@@ -42,7 +46,7 @@ const AdminMenuPage: React.FC<Props> = ({
           <p className="eyebrow">Меню</p>
           <h2 className="admin-page__title">Товары, варианты и цены</h2>
           <p className="muted">
-            Добавляйте варианты размеров с четырьмя полями: название, числовой размер, единицы измерения и цена.
+            Добавляйте варианты размеров; КБЖУ задаётся один раз на 100 г продукта и применяется ко всем размерам.
           </p>
         </div>
         <button className="btn btn--outline" onClick={onRefresh}>
@@ -101,78 +105,110 @@ const AdminMenuPage: React.FC<Props> = ({
         </div>
         <div className="stack gap-8">
           <div className="panel__subhead">Варианты и размеры</div>
+          <div className="grid grid-4 gap-8 align-center muted-inputs">
+            <input
+              className="input input--sm"
+              type="number"
+              placeholder="Ккал (на 100 г)"
+              value={newProduct.calories}
+              onChange={(e) => onNewProductChange("calories", e.target.value)}
+            />
+            <input
+              className="input input--sm"
+              type="number"
+              placeholder="Белки"
+              value={newProduct.protein}
+              onChange={(e) => onNewProductChange("protein", e.target.value)}
+            />
+            <input
+              className="input input--sm"
+              type="number"
+              placeholder="Жиры"
+              value={newProduct.fat}
+              onChange={(e) => onNewProductChange("fat", e.target.value)}
+            />
+            <input
+              className="input input--sm"
+              type="number"
+              placeholder="Углеводы"
+              value={newProduct.carbs}
+              onChange={(e) => onNewProductChange("carbs", e.target.value)}
+            />
+          </div>
           {newProduct.sizes.map((s, idx) => (
-            <div key={idx} className="grid grid-4 gap-8 align-center">
-              <input
-                className="input"
-                placeholder="Название (S, M, L)"
-                value={s.name}
-                onChange={(e) => {
-                  const next = [...newProduct.sizes];
-                  next[idx] = { ...s, name: e.target.value };
-                  onNewProductChange("sizes", next);
-                }}
-              />
-              <input
-                className="input"
-                type="number"
-                placeholder="Размер (число)"
-                value={s.amount}
-                onChange={(e) => {
-                  const next = [...newProduct.sizes];
-                  next[idx] = { ...s, amount: e.target.value };
-                  onNewProductChange("sizes", next);
-                }}
-              />
-              <input
-                className="input"
-                placeholder="Ед. измерения (грамм, мл, см)"
-                value={s.unit}
-                onChange={(e) => {
-                  const next = [...newProduct.sizes];
-                  next[idx] = { ...s, unit: e.target.value };
-                  onNewProductChange("sizes", next);
-                }}
-              />
-              <div className="field-inline field-inline--grow">
+            <div key={idx} className="stack gap-3 size-block">
+              <div className="grid grid-4 gap-8 align-center">
                 <input
                   className="input"
-                  type="number"
-                  placeholder="Цена"
-                  value={s.price}
+                  placeholder="Название (S, M, L)"
+                  value={s.name}
                   onChange={(e) => {
                     const next = [...newProduct.sizes];
-                    next[idx] = { ...s, price: e.target.value };
+                    next[idx] = { ...s, name: e.target.value };
                     onNewProductChange("sizes", next);
                   }}
                 />
-                <div className="panel__actions">
-                  {newProduct.sizes.length > 1 && (
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      onClick={() =>
-                        onNewProductChange(
-                          "sizes",
-                          newProduct.sizes.filter((_, i) => i !== idx)
-                        )
-                      }
-                    >
-                      Удалить
-                    </button>
-                  )}
-                  {idx === newProduct.sizes.length - 1 && (
-                    <button
-                      className="btn btn--outline btn--sm"
-                      onClick={() =>
-                        onNewProductChange("sizes", [
-                          ...newProduct.sizes,
-                          { name: "", amount: "", unit: "", price: "" },
-                        ])
-                      }
-                    >
-                      + Размер
-                    </button>
-                  )}
+                <input
+                  className="input"
+                  type="number"
+                  placeholder="Размер (число)"
+                  value={s.amount}
+                  onChange={(e) => {
+                    const next = [...newProduct.sizes];
+                    next[idx] = { ...s, amount: e.target.value };
+                    onNewProductChange("sizes", next);
+                  }}
+                />
+                <input
+                  className="input"
+                  placeholder="Ед. измерения (грамм, мл, см)"
+                  value={s.unit}
+                  onChange={(e) => {
+                    const next = [...newProduct.sizes];
+                    next[idx] = { ...s, unit: e.target.value };
+                    onNewProductChange("sizes", next);
+                  }}
+                />
+                <div className="field-inline field-inline--grow">
+                  <input
+                    className="input"
+                    type="number"
+                    placeholder="Цена"
+                    value={s.price}
+                    onChange={(e) => {
+                      const next = [...newProduct.sizes];
+                      next[idx] = { ...s, price: e.target.value };
+                      onNewProductChange("sizes", next);
+                    }}
+                  />
+                  <div className="panel__actions">
+                    {newProduct.sizes.length > 1 && (
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        onClick={() =>
+                          onNewProductChange(
+                            "sizes",
+                            newProduct.sizes.filter((_, i) => i !== idx)
+                          )
+                        }
+                      >
+                        Удалить
+                      </button>
+                    )}
+                    {idx === newProduct.sizes.length - 1 && (
+                      <button
+                        className="btn btn--outline btn--sm"
+                        onClick={() =>
+                          onNewProductChange("sizes", [
+                            ...newProduct.sizes,
+                            { name: "", amount: "", unit: "", price: "" },
+                          ])
+                        }
+                      >
+                        + Размер
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

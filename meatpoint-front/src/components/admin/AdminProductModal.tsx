@@ -28,6 +28,10 @@ interface Props {
         unit?: string | null;
         price: number;
         is_hidden?: boolean;
+        calories?: number | null;
+        protein?: number | null;
+        fat?: number | null;
+        carbs?: number | null;
       }[];
       remove_size_ids: number[];
       image_file?: File;
@@ -46,6 +50,10 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
   const [removeSizeIds, setRemoveSizeIds] = useState<number[]>([]);
   const [file, setFile] = useState<File | undefined>();
   const [closing, setClosing] = useState(false);
+  const [calories, setCalories] = useState("");
+  const [protein, setProtein] = useState("");
+  const [fat, setFat] = useState("");
+  const [carbs, setCarbs] = useState("");
 
   useEffect(() => {
     if (!product) return;
@@ -64,6 +72,11 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
         is_hidden: s.is_hidden,
       }))
     );
+    const base = product.sizes[0];
+    setCalories(base?.calories != null ? String(base.calories) : "");
+    setProtein(base?.protein != null ? String(base.protein) : "");
+    setFat(base?.fat != null ? String(base.fat) : "");
+    setCarbs(base?.carbs != null ? String(base.carbs) : "");
     setRemoveSizeIds([]);
     setFile(undefined);
     setClosing(false);
@@ -107,6 +120,10 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
         unit: s.unit.trim() || null,
         price: Number(s.price),
         is_hidden: !!s.is_hidden,
+        calories: calories ? Number(calories) : null,
+        protein: protein ? Number(protein) : null,
+        fat: fat ? Number(fat) : null,
+        carbs: carbs ? Number(carbs) : null,
       }));
 
     await onSave(product.id, {
@@ -190,68 +207,102 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                 </label>
               </div>
 
+              <div className="panel__subhead">КБЖУ (на 100 г)</div>
+              <div className="grid grid-4 gap-6 muted-inputs">
+                <input
+                  className="input input--sm"
+                  type="number"
+                  placeholder="Ккал"
+                  value={calories}
+                  onChange={(e) => setCalories(e.target.value)}
+                />
+                <input
+                  className="input input--sm"
+                  type="number"
+                  placeholder="Белки"
+                  value={protein}
+                  onChange={(e) => setProtein(e.target.value)}
+                />
+                <input
+                  className="input input--sm"
+                  type="number"
+                  placeholder="Жиры"
+                  value={fat}
+                  onChange={(e) => setFat(e.target.value)}
+                />
+                <input
+                  className="input input--sm"
+                  type="number"
+                  placeholder="Углеводы"
+                  value={carbs}
+                  onChange={(e) => setCarbs(e.target.value)}
+                />
+              </div>
+
               <div className="panel__subhead">Варианты и цены</div>
               <div className="stack gap-4">
                 {sizes.map((s, idx) => (
-                  <div key={s.id || idx} className="grid grid-5 gap-6 align-center">
-                    <input
-                      className="input input--sm"
-                      placeholder="Название"
-                      value={s.name}
-                      onChange={(e) => {
-                        const next = [...sizes];
-                        next[idx] = { ...s, name: e.target.value };
-                        setSizes(next);
-                      }}
-                    />
-                    <input
-                      className="input input--sm"
-                      type="number"
-                      placeholder="Размер"
-                      value={s.amount}
-                      onChange={(e) => {
-                        const next = [...sizes];
-                        next[idx] = { ...s, amount: e.target.value };
-                        setSizes(next);
-                      }}
-                    />
-                    <input
-                      className="input input--sm"
-                      placeholder="Единицы (грамм, мл)"
-                      value={s.unit}
-                      onChange={(e) => {
-                        const next = [...sizes];
-                        next[idx] = { ...s, unit: e.target.value };
-                        setSizes(next);
-                      }}
-                    />
-                    <input
-                      className="input input--sm"
-                      type="number"
-                      placeholder="Цена"
-                      value={s.price}
-                      onChange={(e) => {
-                        const next = [...sizes];
-                        next[idx] = { ...s, price: e.target.value };
-                        setSizes(next);
-                      }}
-                    />
-                    <div className="field-inline field-inline--right">
-                      <label className="checkbox">
-                        <input
-                          type="checkbox"
-                          checked={!!s.is_hidden}
-                          onChange={(e) => {
-                            const next = [...sizes];
-                            next[idx] = { ...s, is_hidden: e.target.checked };
-                            setSizes(next);
-                          }}
-                        />
-                        <span>Скрыт</span>
-                      </label>
-                      <button className="btn btn--ghost btn--sm" onClick={() => handleRemoveSize(idx)}>
-                        Удалить
-                      </button>
+                  <div key={s.id || idx} className="admin-size-row">
+                    <div className="grid grid-5 gap-6 align-center">
+                      <input
+                        className="input input--sm"
+                        placeholder="Название"
+                        value={s.name}
+                        onChange={(e) => {
+                          const next = [...sizes];
+                          next[idx] = { ...s, name: e.target.value };
+                          setSizes(next);
+                        }}
+                      />
+                      <input
+                        className="input input--sm"
+                        type="number"
+                        placeholder="Размер"
+                        value={s.amount}
+                        onChange={(e) => {
+                          const next = [...sizes];
+                          next[idx] = { ...s, amount: e.target.value };
+                          setSizes(next);
+                        }}
+                      />
+                      <input
+                        className="input input--sm"
+                        placeholder="Единицы (грамм, мл)"
+                        value={s.unit}
+                        onChange={(e) => {
+                          const next = [...sizes];
+                          next[idx] = { ...s, unit: e.target.value };
+                          setSizes(next);
+                        }}
+                      />
+                      <input
+                        className="input input--sm"
+                        type="number"
+                        placeholder="Цена"
+                        value={s.price}
+                        onChange={(e) => {
+                          const next = [...sizes];
+                          next[idx] = { ...s, price: e.target.value };
+                          setSizes(next);
+                        }}
+                      />
+                      <div className="field-inline field-inline--right">
+                        <label className="checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!s.is_hidden}
+                            onChange={(e) => {
+                              const next = [...sizes];
+                              next[idx] = { ...s, is_hidden: e.target.checked };
+                              setSizes(next);
+                            }}
+                          />
+                          <span>Скрыт</span>
+                        </label>
+                        <button className="btn btn--ghost btn--sm" onClick={() => handleRemoveSize(idx)}>
+                          Удалить
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

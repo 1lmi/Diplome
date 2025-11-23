@@ -26,6 +26,10 @@ interface NewProductForm {
   description: string;
   sortOrder: string;
   file?: File;
+  calories: string;
+  protein: string;
+  fat: string;
+  carbs: string;
   sizes: { name: string; amount: string; unit: string; price: string }[];
 }
 
@@ -60,6 +64,10 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     name: "",
     description: "",
     sortOrder: "",
+    calories: "",
+    protein: "",
+    fat: "",
+    carbs: "",
     sizes: [{ name: "", amount: "", unit: "", price: "" }],
   });
   const [orderStatuses, setOrderStatuses] = useState<Record<number, string>>({});
@@ -173,6 +181,10 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
           amount: s.amount ? Number(s.amount) : undefined,
           unit: s.unit.trim() || undefined,
           price: Number(s.price),
+          calories: newProduct.calories ? Number(newProduct.calories) : undefined,
+          protein: newProduct.protein ? Number(newProduct.protein) : undefined,
+          fat: newProduct.fat ? Number(newProduct.fat) : undefined,
+          carbs: newProduct.carbs ? Number(newProduct.carbs) : undefined,
           is_hidden: false,
         }));
       const created = await api.createProduct({
@@ -189,6 +201,10 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
         description: "",
         sortOrder: "",
         file: undefined,
+        calories: "",
+        protein: "",
+        fat: "",
+        carbs: "",
         sizes: [{ name: "", amount: "", unit: "", price: "" }],
       });
       addProductToMenu(created);

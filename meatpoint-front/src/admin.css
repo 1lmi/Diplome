@@ -384,6 +384,16 @@
   color: var(--text);
 }
 
+.size-block .muted-inputs .input {
+  background: var(--panel-2);
+}
+
+.admin-size-row {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
 .admin-edit-modal {
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -391,11 +401,22 @@
 }
 
 .admin-edit-modal .modal__image-wrap {
+  aspect-ratio: 1 / 1;
   background: linear-gradient(180deg, #fff5ed, #ffffff);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 10px;
   box-shadow: var(--shadow);
+  max-width: 200px;
+  display: grid;
+  place-items: center;
+}
+
+.admin-edit-modal .modal__image {
+  width: 180px;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 12px;
 }
 
 .admin-edit-modal .modal__info {
