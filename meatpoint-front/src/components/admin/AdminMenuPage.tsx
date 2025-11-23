@@ -25,6 +25,7 @@ interface Props {
   onAddSize: (product: AdminProduct, size: { name: string; price: number }) => Promise<void>;
   onUpload: (productId: number, file?: File) => Promise<void>;
   onDelete: (productId: number) => Promise<void>;
+  onEdit: (product: AdminProduct) => void;
   saving: boolean;
   onRefresh: () => void;
 }
@@ -41,6 +42,7 @@ const AdminMenuPage: React.FC<Props> = ({
   onAddSize,
   onUpload,
   onDelete,
+  onEdit,
   saving,
   onRefresh,
 }) => {
@@ -307,18 +309,17 @@ const AdminMenuPage: React.FC<Props> = ({
                       accept="image/*"
                       onChange={(e) => onUpload(product.id, e.target.files?.[0])}
                     />
-                    <button
-                      className="btn btn--outline"
-                      onClick={() => onToggleProduct(product)}
-                    >
-                      {product.is_hidden ? "Показать" : "Скрыть"}
-                    </button>
-                    <button
-                      className="btn btn--ghost"
-                      onClick={() => onDelete(product.id)}
-                    >
-                      Удалить
-                    </button>
+                    <div className="panel__actions">
+                      <button className="btn btn--outline" onClick={() => onToggleProduct(product)}>
+                        {product.is_hidden ? "Показать" : "Скрыть"}
+                      </button>
+                      <button className="btn btn--ghost" onClick={() => onDelete(product.id)}>
+                        Удалить
+                      </button>
+                      <button className="btn btn--primary" onClick={() => onEdit(product)}>
+                        Редактировать
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
