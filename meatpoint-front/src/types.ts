@@ -10,6 +10,11 @@ export interface MenuItem {
   id: number; // id product_sizes (v_menu_items.id)
   category_id: number;
   name: string;
+  product_name?: string;
+  size_name?: string | null;
+  size_amount?: number | null;
+  size_unit?: string | null;
+  size_label?: string | null;
   price: number;
   description?: string | null;
   calories?: number | null;
@@ -45,7 +50,8 @@ export interface OrderCreate {
 export interface ProductSize {
   id: number;
   name?: string | null;
-  grams?: number | null;
+  amount?: number | null;
+  unit?: string | null;
   price: number;
   calories?: number | null;
   protein?: number | null;

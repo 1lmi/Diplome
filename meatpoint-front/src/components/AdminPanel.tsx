@@ -14,6 +14,7 @@ import AdminDashboard from "./admin/AdminDashboard";
 import AdminCategoriesPage from "./admin/AdminCategoriesPage";
 import AdminMenuPage from "./admin/AdminMenuPage";
 import AdminOrdersPage from "./admin/AdminOrdersPage";
+import AdminProductModal from "./admin/AdminProductModal";
 
 interface Props {
   statuses: StatusOption[];
@@ -25,7 +26,25 @@ interface NewProductForm {
   description: string;
   sortOrder: string;
   file?: File;
-  sizes: { name: string; price: string }[];
+  sizes: { name: string; amount: string; unit: string; price: string }[];
+}
+
+interface ProductUpdateDraft {
+  name: string;
+  description?: string | null;
+  sort_order: number;
+  is_hidden: boolean;
+  is_active: boolean;
+  sizes: {
+    id?: number;
+    size_name: string;
+    amount?: number | null;
+    unit?: string | null;
+    price: number;
+    is_hidden?: boolean;
+  }[];
+  remove_size_ids: number[];
+  image_file?: File;
 }
 
 export const AdminPanel: React.FC<Props> = ({ statuses }) => {
@@ -41,9 +60,10 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     name: "",
     description: "",
     sortOrder: "",
-    sizes: [{ name: "", price: "" }],
+    sizes: [{ name: "", amount: "", unit: "", price: "" }],
   });
   const [orderStatuses, setOrderStatuses] = useState<Record<number, string>>({});
+  const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null);
 
   useEffect(() => {
     refreshAll();
@@ -121,13 +141,6 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     patchProductInMenu(updated);
   };
 
-  const handleUpload = async (productId: number, file?: File) => {
-    if (!file) return;
-    const uploaded = await api.uploadImage(file);
-    const updated = await api.updateProduct(productId, { image_path: uploaded.filename });
-    patchProductInMenu(updated);
-  };
-
   const handleCreateCategory = async () => {
     if (!newCategory.name.trim()) return;
     const created = await api.createCategory({
@@ -155,7 +168,13 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
       const imagePath = await uploadAndGetPath(newProduct.file);
       const sizePayload = newProduct.sizes
         .filter((s) => s.name.trim() && s.price.trim())
-        .map((s) => ({ size_name: s.name.trim(), price: Number(s.price), is_hidden: false }));
+        .map((s) => ({
+          size_name: s.name.trim(),
+          amount: s.amount ? Number(s.amount) : undefined,
+          unit: s.unit.trim() || undefined,
+          price: Number(s.price),
+          is_hidden: false,
+        }));
       const created = await api.createProduct({
         category_id: Number(newProduct.categoryId),
         name: newProduct.name.trim(),
@@ -169,7 +188,8 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
         name: "",
         description: "",
         sortOrder: "",
-        sizes: [{ name: "", price: "" }],
+        file: undefined,
+        sizes: [{ name: "", amount: "", unit: "", price: "" }],
       });
       addProductToMenu(created);
     } catch (e: any) {
@@ -204,28 +224,43 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     patchCategoryInMenu(updated);
   };
 
+  const handleDeleteCategory = async (categoryId: number) => {
+    setSaving(true);
+    try {
+      await api.deleteCategory(categoryId);
+      setMenu((prev) => prev.filter((c) => c.id !== categoryId));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDeleteProduct = async (productId: number) => {
     const cat = menu.find((c) => c.products.some((p) => p.id === productId));
     await api.deleteProduct(productId);
     if (cat) removeProductFromMenu(productId, cat.id);
   };
 
-  const handleSaveSize = async (
-    product: AdminProduct,
-    sizeId: number,
-    patch: { name: string; price: number }
-  ) => {
-    const updated = await api.updateProduct(product.id, {
-      sizes: [{ id: sizeId, size_name: patch.name || "Стандарт", price: patch.price }],
-    });
-    patchProductInMenu(updated);
-  };
-
-  const handleAddSize = async (product: AdminProduct, size: { name: string; price: number }) => {
-    const updated = await api.updateProduct(product.id, {
-      sizes: [{ size_name: size.name, price: size.price, is_hidden: false }],
-    });
-    patchProductInMenu(updated);
+  const handleSaveProduct = async (productId: number, payload: ProductUpdateDraft) => {
+    setSaving(true);
+    try {
+      const { image_file, ...rest } = payload;
+      let imagePath: string | undefined;
+      if (image_file) {
+        imagePath = await uploadAndGetPath(image_file);
+      }
+      const updated = await api.updateProduct(productId, {
+        ...rest,
+        image_path: imagePath,
+      });
+      patchProductInMenu(updated);
+      setEditingProduct(null);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const categoriesOptions = useMemo(() => menu.map((m) => ({ id: m.id, name: m.name })), [menu]);
@@ -310,6 +345,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 onNewCategoryChange={(field, value) => setNewCategory((c) => ({ ...c, [field]: value }))}
                 onCreateCategory={handleCreateCategory}
                 onUpdateCategory={handleUpdateCategory}
+                onDeleteCategory={handleDeleteCategory}
                 onRefresh={refreshAll}
               />
             }
@@ -325,10 +361,8 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 onCreateProduct={handleCreateProduct}
                 onToggleProduct={handleToggleProduct}
                 onSortChange={handleSortChange}
-                onSaveSize={handleSaveSize}
-                onAddSize={handleAddSize}
-                onUpload={handleUpload}
                 onDelete={handleDeleteProduct}
+                onEdit={(product) => setEditingProduct(product)}
                 saving={saving}
                 onRefresh={refreshAll}
               />
@@ -348,6 +382,14 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             }
           />
         </Routes>
+        {editingProduct && (
+          <AdminProductModal
+            product={editingProduct}
+            onClose={() => setEditingProduct(null)}
+            onSave={handleSaveProduct}
+            saving={saving}
+          />
+        )}
       </div>
     </div>
   );

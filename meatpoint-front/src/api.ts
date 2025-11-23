@@ -138,6 +138,9 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+  deleteCategory(id: number): Promise<{ ok: boolean }> {
+    return request(`/admin/categories/${id}`, { method: "DELETE" });
+  },
   createProduct(payload: {
     category_id: number;
     name: string;
@@ -148,18 +151,24 @@ export const api = {
     sort_order?: number;
     price?: number;
     size_name?: string;
-    sizes?: { size_name: string; price: number; is_hidden?: boolean }[];
+    size_amount?: number;
+    size_unit?: string;
+    sizes?: { size_name: string; amount?: number; unit?: string; price: number; is_hidden?: boolean }[];
   }): Promise<AdminProduct> {
-    const sizes =
+    const normalizedSizes =
       payload.sizes && payload.sizes.length
         ? payload.sizes.map((s) => ({
             size_name: s.size_name,
+            amount: s.amount,
+            unit: s.unit,
             price: s.price,
             is_hidden: s.is_hidden ?? false,
           }))
         : [
             {
-            size_name: payload.size_name ?? "Стандарт",
+              size_name: payload.size_name ?? "Стандарт",
+              amount: payload.size_amount,
+              unit: payload.size_unit,
               price: payload.price ?? 0,
               is_hidden: false,
             },
@@ -172,7 +181,7 @@ export const api = {
       is_hidden: payload.is_hidden ?? false,
       is_active: payload.is_active ?? true,
       sort_order: payload.sort_order ?? 0,
-      sizes,
+      sizes: normalizedSizes,
     };
     return request("/admin/products", {
       method: "POST",

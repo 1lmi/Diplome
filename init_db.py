@@ -341,17 +341,20 @@ def init_db():
             category_ids[cat_name] = row[0]
 
     # Размеры
-    size_ids: dict[tuple[str, int | None], int] = {}
+    size_ids: dict[tuple[str, int | None, str | None], int] = {}
     for item in MENU:
         for s in item["sizes"]:
-            key = (s["name"], s.get("grams"))
+            grams = s.get("grams")
+            unit = s.get("unit") or ("грамм" if grams else None)
+            key = (s["name"], grams, unit)
             if key not in size_ids:
                 conn.execute(
-                    "INSERT OR IGNORE INTO sizes(name, gram_weight) VALUES (?, ?)",
-                    key,
+                    "INSERT OR IGNORE INTO sizes(name, amount, unit, gram_weight) VALUES (?, ?, ?, ?)",
+                    (s["name"], grams, unit, grams),
                 )
                 row = conn.execute(
-                    "SELECT id FROM sizes WHERE name = ?", (s["name"],)
+                    "SELECT id FROM sizes WHERE name = ? AND amount IS ? AND unit IS ?",
+                    (s["name"], grams, unit),
                 ).fetchone()
                 size_ids[key] = row[0]
 
@@ -365,7 +368,9 @@ def init_db():
         product_id = cur.lastrowid
 
         for s in item["sizes"]:
-            key = (s["name"], s.get("grams"))
+            grams = s.get("grams")
+            unit = s.get("unit") or ("грамм" if grams else None)
+            key = (s["name"], grams, unit)
             size_id = size_ids[key]
             conn.execute(
                 """

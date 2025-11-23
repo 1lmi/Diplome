@@ -10,8 +10,11 @@ CREATE TABLE IF NOT EXISTS categories (
 
 CREATE TABLE IF NOT EXISTS sizes (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    name         TEXT NOT NULL UNIQUE,
-    gram_weight  INTEGER
+    name         TEXT NOT NULL,
+    amount       INTEGER,
+    unit         TEXT,
+    gram_weight  INTEGER,
+    UNIQUE(name, amount, unit)
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -122,9 +125,50 @@ CREATE VIEW IF NOT EXISTS v_menu_items AS
 SELECT
     ps.id AS id,
     p.category_id,
+    p.name AS product_name,
+    s.name AS size_name,
+    COALESCE(s.amount, s.gram_weight) AS size_amount,
+    s.unit AS size_unit,
+    TRIM(
+        COALESCE(s.name, '') ||
+        CASE
+            WHEN s.name IS NOT NULL AND COALESCE(s.amount, s.gram_weight) IS NOT NULL THEN ', '
+            ELSE ''
+        END ||
+        COALESCE(
+            CASE
+                WHEN COALESCE(s.amount, s.gram_weight) IS NOT NULL THEN
+                    CAST(COALESCE(s.amount, s.gram_weight) AS TEXT) ||
+                    CASE
+                        WHEN s.unit IS NOT NULL AND s.unit != '' THEN ' ' || s.unit
+                        ELSE ''
+                    END
+            END,
+            ''
+        )
+    ) AS size_label,
     p.name ||
         CASE
-            WHEN s.name IS NOT NULL THEN ' (' || s.name || ')'
+            WHEN (s.name IS NOT NULL OR COALESCE(s.amount, s.gram_weight) IS NOT NULL) THEN
+                ' (' ||
+                TRIM(
+                    COALESCE(s.name, '') ||
+                    CASE
+                        WHEN s.name IS NOT NULL AND COALESCE(s.amount, s.gram_weight) IS NOT NULL THEN ', '
+                        ELSE ''
+                    END ||
+                    COALESCE(
+                        CASE
+                            WHEN COALESCE(s.amount, s.gram_weight) IS NOT NULL THEN
+                                CAST(COALESCE(s.amount, s.gram_weight) AS TEXT) ||
+                                CASE
+                                    WHEN s.unit IS NOT NULL AND s.unit != '' THEN ' ' || s.unit
+                                    ELSE ''
+                                END
+                        END,
+                        ''
+                    )
+                ) || ')'
             ELSE ''
         END AS name,
     ps.price,

@@ -31,10 +31,11 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
   const variant =
     product.variants.find((v) => v.id === variantId) || product.variants[0];
 
-  const sizeMatch = variant?.name.match(/\(([^)]+)\)$/);
-  const sizeLabel = sizeMatch ? sizeMatch[1] : "Размер";
-  const weightMatch = sizeLabel.match(/(\d+)\s*(г|гр|ml|мл)/i);
-  const weightLabel = weightMatch ? `${weightMatch[1]} ${weightMatch[2]}` : "—";
+
+  const weightLabel =
+    variant?.size_amount !== undefined && variant?.size_amount !== null
+      ? `${variant.size_amount}${variant.size_unit ? ` ${variant.size_unit}` : ""}`
+      : "—";
 
   const handleAdd = () => {
     if (!variant) return;
@@ -68,20 +69,24 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
           <div className="modal__info">
             <h2 className="modal__title">{product.name}</h2>
             <p className="modal__subtitle">
-              {product.description || "Ароматное блюдо от Meat Point"}
+              {product.description || "Тот самый вкусный продукт от Meat Point"}
             </p>
 
-            {variant?.calories && (
-              <p className="modal__kbzu">
-                {variant.calories} ккал · Б {variant.protein} · Ж {variant.fat} · У{" "}
-                {variant.carbs}
-              </p>
-            )}
 
             {product.variants.length > 1 && (
               <div className="size-tabs">
                 {product.variants.map((v) => {
-                  const label = v.name.match(/\(([^)]+)\)$/)?.[1] || "Размер";
+                  const label =
+                    v.size_label ||
+                    [
+                      v.size_name || null,
+                      v.size_amount !== undefined && v.size_amount !== null
+                        ? `${v.size_amount}${v.size_unit ? ` ${v.size_unit}` : ""}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ") ||
+                    "Размер";
                   return (
                     <button
                       key={v.id}
@@ -99,12 +104,12 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
 
             <div className="stat-cards">
               <div className="stat-card">
-                <div className="stat-card__value">{variant?.carbs ?? "—"}</div>
-                <div className="stat-card__label">Углеводы</div>
-              </div>
-              <div className="stat-card">
                 <div className="stat-card__value">{variant?.calories ?? "—"}</div>
                 <div className="stat-card__label">Ккал</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card__value">{variant?.carbs ?? "—"}</div>
+                <div className="stat-card__label">Углеводы</div>
               </div>
               <div className="stat-card">
                 <div className="stat-card__value">{variant?.protein ?? "—"}</div>
@@ -116,14 +121,14 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
               </div>
               <div className="stat-card">
                 <div className="stat-card__value">{weightLabel}</div>
-                <div className="stat-card__label">Вес</div>
+                <div className="stat-card__label">Объем</div>
               </div>
             </div>
 
-            <div className="stat-note">*Пищевая ценность на 100 г</div>
+            <div className="stat-note">*На 100 грамм</div>
 
             <button className="btn btn--primary btn--full" onClick={handleAdd}>
-              В корзину за {variant?.price || 0} руб.
+              В корзину за {variant?.price || 0} ₽
             </button>
           </div>
         </div>

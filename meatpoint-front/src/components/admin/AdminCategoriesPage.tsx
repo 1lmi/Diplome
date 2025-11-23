@@ -7,6 +7,7 @@ interface Props {
   onNewCategoryChange: (field: "name" | "description", value: string) => void;
   onCreateCategory: () => Promise<void> | void;
   onUpdateCategory: (id: number, payload: Partial<Category>) => Promise<void>;
+  onDeleteCategory: (id: number) => Promise<void>;
   onRefresh: () => void;
 }
 
@@ -16,6 +17,7 @@ const AdminCategoriesPage: React.FC<Props> = ({
   onNewCategoryChange,
   onCreateCategory,
   onUpdateCategory,
+  onDeleteCategory,
   onRefresh,
 }) => {
   const [drafts, setDrafts] = useState<Record<number, Category>>({});
@@ -120,6 +122,16 @@ const AdminCategoriesPage: React.FC<Props> = ({
                   <p className="muted">Сортировка: {cat.sort_order}</p>
                 </div>
                 <div className="panel__actions">
+                  <button
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => {
+                      if (window.confirm(`Удалить категорию “${cat.name}” и скрыть все её товары?`)) {
+                        onDeleteCategory(cat.id);
+                      }
+                    }}
+                  >
+                    Удалить
+                  </button>
                   <button
                     className="chip chip--ghost"
                     onClick={() => handleDraftChange(cat.id, "is_hidden", !draft.is_hidden)}

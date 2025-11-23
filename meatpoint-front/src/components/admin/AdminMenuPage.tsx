@@ -1,10 +1,5 @@
-﻿import React, { useEffect, useState } from "react";
-import type { AdminCategory, AdminProduct, ProductSize } from "../../types";
-
-interface NewSizeForm {
-  name: string;
-  price: string;
-}
+import React from "react";
+import type { AdminCategory, AdminProduct } from "../../types";
 
 interface Props {
   categories: AdminCategory[];
@@ -15,15 +10,12 @@ interface Props {
     description: string;
     sortOrder: string;
     file?: File;
-    sizes: { name: string; price: string }[];
+    sizes: { name: string; amount: string; unit: string; price: string }[];
   };
   onNewProductChange: (field: string, value: any) => void;
   onCreateProduct: () => Promise<void>;
   onToggleProduct: (product: AdminProduct) => Promise<void>;
   onSortChange: (product: AdminProduct, sort: number) => Promise<void>;
-  onSaveSize: (product: AdminProduct, sizeId: number, patch: { name: string; price: number }) => Promise<void>;
-  onAddSize: (product: AdminProduct, size: { name: string; price: number }) => Promise<void>;
-  onUpload: (productId: number, file?: File) => Promise<void>;
   onDelete: (productId: number) => Promise<void>;
   onEdit: (product: AdminProduct) => void;
   saving: boolean;
@@ -38,92 +30,34 @@ const AdminMenuPage: React.FC<Props> = ({
   onCreateProduct,
   onToggleProduct,
   onSortChange,
-  onSaveSize,
-  onAddSize,
-  onUpload,
   onDelete,
   onEdit,
   saving,
   onRefresh,
 }) => {
-  const [sizeDrafts, setSizeDrafts] = useState<Record<number, ProductSize[]>>({});
-  const [newSizeForms, setNewSizeForms] = useState<Record<number, NewSizeForm>>({});
-
-  useEffect(() => {
-    const map: Record<number, ProductSize[]> = {};
-    const addForms: Record<number, NewSizeForm> = {};
-    categories.forEach((cat) => {
-      cat.products.forEach((p) => {
-        map[p.id] = p.sizes.map((s) => ({ ...s }));
-        addForms[p.id] = addForms[p.id] || { name: "", price: "" };
-      });
-    });
-    setSizeDrafts(map);
-    setNewSizeForms(addForms);
-  }, [categories]);
-
-  const updateSizeDraft = (productId: number, sizeId: number, field: keyof ProductSize, value: any) => {
-    setSizeDrafts((prev) => ({
-      ...prev,
-      [productId]: (prev[productId] || []).map((s) =>
-        s.id === sizeId ? { ...s, [field]: value } : s
-      ),
-    }));
-  };
-
-  const handleSaveSizeClick = async (product: AdminProduct, sizeId: number) => {
-    const size = (sizeDrafts[product.id] || []).find((s) => s.id === sizeId);
-    if (!size) return;
-    await onSaveSize(product, sizeId, {
-      name: size.name || "",
-      price: Number(size.price),
-    });
-  };
-
-  const handleAddSizeClick = async (product: AdminProduct) => {
-    const form = newSizeForms[product.id] || { name: "", price: "" };
-    if (!form.name.trim() || !form.price.trim()) return;
-    await onAddSize(product, { name: form.name.trim(), price: Number(form.price) });
-    setNewSizeForms((prev) => ({
-      ...prev,
-      [product.id]: { name: "", price: "" },
-    }));
-  };
-
-  const updateNewSizeForm = (productId: number, field: keyof NewSizeForm, value: string) => {
-    setNewSizeForms((prev) => ({
-      ...prev,
-      [productId]: { ...(prev[productId] || { name: "", price: "" }), [field]: value },
-    }));
-  };
-
   return (
     <div className="admin-page">
       <div className="admin-page__header">
         <div>
-          <p className="eyebrow">Управление меню</p>
-          <h2 className="admin-page__title">Блюда, размеры и цены</h2>
+          <p className="eyebrow">Меню</p>
+          <h2 className="admin-page__title">Товары, варианты и цены</h2>
           <p className="muted">
-            Задайте несколько размеров (например, S/M/L), их цены и меняйте состав прямо здесь.
+            Добавляйте варианты размеров с четырьмя полями: название, числовой размер, единицы измерения и цена.
           </p>
         </div>
         <button className="btn btn--outline" onClick={onRefresh}>
-          Перезагрузить
+          Обновить
         </button>
       </div>
 
       <div className="panel">
         <div className="panel__header">
           <div>
-            <h3>Новое блюдо</h3>
-            <p className="muted">Добавьте позицию и сразу задайте размеры</p>
+            <h3>Новый товар</h3>
+            <p className="muted">Заполните карточку и варианты размера</p>
           </div>
-          <button
-            className="btn btn--primary"
-            onClick={onCreateProduct}
-            disabled={saving}
-          >
-            Добавить блюдо
+          <button className="btn btn--primary" onClick={onCreateProduct} disabled={saving}>
+            Добавить товар
           </button>
         </div>
         <div className="grid grid-3 gap-8">
@@ -154,7 +88,7 @@ const AdminMenuPage: React.FC<Props> = ({
           <input
             className="input"
             type="number"
-            placeholder="Сортировка"
+            placeholder="Порядок"
             value={newProduct.sortOrder}
             onChange={(e) => onNewProductChange("sortOrder", e.target.value)}
           />
@@ -166,12 +100,12 @@ const AdminMenuPage: React.FC<Props> = ({
           />
         </div>
         <div className="stack gap-8">
-          <div className="panel__subhead">Размеры и цены</div>
+          <div className="panel__subhead">Варианты и размеры</div>
           {newProduct.sizes.map((s, idx) => (
-            <div key={idx} className="grid grid-3 gap-8">
+            <div key={idx} className="grid grid-4 gap-8 align-center">
               <input
                 className="input"
-                placeholder="Размер (например, S, M, L)"
+                placeholder="Название (S, M, L)"
                 value={s.name}
                 onChange={(e) => {
                   const next = [...newProduct.sizes];
@@ -182,31 +116,64 @@ const AdminMenuPage: React.FC<Props> = ({
               <input
                 className="input"
                 type="number"
-                placeholder="Цена"
-                value={s.price}
+                placeholder="Размер (число)"
+                value={s.amount}
                 onChange={(e) => {
                   const next = [...newProduct.sizes];
-                  next[idx] = { ...s, price: e.target.value };
+                  next[idx] = { ...s, amount: e.target.value };
                   onNewProductChange("sizes", next);
                 }}
               />
-              <div className="panel__actions">
-                {newProduct.sizes.length > 1 && (
-                  <button
-                    className="btn btn--ghost"
-                    onClick={() => onNewProductChange("sizes", newProduct.sizes.filter((_, i) => i !== idx))}
-                  >
-                    Удалить
-                  </button>
-                )}
-                {idx === newProduct.sizes.length - 1 && (
-                  <button
-                    className="btn btn--outline"
-                    onClick={() => onNewProductChange("sizes", [...newProduct.sizes, { name: "", price: "" }])}
-                  >
-                    + Размер
-                  </button>
-                )}
+              <input
+                className="input"
+                placeholder="Ед. измерения (грамм, мл, см)"
+                value={s.unit}
+                onChange={(e) => {
+                  const next = [...newProduct.sizes];
+                  next[idx] = { ...s, unit: e.target.value };
+                  onNewProductChange("sizes", next);
+                }}
+              />
+              <div className="field-inline field-inline--grow">
+                <input
+                  className="input"
+                  type="number"
+                  placeholder="Цена"
+                  value={s.price}
+                  onChange={(e) => {
+                    const next = [...newProduct.sizes];
+                    next[idx] = { ...s, price: e.target.value };
+                    onNewProductChange("sizes", next);
+                  }}
+                />
+                <div className="panel__actions">
+                  {newProduct.sizes.length > 1 && (
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      onClick={() =>
+                        onNewProductChange(
+                          "sizes",
+                          newProduct.sizes.filter((_, i) => i !== idx)
+                        )
+                      }
+                    >
+                      Удалить
+                    </button>
+                  )}
+                  {idx === newProduct.sizes.length - 1 && (
+                    <button
+                      className="btn btn--outline btn--sm"
+                      onClick={() =>
+                        onNewProductChange("sizes", [
+                          ...newProduct.sizes,
+                          { name: "", amount: "", unit: "", price: "" },
+                        ])
+                      }
+                    >
+                      + Размер
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -225,98 +192,72 @@ const AdminMenuPage: React.FC<Props> = ({
             <div className="admin-products">
               {cat.products.map((product) => (
                 <div key={product.id} className="admin-card">
-                  <div className="admin-card__top">
+                  <div className="admin-card__top" onClick={() => onEdit(product)}>
                     <div className="admin-card__img">
                       <img src={product.image_url} alt={product.name} />
                     </div>
                     <div className="admin-card__body">
                       <div className="admin-card__title">
                         {product.name}
-                        {product.is_hidden && <span className="chip">Скрыто</span>}
+                        {product.is_hidden && <span className="chip">Скрыт</span>}
                       </div>
                       {product.description && (
                         <div className="admin-card__meta">{product.description}</div>
                       )}
-                      <div className="admin-card__sizes">
-                        {(sizeDrafts[product.id] || product.sizes).map((s) => (
-                          <div key={s.id} className="field-inline field-inline--grow">
-                            <input
-                              className="input input--sm"
-                              placeholder="Размер"
-                              value={s.name || ""}
-                              onChange={(e) =>
-                                updateSizeDraft(product.id, s.id, "name", e.target.value)
-                              }
-                            />
-                            <input
-                              className="input input--sm"
-                              type="number"
-                              placeholder="Цена"
-                              value={s.price}
-                              onChange={(e) =>
-                                updateSizeDraft(product.id, s.id, "price", Number(e.target.value))
-                              }
-                            />
-                            <button
-                              className="btn btn--outline btn--sm"
-                              onClick={() => handleSaveSizeClick(product, s.id)}
-                            >
-                              Сохранить
-                            </button>
-                          </div>
-                        ))}
-                        <div className="field-inline field-inline--grow">
-                          <input
-                            className="input input--sm"
-                            placeholder="Новый размер"
-                            value={newSizeForms[product.id]?.name || ""}
-                            onChange={(e) =>
-                              updateNewSizeForm(product.id, "name", e.target.value)
-                            }
-                          />
-                          <input
-                            className="input input--sm"
-                            type="number"
-                            placeholder="Цена"
-                            value={newSizeForms[product.id]?.price || ""}
-                            onChange={(e) =>
-                              updateNewSizeForm(product.id, "price", e.target.value)
-                            }
-                          />
-                          <button
-                            className="btn btn--ghost btn--sm"
-                            onClick={() => handleAddSizeClick(product)}
-                          >
-                            + Добавить размер
-                          </button>
-                        </div>
+                      <div className="admin-card__sizes admin-card__sizes--chips">
+                        {product.sizes.map((s) => {
+                          const amountLabel =
+                            s.amount !== null && s.amount !== undefined && s.amount !== 0
+                              ? `${s.amount}${s.unit ? ` ${s.unit}` : ""}`
+                              : "без объема";
+                          return (
+                            <span key={s.id} className="chip chip--ghost">
+                              {(s.name || "Размер")} · {amountLabel} · {s.price} ₽
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
                   <div className="admin-card__controls">
                     <label className="field-inline">
-                      <span>Сортировка</span>
+                      <span>Порядок</span>
                       <input
                         className="input input--sm"
                         type="number"
                         value={product.sort_order}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => onSortChange(product, Number(e.target.value))}
                       />
                     </label>
-                    <input
-                      className="input input--file"
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => onUpload(product.id, e.target.files?.[0])}
-                    />
                     <div className="panel__actions">
-                      <button className="btn btn--outline" onClick={() => onToggleProduct(product)}>
+                      <button
+                        className="btn btn--outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleProduct(product);
+                        }}
+                      >
                         {product.is_hidden ? "Показать" : "Скрыть"}
                       </button>
-                      <button className="btn btn--ghost" onClick={() => onDelete(product.id)}>
+                      <button
+                        className="btn btn--ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Удалить товар “${product.name}”?`)) {
+                            onDelete(product.id);
+                          }
+                        }}
+                      >
                         Удалить
                       </button>
-                      <button className="btn btn--primary" onClick={() => onEdit(product)}>
+                      <button
+                        className="btn btn--primary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(product);
+                        }}
+                      >
                         Редактировать
                       </button>
                     </div>
@@ -324,7 +265,7 @@ const AdminMenuPage: React.FC<Props> = ({
                 </div>
               ))}
               {cat.products.length === 0 && (
-                <div className="muted">Пока нет блюд в этой категории.</div>
+                <div className="muted">Товары пока не добавлены.</div>
               )}
             </div>
           </div>

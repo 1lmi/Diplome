@@ -185,6 +185,14 @@ def apply_migrations() -> None:
     )
     ensure_column(conn, "product_sizes", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "orders", "user_id", "INTEGER REFERENCES users(id)")
+    ensure_column(conn, "sizes", "amount", "INTEGER")
+    ensure_column(conn, "sizes", "unit", "TEXT")
+    conn.execute(
+        "UPDATE sizes SET amount = COALESCE(amount, gram_weight) WHERE amount IS NULL AND gram_weight IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE sizes SET unit = COALESCE(unit, 'грамм') WHERE unit IS NULL AND gram_weight IS NOT NULL"
+    )
 
     conn.executescript(
         f"""
@@ -193,9 +201,50 @@ def apply_migrations() -> None:
         SELECT
             ps.id AS id,
             p.category_id,
+            p.name AS product_name,
+            s.name AS size_name,
+            COALESCE(s.amount, s.gram_weight) AS size_amount,
+            s.unit AS size_unit,
+            TRIM(
+                COALESCE(s.name, '') ||
+                CASE
+                    WHEN s.name IS NOT NULL AND COALESCE(s.amount, s.gram_weight) IS NOT NULL THEN ', '
+                    ELSE ''
+                END ||
+                COALESCE(
+                    CASE
+                        WHEN COALESCE(s.amount, s.gram_weight) IS NOT NULL THEN
+                            CAST(COALESCE(s.amount, s.gram_weight) AS TEXT) ||
+                            CASE
+                                WHEN s.unit IS NOT NULL AND s.unit != '' THEN ' ' || s.unit
+                                ELSE ''
+                            END
+                    END,
+                    ''
+                )
+            ) AS size_label,
             p.name ||
                 CASE
-                    WHEN s.name IS NOT NULL THEN ' (' || s.name || ')'
+                    WHEN (s.name IS NOT NULL OR COALESCE(s.amount, s.gram_weight) IS NOT NULL) THEN
+                        ' (' ||
+                        TRIM(
+                            COALESCE(s.name, '') ||
+                            CASE
+                                WHEN s.name IS NOT NULL AND COALESCE(s.amount, s.gram_weight) IS NOT NULL THEN ', '
+                                ELSE ''
+                            END ||
+                            COALESCE(
+                                CASE
+                                    WHEN COALESCE(s.amount, s.gram_weight) IS NOT NULL THEN
+                                        CAST(COALESCE(s.amount, s.gram_weight) AS TEXT) ||
+                                        CASE
+                                            WHEN s.unit IS NOT NULL AND s.unit != '' THEN ' ' || s.unit
+                                            ELSE ''
+                                        END
+                                END,
+                                ''
+                            )
+                        ) || ')'
                     ELSE ''
                 END AS name,
             ps.price,
@@ -342,6 +391,11 @@ class MenuItem(BaseModel):
     name: str
     price: int
     description: Optional[str] = None
+    product_name: Optional[str] = None
+    size_name: Optional[str] = None
+    size_amount: Optional[int] = None
+    size_unit: Optional[str] = None
+    size_label: Optional[str] = None
     calories: Optional[float] = None
     protein: Optional[float] = None
     fat: Optional[float] = None
@@ -433,7 +487,9 @@ class AuthResponse(BaseModel):
 class ProductSizePayload(BaseModel):
     id: Optional[int] = None
     size_name: Optional[str] = None
-    grams: Optional[int] = None
+    amount: Optional[int] = None
+    unit: Optional[str] = None
+    grams: Optional[int] = None  # backward compatibility alias
     price: int
     calories: Optional[float] = None
     protein: Optional[float] = None
@@ -445,7 +501,8 @@ class ProductSizePayload(BaseModel):
 class ProductSizeOut(BaseModel):
     id: int
     name: Optional[str]
-    grams: Optional[int]
+    amount: Optional[int]
+    unit: Optional[str]
     price: int
     calories: Optional[float] = None
     protein: Optional[float] = None
@@ -516,15 +573,37 @@ def serialize_user(row: sqlite3.Row) -> Dict[str, Any]:
 
 
 def ensure_size(
-    db: sqlite3.Connection, name: Optional[str], grams: Optional[int]
+    db: sqlite3.Connection,
+    name: Optional[str],
+    amount: Optional[int],
+    unit: Optional[str],
 ) -> Optional[int]:
-    if name is None:
+    if name is None and amount is None and unit is None:
         return None
-    existing = db.execute("SELECT id FROM sizes WHERE name = ?", (name,)).fetchone()
+
+    trimmed_name = name.strip() if name else None
+    normalized_unit = unit.strip() if unit else None
+    normalized_amount = amount
+
+    existing = db.execute(
+        """
+        SELECT id
+        FROM sizes
+        WHERE name IS ?
+          AND amount IS ?
+          AND unit IS ?
+        """,
+        (trimmed_name, normalized_amount, normalized_unit),
+    ).fetchone()
     if existing:
         return existing["id"]
+
     cur = db.execute(
-        "INSERT INTO sizes(name, gram_weight) VALUES (?, ?)", (name, grams)
+        """
+        INSERT INTO sizes(name, amount, unit, gram_weight)
+        VALUES (?, ?, ?, ?)
+        """,
+        (trimmed_name, normalized_amount, normalized_unit, normalized_amount),
     )
     return cur.lastrowid
 
@@ -647,7 +726,8 @@ def build_admin_product(
             ps.carbs,
             ps.is_hidden,
             s.name,
-            s.gram_weight
+            COALESCE(s.amount, s.gram_weight) AS amount,
+            s.unit
         FROM product_sizes ps
         LEFT JOIN sizes s ON s.id = ps.size_id
         WHERE ps.product_id = ?
@@ -659,7 +739,8 @@ def build_admin_product(
         ProductSizeOut(
             id=s["id"],
             name=s["name"],
-            grams=s["gram_weight"],
+            amount=s["amount"],
+            unit=s["unit"],
             price=s["price"],
             calories=s["calories"],
             protein=s["protein"],
@@ -716,7 +797,7 @@ def list_menu(
     db: sqlite3.Connection = Depends(get_db),
 ):
     base_query = """
-        SELECT id, category_id, name, price, description,
+        SELECT id, category_id, name, product_name, size_name, size_amount, size_unit, size_label, price, description,
                calories, protein, fat, carbs, image_path
         FROM v_menu_items
     """
@@ -745,7 +826,7 @@ def get_menu_item(
 ):
     row = db.execute(
         """
-        SELECT id, category_id, name, price, description,
+        SELECT id, category_id, name, product_name, size_name, size_amount, size_unit, size_label, price, description,
                calories, protein, fat, carbs, image_path
         FROM v_menu_items
         WHERE id = ?
@@ -1131,6 +1212,23 @@ def update_category(
     return Category(**dict(updated))
 
 
+@app.delete("/admin/categories/{category_id}")
+def delete_category(
+    category_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    row = db.execute("SELECT id FROM categories WHERE id = ?", (category_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Категория не найдена")
+
+    # мягкое удаление: скрываем категорию и связанные товары
+    db.execute("UPDATE categories SET is_hidden = 1 WHERE id = ?", (category_id,))
+    db.execute("UPDATE products SET is_hidden = 1 WHERE category_id = ?", (category_id,))
+    db.commit()
+    return {"ok": True}
+
+
 @app.post("/admin/products", response_model=AdminProductOut)
 def create_product(
     body: ProductCreate,
@@ -1156,7 +1254,8 @@ def create_product(
     product_id = product_cur.lastrowid
 
     for size in body.sizes:
-        size_id = ensure_size(db, size.size_name, size.grams)
+        amount = size.amount if size.amount is not None else size.grams
+        size_id = ensure_size(db, size.size_name, amount, size.unit)
         db.execute(
             """
             INSERT INTO product_sizes(product_id, size_id, price, calories, protein, fat, carbs, is_hidden)
@@ -1229,7 +1328,8 @@ def update_product(
 
     if body.sizes:
         for size in body.sizes:
-            size_id = ensure_size(db, size.size_name, size.grams)
+            amount = size.amount if size.amount is not None else size.grams
+            size_id = ensure_size(db, size.size_name, amount, size.unit)
             if size.id:
                 db.execute(
                     """

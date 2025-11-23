@@ -143,7 +143,9 @@ const AppContent: React.FC = () => {
   const productsByCategory = useMemo(() => {
     const grouped: Record<string, ProductDisplay> = {};
     for (const item of menu) {
-      const baseName = item.name.replace(/\s*\([^)]*\)\s*$/, "");
+      const baseName =
+        (item.product_name && item.product_name.trim()) ||
+        item.name.replace(/\s*\([^)]*\)\s*$/, "");
       const key = `${item.category_id}|${baseName}`;
       if (!grouped[key]) {
         grouped[key] = {
