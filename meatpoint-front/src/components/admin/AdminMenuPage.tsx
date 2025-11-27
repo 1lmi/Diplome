@@ -151,7 +151,7 @@ const AdminMenuPage: React.FC<Props> = ({
                 <input
                   className="input"
                   type="number"
-                  placeholder="Размер (число)"
+                  placeholder="Размер (200, 350, 500)"
                   value={s.amount}
                   onChange={(e) => {
                     const next = [...newProduct.sizes];
@@ -161,7 +161,7 @@ const AdminMenuPage: React.FC<Props> = ({
                 />
                 <input
                   className="input"
-                  placeholder="Ед. измерения (грамм, мл, см)"
+                  placeholder="Ед. измерения (грамм, мл, шт.)"
                   value={s.unit}
                   onChange={(e) => {
                     const next = [...newProduct.sizes];

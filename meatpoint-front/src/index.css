@@ -253,7 +253,6 @@ select {
   align-items: center;
   overflow: hidden;
   border-radius: 14px;
-  background: #f4f5f7;
 }
 
 .product-card__image {
