@@ -96,6 +96,7 @@ export interface OrderLine {
   price: number;
   quantity: number;
   line_total: number;
+  image_url?: string | null;
 }
 
 export interface Order {
@@ -114,8 +115,11 @@ export interface Order {
 
 export interface User {
   id: number;
+  first_name: string;
+  last_name: string;
+  login: string;
+  full_name: string;
   name: string;
-  phone: string;
   is_admin: boolean;
 }
 
@@ -133,13 +137,4 @@ export interface SettingsMap {
   [key: string]: string;
 }
 
-export interface AdminOrder {
-  id: number;
-  status: string;
-  status_name: string;
-  created_at: string;
-  comment?: string | null;
-  total_price: number;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-}
+export type AdminOrder = Order;

@@ -24,8 +24,11 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
   const [closing, setClosing] = useState(false);
 
   useEffect(() => {
-    if (user?.phone) {
-      setPhone(user.phone);
+    if (user?.login) {
+      setPhone(user.login);
+    }
+    if (user?.full_name) {
+      setName(user.full_name);
     }
     if (open) {
       setClosing(false);
@@ -55,7 +58,7 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
       setError(null);
       const body = {
         customer: {
-          name: name || user.name || undefined,
+          name: name || user.full_name || undefined,
           phone: phone.trim(),
           address: address || undefined,
         },

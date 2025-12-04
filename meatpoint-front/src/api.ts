@@ -99,16 +99,21 @@ export const api = {
     return request("/me/orders");
   },
   // Auth
-  register(name: string, login: string, password: string): Promise<AuthResponse> {
+  register(firstName: string, lastName: string, login: string, password: string): Promise<AuthResponse> {
     return request("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ name, phone: login, password }),
+      body: JSON.stringify({
+        first_name: firstName,
+        last_name: lastName,
+        login,
+        password,
+      }),
     });
   },
   login(login: string, password: string): Promise<AuthResponse> {
     return request("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ phone: login, password }),
+      body: JSON.stringify({ login, password }),
     });
   },
   me(): Promise<AuthResponse["user"]> {

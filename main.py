@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
@@ -53,6 +54,17 @@ def verify_password(password: str, stored: str) -> bool:
         "sha256", password.encode("utf-8"), salt_bytes, 120_000
     ).hex()
     return secrets.compare_digest(recalculated, hash_hex)
+
+
+PASSWORD_POLICY_RE = re.compile(r"^(?=.*[A-Z])(?=.*\d).{8,}$")
+
+
+def validate_password_strength(password: str) -> None:
+    if not PASSWORD_POLICY_RE.match(password):
+        raise HTTPException(
+            status_code=400,
+            detail="Пароль должен содержать минимум 8 символов, 1 заглавную букву и 1 цифру.",
+        )
 
 
 def build_image_url(image_path: str, request: Optional[Request] = None) -> str:
@@ -129,8 +141,11 @@ def apply_migrations() -> None:
         """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT,
+            last_name TEXT,
             name TEXT NOT NULL,
-            phone TEXT NOT NULL UNIQUE,
+            login TEXT UNIQUE,
+            phone TEXT UNIQUE,
             password_hash TEXT NOT NULL,
             is_admin INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -185,6 +200,9 @@ def apply_migrations() -> None:
     )
     ensure_column(conn, "product_sizes", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "orders", "user_id", "INTEGER REFERENCES users(id)")
+    ensure_column(conn, "users", "first_name", "TEXT")
+    ensure_column(conn, "users", "last_name", "TEXT")
+    ensure_column(conn, "users", "login", "TEXT")
     ensure_column(conn, "sizes", "amount", "INTEGER")
     ensure_column(conn, "sizes", "unit", "TEXT")
     conn.execute(
@@ -193,6 +211,37 @@ def apply_migrations() -> None:
     conn.execute(
         "UPDATE sizes SET unit = COALESCE(unit, 'грамм') WHERE unit IS NULL AND gram_weight IS NOT NULL"
     )
+
+    users_rows = conn.execute(
+        "SELECT id, name, phone, first_name, last_name, login FROM users"
+    ).fetchall()
+    for user_row in users_rows:
+        first_name = (user_row["first_name"] or "").strip()
+        last_name = (user_row["last_name"] or "").strip()
+        name = (user_row["name"] or "").strip()
+        if (not first_name or not last_name) and name:
+            parts = name.split(maxsplit=1)
+            if not first_name and parts:
+                first_name = parts[0]
+            if not last_name and len(parts) > 1:
+                last_name = parts[1]
+        login_value = (user_row["login"] or user_row["phone"] or "").strip()
+        if not login_value:
+            login_value = name
+        full_name = name or f"{first_name} {last_name}".strip()
+        conn.execute(
+            """
+            UPDATE users
+            SET first_name = COALESCE(NULLIF(first_name, ''), ?),
+                last_name = COALESCE(NULLIF(last_name, ''), ?),
+                login = COALESCE(NULLIF(login, ''), ?),
+                name = COALESCE(NULLIF(name, ''), ?)
+            WHERE id = ?
+            """,
+            (first_name, last_name, login_value, full_name, user_row["id"]),
+        )
+
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login ON users(login)")
 
     conn.executescript(
         f"""
@@ -282,8 +331,11 @@ def apply_migrations() -> None:
     if admin_exists is None:
         password_hash = hash_password("admin1234")
         conn.execute(
-            "INSERT INTO users(name, phone, password_hash, is_admin) VALUES (?, ?, ?, 1)",
-            ("Admin", "admin", password_hash),
+            """
+            INSERT INTO users(name, first_name, last_name, login, phone, password_hash, is_admin)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+            """,
+            ("Admin", "Admin", "User", "admin", "admin", password_hash),
         )
 
     default_settings = {
@@ -428,6 +480,7 @@ class OrderItemOut(BaseModel):
     price: int
     quantity: int
     line_total: int
+    image_url: Optional[str] = None
 
 
 class OrderHistoryItem(BaseModel):
@@ -462,20 +515,24 @@ class OrderStatus(BaseModel):
 
 
 class RegisterBody(BaseModel):
-    name: str
-    phone: str
-    password: str
+    first_name: str = Field(min_length=1)
+    last_name: str = Field(min_length=1)
+    login: str = Field(min_length=1)
+    password: str = Field(min_length=8)
 
 
 class LoginBody(BaseModel):
-    phone: str
+    login: str
     password: str
 
 
 class UserOut(BaseModel):
     id: int
+    first_name: str
+    last_name: str
+    login: str
+    full_name: str
     name: str
-    phone: str
     is_admin: bool
 
 
@@ -564,10 +621,25 @@ class OrderShort(BaseModel):
 # --- helpers -----------------------------------------------------------------
 
 def serialize_user(row: sqlite3.Row) -> Dict[str, Any]:
+    first_name = (row["first_name"] or "").strip()
+    last_name = (row["last_name"] or "").strip()
+    login = (row["login"] or row["phone"] or "").strip()
+    full_name = (row["name"] or "").strip()
+    if not full_name:
+        full_name = f"{first_name} {last_name}".strip()
+    if not first_name and full_name:
+        parts = full_name.split(maxsplit=1)
+        if parts:
+            first_name = parts[0]
+            if len(parts) > 1 and not last_name:
+                last_name = parts[1]
     return {
         "id": row["id"],
-        "name": row["name"],
-        "phone": row["phone"],
+        "first_name": first_name,
+        "last_name": last_name,
+        "login": login,
+        "full_name": full_name,
+        "name": full_name,
         "is_admin": bool(row["is_admin"]),
     }
 
@@ -650,7 +722,8 @@ def fetch_order(
             oi.quantity,
             oi.price,
             p.name AS product_name,
-            s.name AS size_name
+            s.name AS size_name,
+            p.image_path AS image_path
         FROM order_items oi
         JOIN product_sizes ps ON ps.id = oi.product_size_id
         JOIN products p       ON p.id = ps.product_id
@@ -671,6 +744,7 @@ def fetch_order(
                 price=r["price"],
                 quantity=r["quantity"],
                 line_total=line_total,
+                image_url=build_image_url(r["image_path"]),
             )
         )
 
@@ -976,7 +1050,7 @@ def my_orders(
     return results
 
 
-@app.get("/admin/orders", response_model=List[OrderShort])
+@app.get("/admin/orders", response_model=List[OrderOut])
 def admin_orders(
     status: Optional[str] = None,
     db: sqlite3.Connection = Depends(get_db),
@@ -1002,19 +1076,11 @@ def admin_orders(
     query += " ORDER BY o.created_at DESC"
 
     rows = db.execute(query, params).fetchall()
-    return [
-        OrderShort(
-            id=r["id"],
-            status=r["status"],
-            status_name=r["status_name"],
-            created_at=datetime.fromisoformat(r["created_at"]),
-            comment=r["comment"],
-            total_price=r["total_price"],
-            customer_name=r["customer_name"],
-            customer_phone=r["customer_phone"],
-        )
-        for r in rows
-    ]
+    results: List[OrderOut] = []
+    for r in rows:
+        _, order_out = fetch_order(db, r["id"], with_history=False)
+        results.append(order_out)
+    return results
 
 
 @app.patch("/orders/{order_id}/status", response_model=OrderOut)
@@ -1061,16 +1127,30 @@ def issue_token(db: sqlite3.Connection, user: sqlite3.Row) -> AuthResponse:
 def register(
     body: RegisterBody, db: sqlite3.Connection = Depends(get_db)
 ):
+    first_name = body.first_name.strip()
+    last_name = body.last_name.strip()
+    login_value = body.login.strip()
+    if not first_name or not last_name:
+        raise HTTPException(status_code=400, detail="??? ? ??????? ???????????.")
+    if not login_value:
+        raise HTTPException(status_code=400, detail="????? ??????????.")
+    validate_password_strength(body.password)
+
     existing = db.execute(
-        "SELECT id FROM users WHERE phone = ?", (body.phone,)
+        "SELECT id FROM users WHERE login = ? OR phone = ?",
+        (login_value, login_value),
     ).fetchone()
     if existing:
-        raise HTTPException(status_code=400, detail="Пользователь уже существует")
+        raise HTTPException(status_code=400, detail="????? ????? ??? ?????.")
 
     pwd_hash = hash_password(body.password)
+    full_name = f"{first_name} {last_name}".strip()
     cur = db.execute(
-        "INSERT INTO users(name, phone, password_hash) VALUES (?, ?, ?)",
-        (body.name.strip(), body.phone.strip(), pwd_hash),
+        """
+        INSERT INTO users(name, first_name, last_name, login, phone, password_hash)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (full_name, first_name, last_name, login_value, login_value, pwd_hash),
     )
     user_row = db.execute(
         "SELECT * FROM users WHERE id = ?", (cur.lastrowid,)
@@ -1080,13 +1160,16 @@ def register(
 
 @app.post("/auth/login", response_model=AuthResponse)
 def login(body: LoginBody, db: sqlite3.Connection = Depends(get_db)):
+    login_value = body.login.strip()
+    if not login_value or not body.password:
+        raise HTTPException(status_code=400, detail="Логин и пароль обязательны.")
     user = db.execute(
-        "SELECT * FROM users WHERE phone = ?", (body.phone.strip(),)
+        "SELECT * FROM users WHERE login = ? OR phone = ? LIMIT 1",
+        (login_value, login_value),
     ).fetchone()
     if user is None or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+        raise HTTPException(status_code=401, detail="???????? ????? ??? ??????.")
     return issue_token(db, user)
-
 
 @app.get("/auth/me", response_model=UserOut)
 def me(current_user: sqlite3.Row = Depends(get_current_user)):

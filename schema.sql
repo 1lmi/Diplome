@@ -58,12 +58,17 @@ CREATE TABLE IF NOT EXISTS customers (
 
 CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name    TEXT,
+    last_name     TEXT,
     name          TEXT NOT NULL,
-    phone         TEXT NOT NULL UNIQUE,
+    login         TEXT UNIQUE,
+    phone         TEXT UNIQUE,
     password_hash TEXT NOT NULL,
     is_admin      INTEGER NOT NULL DEFAULT 0,
     created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login ON users(login);
 
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,

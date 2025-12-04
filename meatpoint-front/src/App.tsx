@@ -45,10 +45,15 @@ const AppContent: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authForm, setAuthForm] = useState({
     mode: "login" as "login" | "register",
-    name: "",
+    firstName: "",
+    lastName: "",
     login: "",
     password: "",
   });
+  const passwordStrong = useMemo(
+    () => /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(authForm.password),
+    [authForm.password]
+  );
 
   const sectionRefs = useRef<Record<number, HTMLElement | null>>({});
   const { user, login, register, logout } = useAuth();
@@ -205,16 +210,37 @@ const AppContent: React.FC = () => {
   };
 
   const handleAuthSubmit = async () => {
-    if (!authForm.login.trim() || !authForm.password.trim()) {
-      setAuthError("Введите логин и пароль");
+    const loginValue = authForm.login.trim();
+    const passwordValue = authForm.password;
+    if (!loginValue || !passwordValue) {
+      setAuthError("Введите логин и пароль.");
       return;
+    }
+    if (authForm.mode === "register") {
+      const firstName = authForm.firstName.trim();
+      const lastName = authForm.lastName.trim();
+      if (!firstName || !lastName) {
+        setAuthError("Введите имя и фамилию.");
+        return;
+      }
+      if (!passwordStrong) {
+        setAuthError(
+          "Пароль должен быть не короче 8 символов и содержать заглавную букву и цифру."
+        );
+        return;
+      }
     }
     setAuthError(null);
     try {
       if (authForm.mode === "login") {
-        await login(authForm.login.trim(), authForm.password);
+        await login(loginValue, passwordValue);
       } else {
-        await register(authForm.name.trim() || "Гость", authForm.login.trim(), authForm.password);
+        await register(
+          authForm.firstName.trim(),
+          authForm.lastName.trim(),
+          loginValue,
+          passwordValue
+        );
       }
       setAuthForm((f) => ({ ...f, password: "" }));
       setAuthModalOpen(false);
@@ -459,7 +485,10 @@ const AppContent: React.FC = () => {
                   className={
                     "auth-tab" + (authForm.mode === "login" ? " auth-tab--active" : "")
                   }
-                  onClick={() => setAuthForm((f) => ({ ...f, mode: "login" }))}
+                  onClick={() => {
+                    setAuthError(null);
+                    setAuthForm((f) => ({ ...f, mode: "login" }));
+                  }}
                 >
                   Вход
                 </button>
@@ -467,20 +496,33 @@ const AppContent: React.FC = () => {
                   className={
                     "auth-tab" + (authForm.mode === "register" ? " auth-tab--active" : "")
                   }
-                  onClick={() => setAuthForm((f) => ({ ...f, mode: "register" }))}
+                  onClick={() => {
+                    setAuthError(null);
+                    setAuthForm((f) => ({ ...f, mode: "register" }));
+                  }}
                 >
                   Регистрация
                 </button>
               </div>
               {authForm.mode === "register" && (
-                <input
-                  className="input"
-                  placeholder="Имя"
-                  value={authForm.name}
-                  onChange={(e) =>
-                    setAuthForm((f) => ({ ...f, name: e.target.value }))
-                  }
-                />
+                <>
+                  <input
+                    className="input"
+                    placeholder="Имя"
+                    value={authForm.firstName}
+                    onChange={(e) =>
+                      setAuthForm((f) => ({ ...f, firstName: e.target.value }))
+                    }
+                  />
+                  <input
+                    className="input"
+                    placeholder="Фамилия"
+                    value={authForm.lastName}
+                    onChange={(e) =>
+                      setAuthForm((f) => ({ ...f, lastName: e.target.value }))
+                    }
+                  />
+                </>
               )}
               <input
                 className="input"
@@ -499,6 +541,9 @@ const AppContent: React.FC = () => {
                   setAuthForm((f) => ({ ...f, password: e.target.value }))
                 }
               />
+              <div className="muted" style={{ fontSize: "12px" }}>
+                Пароль: минимум 8 символов, одна заглавная буква и одна цифра.
+              </div>
               {authError && <div className="alert alert--error">{authError}</div>}
               <button
                 className="btn btn--primary btn--full"
