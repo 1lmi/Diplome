@@ -46,7 +46,6 @@ const AppContent: React.FC = () => {
   const [authForm, setAuthForm] = useState({
     mode: "login" as "login" | "register",
     firstName: "",
-    lastName: "",
     login: "",
     password: "",
   });
@@ -54,9 +53,18 @@ const AppContent: React.FC = () => {
     () => /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(authForm.password),
     [authForm.password]
   );
+  const [profileForm, setProfileForm] = useState({
+    firstName: "",
+    lastName: "",
+    birthDate: "",
+    gender: "",
+  });
+  const [profileStatus, setProfileStatus] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
 
   const sectionRefs = useRef<Record<number, HTMLElement | null>>({});
-  const { user, login, register, logout } = useAuth();
+  const { user, login, register, logout, refresh, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -99,6 +107,16 @@ const AppContent: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
+    if (!user) return;
+    setProfileForm({
+      firstName: user.first_name || "",
+      lastName: user.last_name || "",
+      birthDate: user.birth_date || "",
+      gender: user.gender || "",
+    });
+  }, [user]);
+
+  useEffect(() => {
     const onScroll = () => setCompactHeader(window.scrollY > 60);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -132,6 +150,7 @@ const AppContent: React.FC = () => {
   }, [categories]);
 
   useEffect(() => {
+    if (loading) return;
     if (location.pathname === "/auth") {
       setAuthClosing(false);
       setAuthModalOpen(true);
@@ -143,7 +162,7 @@ const AppContent: React.FC = () => {
       setAuthClosing(false);
       setAuthModalOpen(true);
     }
-  }, [location.pathname, navigate, user]);
+  }, [location.pathname, navigate, user, loading]);
 
   const productsByCategory = useMemo(() => {
     const grouped: Record<string, ProductDisplay> = {};
@@ -218,9 +237,8 @@ const AppContent: React.FC = () => {
     }
     if (authForm.mode === "register") {
       const firstName = authForm.firstName.trim();
-      const lastName = authForm.lastName.trim();
-      if (!firstName || !lastName) {
-        setAuthError("Введите имя и фамилию.");
+      if (!firstName) {
+        setAuthError("Введите имя.");
         return;
       }
       if (!passwordStrong) {
@@ -237,7 +255,6 @@ const AppContent: React.FC = () => {
       } else {
         await register(
           authForm.firstName.trim(),
-          authForm.lastName.trim(),
           loginValue,
           passwordValue
         );
@@ -259,69 +276,181 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const formatPrice = (value: number) =>
+    `${value.toLocaleString("ru-RU")} ₽`;
+
+  const formatDateTime = (value: string) =>
+    new Date(value).toLocaleString("ru-RU", {
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
   const heroTitle = settings.hero_title || "Meat Point";
   const heroSubtitle =
     settings.hero_subtitle ||
     "Тёплые блюда и десерты с быстрой доставкой по городу.";
+  const handleProfileSave = async () => {
+    setProfileError(null);
+    setProfileStatus(null);
+    setProfileSaving(true);
+    try {
+      await api.updateProfile({
+        first_name: profileForm.firstName.trim() || null,
+        last_name: profileForm.lastName.trim() || null,
+        birth_date: profileForm.birthDate || null,
+        gender: profileForm.gender || null,
+      });
+      await refresh();
+      setProfileStatus("Данные сохранены");
+    } catch (e: any) {
+      setProfileError(e.message || "Не удалось сохранить данные");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
-  const OrdersPanel = (
-    <section className="panel orders-panel">
-      <div className="panel__header">
-        <div>
-          <h2>История заказов</h2>
-          <p className="muted">Все покупки и статусы в одном месте.</p>
-        </div>
-        <button
-          className="btn btn--outline"
-          onClick={() => api.getMyOrders().then(setMyOrders)}
-        >
-          Обновить
-        </button>
-      </div>
+  const renderOrderCard = (order: Order) => {
+    const thumbs = order.items
+      .map((item) => item.image_url)
+      .filter(Boolean)
+      .slice(0, 3) as string[];
+    const deliveryLabel = order.customer_address ? "Доставка" : "Самовывоз";
 
-      {ordersLoading && <div className="muted">Загружаем заказы...</div>}
-      {!ordersLoading && myOrders.length === 0 && (
-        <div className="muted">Заказов пока нет.</div>
-      )}
-
-      <div className="orders-list">
-        {myOrders.map((order) => (
-          <div key={order.id} className="order-card order-card--profile">
-            <div className="order-card__top">
-              <div>
-                <div className="order-card__id">Ваш заказ №{order.id}</div>
-                <div className="order-card__meta">
-                  {order.status_name} · {new Date(order.created_at).toLocaleString()}
-                </div>
-              </div>
-              <div className="order-card__sum">{order.total_price} руб.</div>
-            </div>
-
-            <div className="order-card__table">
-              <div className="order-card__table-head">
-                <span>Наименование</span>
-                <span>Шт.</span>
-                <span className="align-right">Сумма</span>
-              </div>
-              {order.items.map((item) => (
-                <div key={item.product_size_id} className="order-card__table-row">
-                  <span>{item.product_name}</span>
-                  <span>{item.quantity}</span>
-                  <span className="align-right">{item.line_total} руб.</span>
-                </div>
-              ))}
-              <div className="order-card__table-row order-card__table-row--total">
-                <span>Итого</span>
-                <span />
-                <span className="align-right">{order.total_price} руб.</span>
-              </div>
+    return (
+      <div key={order.id} className="order-card order-card--profile">
+        <div className="order-card__header">
+          <div>
+            <div className="order-card__label">Ваш заказ:</div>
+            <div className="order-card__title">№{order.id}</div>
+            <div className="order-card__meta">
+              {deliveryLabel} · {formatDateTime(order.created_at)}
             </div>
           </div>
-        ))}
+          <div className="order-card__header-meta">
+            {thumbs.length > 0 && (
+              <div className="order-card__thumbs">
+                {thumbs.map((src, idx) => (
+                  <span
+                    key={idx}
+                    className="order-card__thumb"
+                    style={{ backgroundImage: `url(${src})` }}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="order-card__sum">{formatPrice(order.total_price)}</div>
+          </div>
+        </div>
+
+        <div className="order-card__table order-card__table--modern">
+          <div className="order-card__table-head">
+            <span>Наименование</span>
+            <span>Кол-во</span>
+            <span className="align-right">Сумма</span>
+          </div>
+          {order.items.map((item) => (
+            <div key={item.product_size_id} className="order-card__table-row">
+              <span>{item.product_name}</span>
+              <span>{item.quantity}</span>
+              <span className="align-right">{formatPrice(item.line_total)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="order-card__summary">
+          <div className="order-card__summary-row">
+            <span>Сумма заказа</span>
+            <span>{formatPrice(order.total_price)}</span>
+          </div>
+          <div className="order-card__summary-row order-card__summary-row--total">
+            <span>Итого</span>
+            <span>{formatPrice(order.total_price)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ProfilePanel = (
+    <section className="profile-page">
+      <div className="profile-page__header">
+        <h1>Личный кабинет</h1>
+      </div>
+
+      <div className="profile-page__grid">
+        <div className="profile-card profile-card--data">
+          <h3>Личные данные</h3>
+          <p className="muted">Обновите информацию о себе, чтобы курьер смог связаться с вами.</p>
+          <div className="profile-form">
+            <label className="profile-form__label">Логин</label>
+            <input className="input" value={user?.login || ""} disabled />
+
+            <label className="profile-form__label">Имя</label>
+            <input
+              className="input"
+              value={profileForm.firstName}
+              onChange={(e) => setProfileForm((f) => ({ ...f, firstName: e.target.value }))}
+            />
+
+            <label className="profile-form__label">Фамилия (необязательно)</label>
+            <input
+              className="input"
+              value={profileForm.lastName}
+              onChange={(e) => setProfileForm((f) => ({ ...f, lastName: e.target.value }))}
+            />
+
+            <label className="profile-form__label">Дата рождения</label>
+            <input
+              className="input"
+              type="date"
+              value={profileForm.birthDate || ""}
+              onChange={(e) => setProfileForm((f) => ({ ...f, birthDate: e.target.value }))}
+            />
+
+            <label className="profile-form__label">Пол</label>
+            <select
+              className="input"
+              value={profileForm.gender}
+              onChange={(e) => setProfileForm((f) => ({ ...f, gender: e.target.value }))}
+            >
+              <option value="">Не выбрано</option>
+              <option value="Мужской">Мужской</option>
+              <option value="Женский">Женский</option>
+              <option value="Другое">Другое</option>
+            </select>
+          </div>
+          {profileStatus && <div className="alert alert--success">{profileStatus}</div>}
+          {profileError && <div className="alert alert--error">{profileError}</div>}
+          <button className="btn btn--primary" onClick={handleProfileSave} disabled={profileSaving}>
+            {profileSaving ? "Сохраняем..." : "Сохранить"}
+          </button>
+        </div>
+
+        <div className="profile-card profile-card--orders">
+          <div className="profile-card__header">
+            <h3>История заказов</h3>
+            <button
+              className="btn btn--outline"
+              onClick={() => api.getMyOrders().then(setMyOrders)}
+            >
+              Обновить
+            </button>
+          </div>
+
+          {ordersLoading && <div className="muted">Загружаем заказы...</div>}
+          {!ordersLoading && myOrders.length === 0 && (
+            <div className="muted">У вас пока нет заказов.</div>
+          )}
+
+          <div className="orders-list orders-list--modern">
+            {myOrders.map((order) => renderOrderCard(order))}
+          </div>
+        </div>
       </div>
     </section>
   );
-
   const MenuPanel = (
     <section className="menu-section">
       <div className="section-header">
@@ -419,7 +548,7 @@ const AppContent: React.FC = () => {
             path="/profile"
             element={
               user ? (
-                OrdersPanel
+                ProfilePanel
               ) : (
                 <div className="panel">
                   <div className="panel__header">
@@ -505,24 +634,14 @@ const AppContent: React.FC = () => {
                 </button>
               </div>
               {authForm.mode === "register" && (
-                <>
-                  <input
-                    className="input"
-                    placeholder="Имя"
-                    value={authForm.firstName}
-                    onChange={(e) =>
-                      setAuthForm((f) => ({ ...f, firstName: e.target.value }))
-                    }
-                  />
-                  <input
-                    className="input"
-                    placeholder="Фамилия"
-                    value={authForm.lastName}
-                    onChange={(e) =>
-                      setAuthForm((f) => ({ ...f, lastName: e.target.value }))
-                    }
-                  />
-                </>
+                <input
+                  className="input"
+                  placeholder="Имя"
+                  value={authForm.firstName}
+                  onChange={(e) =>
+                    setAuthForm((f) => ({ ...f, firstName: e.target.value }))
+                  }
+                />
               )}
               <input
                 className="input"

@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS users (
     name          TEXT NOT NULL,
     login         TEXT UNIQUE,
     phone         TEXT UNIQUE,
+    birth_date    TEXT,
+    gender        TEXT,
     password_hash TEXT NOT NULL,
     is_admin      INTEGER NOT NULL DEFAULT 0,
     created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

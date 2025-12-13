@@ -146,6 +146,8 @@ def apply_migrations() -> None:
             name TEXT NOT NULL,
             login TEXT UNIQUE,
             phone TEXT UNIQUE,
+            birth_date TEXT,
+            gender TEXT,
             password_hash TEXT NOT NULL,
             is_admin INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -203,6 +205,8 @@ def apply_migrations() -> None:
     ensure_column(conn, "users", "first_name", "TEXT")
     ensure_column(conn, "users", "last_name", "TEXT")
     ensure_column(conn, "users", "login", "TEXT")
+    ensure_column(conn, "users", "birth_date", "TEXT")
+    ensure_column(conn, "users", "gender", "TEXT")
     ensure_column(conn, "sizes", "amount", "INTEGER")
     ensure_column(conn, "sizes", "unit", "TEXT")
     conn.execute(
@@ -213,7 +217,7 @@ def apply_migrations() -> None:
     )
 
     users_rows = conn.execute(
-        "SELECT id, name, phone, first_name, last_name, login FROM users"
+        "SELECT id, name, phone, first_name, last_name, login, birth_date, gender FROM users"
     ).fetchall()
     for user_row in users_rows:
         first_name = (user_row["first_name"] or "").strip()
@@ -516,9 +520,11 @@ class OrderStatus(BaseModel):
 
 class RegisterBody(BaseModel):
     first_name: str = Field(min_length=1)
-    last_name: str = Field(min_length=1)
+    last_name: Optional[str] = None
     login: str = Field(min_length=1)
     password: str = Field(min_length=8)
+    birth_date: Optional[str] = None
+    gender: Optional[str] = None
 
 
 class LoginBody(BaseModel):
@@ -529,16 +535,25 @@ class LoginBody(BaseModel):
 class UserOut(BaseModel):
     id: int
     first_name: str
-    last_name: str
+    last_name: Optional[str] = None
     login: str
     full_name: str
     name: str
+    birth_date: Optional[str] = None
+    gender: Optional[str] = None
     is_admin: bool
 
 
 class AuthResponse(BaseModel):
     token: str
     user: UserOut
+
+
+class ProfileUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    birth_date: Optional[str] = None
+    gender: Optional[str] = None
 
 
 class ProductSizePayload(BaseModel):
@@ -625,6 +640,8 @@ def serialize_user(row: sqlite3.Row) -> Dict[str, Any]:
     last_name = (row["last_name"] or "").strip()
     login = (row["login"] or row["phone"] or "").strip()
     full_name = (row["name"] or "").strip()
+    birth_date = (row["birth_date"] or None) if row["birth_date"] else None
+    gender = (row["gender"] or None) if row["gender"] else None
     if not full_name:
         full_name = f"{first_name} {last_name}".strip()
     if not first_name and full_name:
@@ -640,6 +657,8 @@ def serialize_user(row: sqlite3.Row) -> Dict[str, Any]:
         "login": login,
         "full_name": full_name,
         "name": full_name,
+        "birth_date": birth_date,
+        "gender": gender,
         "is_admin": bool(row["is_admin"]),
     }
 
@@ -1128,12 +1147,14 @@ def register(
     body: RegisterBody, db: sqlite3.Connection = Depends(get_db)
 ):
     first_name = body.first_name.strip()
-    last_name = body.last_name.strip()
+    last_name = (body.last_name or "").strip()
+    birth_date = (body.birth_date or "").strip() or None
+    gender = (body.gender or "").strip() or None
     login_value = body.login.strip()
-    if not first_name or not last_name:
-        raise HTTPException(status_code=400, detail="??? ? ??????? ???????????.")
+    if not first_name:
+        raise HTTPException(status_code=400, detail="Имя обязательно.")
     if not login_value:
-        raise HTTPException(status_code=400, detail="????? ??????????.")
+        raise HTTPException(status_code=400, detail="Логин обязателен.")
     validate_password_strength(body.password)
 
     existing = db.execute(
@@ -1141,40 +1162,73 @@ def register(
         (login_value, login_value),
     ).fetchone()
     if existing:
-        raise HTTPException(status_code=400, detail="????? ????? ??? ?????.")
+        raise HTTPException(status_code=400, detail="Такой логин уже занят.")
 
     pwd_hash = hash_password(body.password)
-    full_name = f"{first_name} {last_name}".strip()
+    full_name = f"{first_name} {last_name}".strip() if last_name else first_name
     cur = db.execute(
         """
-        INSERT INTO users(name, first_name, last_name, login, phone, password_hash)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO users(name, first_name, last_name, login, phone, birth_date, gender, password_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (full_name, first_name, last_name, login_value, login_value, pwd_hash),
+        (full_name, first_name, last_name or None, login_value, login_value, birth_date, gender, pwd_hash),
     )
     user_row = db.execute(
         "SELECT * FROM users WHERE id = ?", (cur.lastrowid,)
     ).fetchone()
     return issue_token(db, user_row)
 
-
 @app.post("/auth/login", response_model=AuthResponse)
 def login(body: LoginBody, db: sqlite3.Connection = Depends(get_db)):
     login_value = body.login.strip()
     if not login_value or not body.password:
-        raise HTTPException(status_code=400, detail="Логин и пароль обязательны.")
+        raise HTTPException(status_code=400, detail="Имя обязательно.")
     user = db.execute(
         "SELECT * FROM users WHERE login = ? OR phone = ? LIMIT 1",
         (login_value, login_value),
     ).fetchone()
     if user is None or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="???????? ????? ??? ??????.")
+        raise HTTPException(status_code=400, detail="Имя обязательно.")
     return issue_token(db, user)
 
 @app.get("/auth/me", response_model=UserOut)
 def me(current_user: sqlite3.Row = Depends(get_current_user)):
     return UserOut(**serialize_user(current_user))
 
+
+@app.put("/me", response_model=UserOut)
+def update_me(
+    body: ProfileUpdate,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(get_current_user),
+):
+    fields: list[str] = []
+    params: list[Any] = []
+
+    def normalized(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        val = value.strip()
+        return val or None
+
+    for attr, column in (
+        ("first_name", "first_name"),
+        ("last_name", "last_name"),
+        ("birth_date", "birth_date"),
+        ("gender", "gender"),
+    ):
+        incoming = getattr(body, attr)
+        if incoming is not None:
+            fields.append(f"{column} = ?")
+            params.append(normalized(incoming))
+
+    if fields:
+        params.append(current_user["id"])
+        db.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", params)
+        db.commit()
+
+    updated = db.execute("SELECT * FROM users WHERE id = ?", (current_user["id"],)).fetchone()
+    return UserOut(**serialize_user(updated))
 
 @app.post("/auth/logout")
 def logout(

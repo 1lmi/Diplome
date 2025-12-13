@@ -99,7 +99,14 @@ export const api = {
     return request("/me/orders");
   },
   // Auth
-  register(firstName: string, lastName: string, login: string, password: string): Promise<AuthResponse> {
+  register(
+    firstName: string,
+    login: string,
+    password: string,
+    lastName?: string,
+    birthDate?: string,
+    gender?: string
+  ): Promise<AuthResponse> {
     return request("/auth/register", {
       method: "POST",
       body: JSON.stringify({
@@ -107,6 +114,8 @@ export const api = {
         last_name: lastName,
         login,
         password,
+        birth_date: birthDate,
+        gender,
       }),
     });
   },
@@ -118,6 +127,17 @@ export const api = {
   },
   me(): Promise<AuthResponse["user"]> {
     return request("/auth/me");
+  },
+  updateProfile(payload: {
+    first_name?: string | null;
+    last_name?: string | null;
+    birth_date?: string | null;
+    gender?: string | null;
+  }): Promise<AuthResponse["user"]> {
+    return request("/me", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
   },
   logout(): Promise<{ ok: boolean }> {
     return request("/auth/logout", { method: "POST" });

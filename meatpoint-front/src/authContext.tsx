@@ -6,7 +6,12 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login(login: string, password: string): Promise<void>;
-  register(firstName: string, lastName: string, login: string, password: string): Promise<void>;
+  register(
+    firstName: string,
+    login: string,
+    password: string,
+    lastName?: string
+  ): Promise<void>;
   logout(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -54,10 +59,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     handleAuth(() => api.login(login, password));
   const register = (
     firstName: string,
-    lastName: string,
     login: string,
-    password: string
-  ) => handleAuth(() => api.register(firstName, lastName, login, password));
+    password: string,
+    lastName?: string
+  ) => handleAuth(() => api.register(firstName, login, password, lastName));
   const logout = async () => {
     await api.logout();
     setAuthToken(null);

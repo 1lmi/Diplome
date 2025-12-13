@@ -116,10 +116,12 @@ export interface Order {
 export interface User {
   id: number;
   first_name: string;
-  last_name: string;
+  last_name?: string | null;
   login: string;
   full_name: string;
   name: string;
+  birth_date?: string | null;
+  gender?: string | null;
   is_admin: boolean;
 }
 
