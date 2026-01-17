@@ -1182,13 +1182,13 @@ def register(
 def login(body: LoginBody, db: sqlite3.Connection = Depends(get_db)):
     login_value = body.login.strip()
     if not login_value or not body.password:
-        raise HTTPException(status_code=400, detail="Имя обязательно.")
+        raise HTTPException(status_code=400, detail="Логин и пароль обязательны.")
     user = db.execute(
         "SELECT * FROM users WHERE login = ? OR phone = ? LIMIT 1",
         (login_value, login_value),
     ).fetchone()
     if user is None or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=400, detail="Имя обязательно.")
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль.")
     return issue_token(db, user)
 
 @app.get("/auth/me", response_model=UserOut)

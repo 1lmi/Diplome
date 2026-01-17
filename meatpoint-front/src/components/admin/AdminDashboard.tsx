@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+﻿import React, { useMemo, useState } from "react";
 import {
   Area,
   Bar,
@@ -10,6 +10,9 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import type { AdminOrder, SettingsMap, StatusOption } from "../../types";
 import { dayKey, formatTime, isSameDay, terminalStatuses } from "./utils";
@@ -26,20 +29,24 @@ interface Props {
 
 const formatMoney = (value: number) => new Intl.NumberFormat("ru-RU").format(value);
 
-const StatCard: React.FC<{
+const SummaryCard: React.FC<{
   title: string;
   value: string;
   subtitle?: string;
   accent?: string;
-}> = ({ title, value, subtitle, accent }) => (
-  <div className="stat-card">
-    <div className="stat-card__title">{title}</div>
-    <div className="stat-card__value" style={accent ? { color: accent } : undefined}>
-      {value}
+}> = ({ title, value, subtitle, accent }) => {
+  const style = {
+    "--summary-accent": accent ?? "var(--accent)",
+  } as React.CSSProperties;
+
+  return (
+    <div className="summary-card" style={style}>
+      <div className="summary-card__title">{title}</div>
+      <div className="summary-card__value">{value}</div>
+      {subtitle && <div className="summary-card__meta">{subtitle}</div>}
     </div>
-    {subtitle && <div className="stat-card__subtitle">{subtitle}</div>}
-  </div>
-);
+  );
+};
 
 const ChartTooltip: React.FC<{ active?: boolean; payload?: any[]; label?: string; currency?: boolean }> = ({
   active,
@@ -50,11 +57,11 @@ const ChartTooltip: React.FC<{ active?: boolean; payload?: any[]; label?: string
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="chart-tooltip">
-      <div className="chart-tooltip__label">{label}</div>
+      {label && <div className="chart-tooltip__label">{label}</div>}
       {payload.map((p) => (
         <div key={p.dataKey} className="chart-tooltip__row">
           <span>{p.name}</span>
-          <strong>{currency ? `${formatMoney(p.value)}` : p.value}</strong>
+          <strong>{currency ? `${formatMoney(p.value)} ₽` : p.value}</strong>
         </div>
       ))}
     </div>
@@ -63,33 +70,59 @@ const ChartTooltip: React.FC<{ active?: boolean; payload?: any[]; label?: string
 
 const AdminDashboard: React.FC<Props> = ({
   orders,
-  statuses,
   settings,
   onSettingChange,
   onSaveSettings,
   onRefresh,
   saving,
 }) => {
-  const now = new Date();
-  const todayOrders = orders.filter((o) => isSameDay(new Date(o.created_at), now));
-  const activeOrders = orders.filter((o) => !terminalStatuses.has(o.status.toLowerCase()));
-  const revenueToday = todayOrders.reduce((sum, o) => sum + o.total_price, 0);
+  const [popularRange, setPopularRange] = useState<"day" | "week">("day");
+
+  const todayOrders = useMemo(() => {
+    const today = new Date();
+    return orders.filter((o) => isSameDay(new Date(o.created_at), today));
+  }, [orders]);
+
+  const activeOrders = useMemo(
+    () => orders.filter((o) => !terminalStatuses.has(o.status.toLowerCase())),
+    [orders]
+  );
+
+  const revenueToday = useMemo(
+    () => todayOrders.reduce((sum, o) => sum + o.total_price, 0),
+    [todayOrders]
+  );
+
   const avgToday = todayOrders.length ? Math.round(revenueToday / todayOrders.length) : 0;
 
+  const deliveryCount = todayOrders.filter((o) => (o.customer_address ?? "").trim()).length;
+  const pickupCount = Math.max(todayOrders.length - deliveryCount, 0);
+
+  const orderTypeData = [
+    { name: "Доставка", value: deliveryCount, color: "#ff8c3a" },
+    { name: "Самовывоз", value: pickupCount, color: "#ffd2ad" },
+  ];
+
   const hourlyBuckets = useMemo(() => {
-    const buckets = Array.from({ length: 12 }, (_, i) => ({
-      label: `${String(i * 2).padStart(2, "0")}-${String(i * 2 + 1).padStart(2, "0")}`,
-      value: 0,
-    }));
+    const startHour = 8;
+    const endHour = 23;
+    const buckets = Array.from({ length: endHour - startHour + 1 }, (_, idx) => {
+      const hour = startHour + idx;
+      return { label: String(hour), value: 0 };
+    });
+
     todayOrders.forEach((order) => {
       const hour = new Date(order.created_at).getHours();
-      const idx = Math.floor(hour / 2);
-      if (buckets[idx]) buckets[idx].value += 1;
+      if (hour >= startHour && hour <= endHour) {
+        buckets[hour - startHour].value += 1;
+      }
     });
+
     return buckets;
   }, [todayOrders]);
 
   const dailyStats = useMemo(() => {
+    const now = new Date();
     const map: Record<string, { revenue: number; orders: number }> = {};
     orders.forEach((o) => {
       const key = dayKey(new Date(o.created_at));
@@ -107,118 +140,214 @@ const AdminDashboard: React.FC<Props> = ({
       list.push({ label, revenue: map[key]?.revenue ?? 0, orders: map[key]?.orders ?? 0 });
     }
     return list;
-  }, [now, orders]);
+  }, [orders]);
 
-  const statusCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    orders.forEach((o) => {
-      const key = o.status;
-      map[key] = (map[key] ?? 0) + 1;
+  const popularItems = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(todayStart.getDate() - 6);
+
+    const dayMap = new Map<string, number>();
+    const weekMap = new Map<string, number>();
+
+    orders.forEach((order) => {
+      const created = new Date(order.created_at);
+      const items = order.items ?? [];
+      const isToday = created >= todayStart;
+      const isWeek = created >= weekStart;
+      if (!isToday && !isWeek) return;
+
+      items.forEach((item) => {
+        const key = item.product_name || "Позиция";
+        if (isToday) {
+          dayMap.set(key, (dayMap.get(key) ?? 0) + item.quantity);
+        }
+        if (isWeek) {
+          weekMap.set(key, (weekMap.get(key) ?? 0) + item.quantity);
+        }
+      });
     });
-    const ordered =
-      statuses.length > 0
-        ? statuses.map((s) => ({
-            code: s.code,
-            label: s.name,
-            value: map[s.code] ?? 0,
-          }))
-        : Object.entries(map).map(([code, value]) => ({ code, label: code, value }));
-    return ordered.filter((s) => s.value > 0).sort((a, b) => b.value - a.value);
-  }, [orders, statuses]);
 
-  const statusColors = useMemo(() => {
-    const palette = ["#ff8c3a", "#1c7ed6", "#12b886", "#845ef7", "#f76707", "#f03e3e"];
-    const map: Record<string, string> = {};
-    statuses.forEach((s, idx) => {
-      map[s.code.toLowerCase()] = palette[idx % palette.length];
-    });
-    return map;
-  }, [statuses]);
+    const toList = (map: Map<string, number>) =>
+      [...map.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
 
-  const activeList = [...activeOrders].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    return { day: toList(dayMap), week: toList(weekMap) };
+  }, [orders]);
+
+  const activeList = useMemo(
+    () =>
+      [...activeOrders].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ),
+    [activeOrders]
   );
 
   const hasDailyStats = dailyStats.some((d) => d.revenue > 0 || d.orders > 0);
   const hasHourlyStats = hourlyBuckets.some((d) => d.value > 0);
+  const hasTypeStats = orderTypeData.some((d) => d.value > 0);
+
+  const popularList = popularRange === "day" ? popularItems.day : popularItems.week;
 
   return (
     <div className="admin-page">
       <div className="admin-page__header">
         <div>
-          <p className="eyebrow">Обзор</p>
-          <h2 className="admin-page__title">Дашборд ресторана</h2>
-          <p className="muted">Свежие показатели, активные заказы и настройки на одной странице.</p>
+          <p className="eyebrow">Дашборд</p>
+          <h2 className="admin-page__title">Сводка по заказам</h2>
+          <p className="muted">Сегодня, активные заказы и динамика за неделю в одном месте.</p>
         </div>
         <button className="btn btn--outline" onClick={onRefresh}>
           Обновить данные
         </button>
       </div>
 
-      <div className="panel active-orders-panel">
-        <div className="panel__header active-orders-panel__header">
+      <div className="dashboard-grid dashboard-grid--top">
+        <div className="dashboard-card">
+          <div className="dashboard-card__header">
+            <div>
+              <div className="dashboard-card__title">Заказы за день</div>
+              <div className="dashboard-card__subtitle">Доставка и самовывоз</div>
+            </div>
+          </div>
+          <div className="donut-block">
+            <div className="donut-chart">
+              {hasTypeStats ? (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={orderTypeData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={52}
+                        outerRadius={72}
+                        paddingAngle={2}
+                      >
+                        {orderTypeData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="donut-center">
+                    <div className="donut-center__value">{todayOrders.length}</div>
+                    <div className="donut-center__label">заказов</div>
+                  </div>
+                </>
+              ) : (
+                <div className="chart-empty">Нет заказов за сегодня</div>
+              )}
+            </div>
+            <div className="donut-legend">
+              {orderTypeData.map((entry) => (
+                <div key={entry.name} className="donut-legend__item">
+                  <span className="donut-legend__label">
+                    <span className="donut-legend__dot" style={{ background: entry.color }} />
+                    {entry.name}
+                  </span>
+                  <span className="donut-legend__value">{entry.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="dashboard-card__header">
+            <div>
+              <div className="dashboard-card__title">Заказы за день по часам</div>
+              <div className="dashboard-card__subtitle">Интервал с 8:00 до 23:00</div>
+            </div>
+          </div>
+          {!hasHourlyStats ? (
+            <div className="chart-empty">Нет заказов в этом интервале</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <RBarChart data={hourlyBuckets}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e9edf5" />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="value" name="Заказы" fill="var(--accent)" radius={[10, 10, 4, 4]} />
+              </RBarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      <div className="dashboard-summary">
+        <SummaryCard
+          title="Активные заказы"
+          value={String(activeOrders.length)}
+          subtitle="В работе прямо сейчас"
+          accent="#ff6b3d"
+        />
+        <SummaryCard
+          title="Заказы сегодня"
+          value={String(todayOrders.length)}
+          subtitle="За последние 24 часа"
+          accent="#1c7ed6"
+        />
+        <SummaryCard
+          title="Выручка сегодня"
+          value={`${formatMoney(revenueToday)} ₽`}
+          subtitle="Сумма всех чеков"
+          accent="#2f9e44"
+        />
+        <SummaryCard
+          title="Средний чек"
+          value={avgToday ? `${formatMoney(avgToday)} ₽` : "-"}
+          subtitle="По заказам сегодня"
+          accent="#845ef7"
+        />
+      </div>
+
+      <div className="dashboard-panel dashboard-panel--accent">
+        <div className="dashboard-panel__header">
           <div>
-            <p className="eyebrow">Активные заказы</p>
-            <h3 className="admin-page__title">На руках: {activeOrders.length}</h3>
-            <p className="muted">Все текущие заказы наверху, с позициями и статусами.</p>
+            <h3 className="dashboard-panel__title">Активные заказы</h3>
+            <p className="dashboard-panel__meta">Последние заказы в работе</p>
           </div>
           <div className="active-orders__badges">
             <span className="chip chip--soft">{activeOrders.length} в работе</span>
             <span className="chip chip--ghost">{todayOrders.length} сегодня</span>
           </div>
         </div>
-        {activeList.length === 0 && <div className="active-orders__empty">Активных заказов нет.</div>}
+        {activeList.length === 0 && <div className="muted">Активных заказов нет.</div>}
         {activeList.length > 0 && (
-          <div className="active-orders__grid">
-            {activeList.slice(0, 6).map((order) => {
-              const color = statusColors[order.status.toLowerCase()] ?? "var(--accent)";
+          <div className="active-strip">
+            {activeList.map((order) => {
               const items = order.items ?? [];
+              const deliveryLabel = (order.customer_address ?? "").trim() ? "Доставка" : "Самовывоз";
               return (
-                <div key={order.id} className="admin-order-card">
-                  <div className="admin-order-card__head">
-                    <div>
-                      <div className="admin-order-card__id">№{order.id}</div>
-                      <div className="admin-order-card__meta">
-                        {formatTime(order.created_at)} · {order.customer_name || "Гость"} · {order.customer_phone || "-"}
-                      </div>
-                    </div>
-                    <span className="status-pill" style={{ color, background: `${color}1a` }}>
-                      {order.status_name || order.status}
-                    </span>
+                <div key={order.id} className="order-mini-card">
+                  <div className="order-mini-card__head">
+                    <span className="order-mini-card__type">{deliveryLabel}</span>
+                    <span className="order-mini-card__id">№{order.id}</span>
                   </div>
-                  <div className="admin-order-card__items">
-                    {items.length === 0 && <div className="muted">Нет позиций в заказе</div>}
-                    {items.slice(0, 4).map((item) => (
-                      <div
-                        key={`${order.id}-${item.product_size_id}-${item.product_name}`}
-                        className="admin-order-card__item"
-                      >
-                        <div className="admin-order-card__thumb">
+                  <div className="order-mini-card__sum">{formatMoney(order.total_price)} ₽</div>
+                  {items.length === 0 ? (
+                    <div className="order-mini-card__empty muted">Нет позиций</div>
+                  ) : (
+                    <div className="order-mini-card__items">
+                      {items.slice(0, 3).map((item) => (
+                        <div
+                          key={`${order.id}-${item.product_size_id}-${item.product_name}`}
+                          className="order-mini-card__thumb"
+                        >
                           <img src={item.image_url || "/static/default.png"} alt={item.product_name} />
                         </div>
-                        <div className="admin-order-card__item-info">
-                          <div className="admin-order-card__item-title">{item.product_name}</div>
-                          <div className="admin-order-card__item-meta">
-                            {item.size_name ? `${item.size_name} · ` : ""}
-                            x{item.quantity} · {formatMoney(item.line_total)} ₽
-                          </div>
-                        </div>
-                        <div className="admin-order-card__price">{formatMoney(item.price)} ₽</div>
-                      </div>
-                    ))}
-                    {items.length > 4 && (
-                      <div className="admin-order-card__more">+ ещё {items.length - 4} позиций</div>
-                    )}
-                  </div>
-                  <div className="admin-order-card__footer">
-                    <div className="admin-order-card__customer">
-                      {order.customer_phone || "Без телефона"}
-                      {order.comment && <span className="admin-order-card__comment"> · {order.comment}</span>}
+                      ))}
+                      {items.length > 3 && <div className="order-mini-card__more">+{items.length - 3}</div>}
                     </div>
-                    <div className="admin-order-card__total">
-                      <span>Сумма</span>
-                      <strong>{formatMoney(order.total_price)} ₽</strong>
-                    </div>
+                  )}
+                  <div className="order-mini-card__meta">
+                    <span className="order-mini-card__count">{items.length} поз.</span>
+                    <span>{formatTime(order.created_at)}</span>
                   </div>
                 </div>
               );
@@ -227,51 +356,24 @@ const AdminDashboard: React.FC<Props> = ({
         )}
       </div>
 
-      <div className="stat-grid">
-        <StatCard
-          title="Активные заказы"
-          value={String(activeOrders.length)}
-          subtitle="В работе прямо сейчас"
-          accent="#ff6b3d"
-        />
-        <StatCard
-          title="Заказы сегодня"
-          value={String(todayOrders.length)}
-          subtitle="За последние 24 часа"
-          accent="#1c7ed6"
-        />
-        <StatCard
-          title="Выручка сегодня"
-          value={`${formatMoney(revenueToday)} ₽`}
-          subtitle="Сумма всех чеков"
-          accent="#2f9e44"
-        />
-        <StatCard
-          title="Средний чек"
-          value={avgToday ? `${formatMoney(avgToday)} ₽` : "-"}
-          subtitle="По сегодняшним заказам"
-          accent="#ae3ec9"
-        />
-      </div>
-
-      <div className="grid grid-2 gap-12">
-        <div className="chart-card chart-card--glass">
-          <div className="chart-card__header">
+      <div className="dashboard-grid dashboard-grid--bottom">
+        <div className="dashboard-card">
+          <div className="dashboard-card__header">
             <div>
-              <div className="chart-card__title">Динамика за 7 дней</div>
-              <div className="chart-card__subtitle muted">Выручка и количество заказов</div>
+              <div className="dashboard-card__title">Динамика за 7 дней</div>
+              <div className="dashboard-card__subtitle">Выручка и количество заказов</div>
             </div>
             <div className="chart-card__legend">
-              <span className="legend-dot legend-dot--primary" />
+              <span className="legend-dot" />
               <span>Выручка</span>
               <span className="legend-dot legend-dot--secondary" />
               <span>Заказы</span>
             </div>
           </div>
           {!hasDailyStats ? (
-            <div className="chart-empty">Нет данных</div>
+            <div className="chart-empty">Нет данных за период</div>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={240}>
               <ComposedChart data={dailyStats}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e9edf5" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
@@ -302,96 +404,91 @@ const AdminDashboard: React.FC<Props> = ({
           )}
         </div>
 
-        <div className="chart-card">
-          <div className="chart-card__header">
-            <div className="chart-card__title">Заказы по часам (сегодня)</div>
+        <div className="dashboard-card">
+          <div className="dashboard-card__header">
+            <div>
+              <div className="dashboard-card__title">Популярные позиции</div>
+              <div className="dashboard-card__subtitle">
+                {popularRange === "day" ? "Топ за день" : "Топ за неделю"}
+              </div>
+            </div>
+            <div className="range-tabs">
+              <button
+                className={`range-tab${popularRange === "day" ? " range-tab--active" : ""}`}
+                onClick={() => setPopularRange("day")}
+                type="button"
+              >
+                День
+              </button>
+              <button
+                className={`range-tab${popularRange === "week" ? " range-tab--active" : ""}`}
+                onClick={() => setPopularRange("week")}
+                type="button"
+              >
+                Неделя
+              </button>
+            </div>
           </div>
-          {!hasHourlyStats ? (
-            <div className="chart-empty">Нет данных за период</div>
+          {popularList.length === 0 ? (
+            <div className="muted">Нет данных по позициям.</div>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <RBarChart data={hourlyBuckets}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e9edf5" />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="value" name="Заказы" fill="var(--accent)" radius={[10, 10, 4, 4]} />
-              </RBarChart>
-            </ResponsiveContainer>
+            <ul className="popular-list">
+              {popularList.map((item, index) => (
+                <li key={item.name} className="popular-item">
+                  <span className="popular-item__name">
+                    {index + 1}. {item.name}
+                  </span>
+                  <span className="popular-item__count">{item.count} шт.</span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>
 
-      <div className="grid grid-2 gap-12">
-        <div className="panel">
-          <div className="panel__header">
-            <div>
-              <h3>Статусы</h3>
-              <p className="muted">Распределение всех заказов</p>
-            </div>
-            <span className="chip chip--soft">{orders.length} заказов</span>
+      <div className="panel dashboard-settings">
+        <div className="panel__header">
+          <div>
+            <h3>Настройки витрины</h3>
+            <p className="muted">Тексты главного блока на сайте и контактный номер.</p>
           </div>
-          {statusCounts.length === 0 && <div className="muted">Пока нет заказов.</div>}
-          <div className="status-grid">
-            {statusCounts.map((s) => {
-              const color = statusColors[s.code.toLowerCase()] ?? "var(--accent)";
-              return (
-                <div key={s.code} className="status-card">
-                  <div className="status-card__header">
-                    <span className="status-card__dot" style={{ background: color, boxShadow: `0 0 0 6px ${color}22` }} />
-                    <span>{s.label}</span>
-                  </div>
-                  <div className="status-card__value">{s.value}</div>
-                </div>
-              );
-            })}
-          </div>
+          <button className="btn btn--primary" onClick={onSaveSettings} disabled={saving}>
+            Сохранить
+          </button>
         </div>
-
-        <div className="panel">
-          <div className="panel__header">
-            <div>
-              <h3>Главная витрина</h3>
-              <p className="muted">Настройки геро-блока на сайте</p>
-            </div>
-            <button className="btn btn--primary" onClick={onSaveSettings} disabled={saving}>
-              Сохранить
-            </button>
-          </div>
-          <div className="stack gap-8">
-            <label className="field">
-              <span>Заголовок</span>
-              <input
-                className="input"
-                value={settings.hero_title || ""}
-                onChange={(e) => onSettingChange("hero_title", e.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>Подзаголовок</span>
-              <input
-                className="input"
-                value={settings.hero_subtitle || ""}
-                onChange={(e) => onSettingChange("hero_subtitle", e.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>Телефон</span>
-              <input
-                className="input"
-                value={settings.contact_phone || ""}
-                onChange={(e) => onSettingChange("contact_phone", e.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>Подсказка по доставке</span>
-              <input
-                className="input"
-                value={settings.delivery_hint || ""}
-                onChange={(e) => onSettingChange("delivery_hint", e.target.value)}
-              />
-            </label>
-          </div>
+        <div className="stack gap-8">
+          <label className="field">
+            <span>Заголовок</span>
+            <input
+              className="input"
+              value={settings.hero_title || ""}
+              onChange={(e) => onSettingChange("hero_title", e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>Подзаголовок</span>
+            <input
+              className="input"
+              value={settings.hero_subtitle || ""}
+              onChange={(e) => onSettingChange("hero_subtitle", e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>Телефон</span>
+            <input
+              className="input"
+              value={settings.contact_phone || ""}
+              onChange={(e) => onSettingChange("contact_phone", e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>Подсказка о доставке</span>
+            <input
+              className="input"
+              value={settings.delivery_hint || ""}
+              onChange={(e) => onSettingChange("delivery_hint", e.target.value)}
+            />
+          </label>
         </div>
       </div>
     </div>
