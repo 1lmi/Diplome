@@ -223,8 +223,8 @@ const AdminDashboard: React.FC<Props> = ({
                         data={orderTypeData}
                         dataKey="value"
                         nameKey="name"
-                        innerRadius={52}
-                        outerRadius={72}
+                        innerRadius={60}
+                        outerRadius={86}
                         paddingAngle={2}
                       >
                         {orderTypeData.map((entry) => (
