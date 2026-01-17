@@ -43,6 +43,7 @@ export interface OrderCreate {
     phone: string;
     address?: string | null;
   };
+  delivery_method?: "delivery" | "pickup";
   comment?: string | null;
   items: OrderCreateItem[];
 }
@@ -109,6 +110,7 @@ export interface Order {
   customer_name?: string | null;
   customer_phone?: string | null;
   customer_address?: string | null;
+  delivery_method?: "delivery" | "pickup" | null;
   items: OrderLine[];
   history: OrderHistoryItem[];
 }

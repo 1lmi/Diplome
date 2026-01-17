@@ -14,6 +14,7 @@ interface Props {
 export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
   const { items, totalPrice, changeQuantity, removeItem, clear } = useCart();
   const { user } = useAuth();
+  const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup">("delivery");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -37,7 +38,9 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
   }, [user, open]);
 
   const visible = open || closing;
-  const disabled = !items.length || !phone.trim() || loading || !user;
+  const needsAddress = deliveryMethod === "delivery";
+  const disabled =
+    !items.length || !phone.trim() || loading || !user || (needsAddress && !address.trim());
 
   const handleClose = () => {
     setClosing(true);
@@ -60,8 +63,9 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
         customer: {
           name: name || user.full_name || undefined,
           phone: phone.trim(),
-          address: address || undefined,
+          address: needsAddress ? address || undefined : undefined,
         },
+        delivery_method: deliveryMethod,
         comment: comment || undefined,
         items: items.map((i) => ({
           product_size_id: i.productSizeId,
@@ -153,7 +157,29 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
             </div>
 
             <div className="cart-modal__form">
-              <h3>Данные для доставки</h3>
+              <h3>Получение заказа</h3>
+              <div className="delivery-toggle">
+                <button
+                  type="button"
+                  className={
+                    "delivery-toggle__btn" +
+                    (deliveryMethod === "delivery" ? " delivery-toggle__btn--active" : "")
+                  }
+                  onClick={() => setDeliveryMethod("delivery")}
+                >
+                  Доставка
+                </button>
+                <button
+                  type="button"
+                  className={
+                    "delivery-toggle__btn" +
+                    (deliveryMethod === "pickup" ? " delivery-toggle__btn--active" : "")
+                  }
+                  onClick={() => setDeliveryMethod("pickup")}
+                >
+                  Самовывоз
+                </button>
+              </div>
               <input
                 className="input"
                 placeholder="Имя (необязательно)"
@@ -166,12 +192,16 @@ export const CartDrawer: React.FC<Props> = ({ open, onClose, onTrack }) => {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
               />
-              <input
-                className="input"
-                placeholder="Адрес"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-              />
+              {needsAddress ? (
+                <input
+                  className="input"
+                  placeholder="Адрес"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                />
+              ) : (
+                <div className="pickup-hint">Адрес не нужен — ждём вас на самовывоз.</div>
+              )}
               <textarea
                 className="textarea"
                 placeholder="Комментарий для курьера"

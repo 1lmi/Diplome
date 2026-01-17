@@ -202,6 +202,7 @@ def apply_migrations() -> None:
     )
     ensure_column(conn, "product_sizes", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "orders", "user_id", "INTEGER REFERENCES users(id)")
+    ensure_column(conn, "orders", "delivery_method", "TEXT")
     ensure_column(conn, "users", "first_name", "TEXT")
     ensure_column(conn, "users", "last_name", "TEXT")
     ensure_column(conn, "users", "login", "TEXT")
@@ -473,6 +474,7 @@ class OrderItemIn(BaseModel):
 
 class OrderCreate(BaseModel):
     customer: CustomerIn
+    delivery_method: Optional[str] = None
     comment: Optional[str] = None
     items: List[OrderItemIn]
 
@@ -504,6 +506,7 @@ class OrderOut(BaseModel):
     customer_name: Optional[str]
     customer_phone: Optional[str]
     customer_address: Optional[str]
+    delivery_method: Optional[str]
     items: List[OrderItemOut]
     history: List[OrderHistoryItem] = []
 
@@ -709,7 +712,10 @@ def record_status_history(
 
 
 def fetch_order(
-    db: sqlite3.Connection, order_id: int, with_history: bool = True
+    db: sqlite3.Connection,
+    order_id: int,
+    with_history: bool = True,
+    request: Optional[Request] = None,
 ) -> tuple[sqlite3.Row, OrderOut]:
     row = db.execute(
         """
@@ -718,6 +724,7 @@ def fetch_order(
                o.total_price,
                o.created_at,
                o.user_id,
+               o.delivery_method,
                os.code AS status,
                os.name AS status_name,
                c.name  AS customer_name,
@@ -733,6 +740,16 @@ def fetch_order(
 
     if row is None:
         raise HTTPException(status_code=404, detail="Заказ не найден")
+
+    delivery_method = row["delivery_method"]
+    if delivery_method:
+        delivery_method = delivery_method.strip().lower()
+    if delivery_method not in ("delivery", "pickup"):
+        delivery_method = (
+            "delivery"
+            if (row["customer_address"] and str(row["customer_address"]).strip())
+            else "pickup"
+        )
 
     items_rows = db.execute(
         """
@@ -763,7 +780,7 @@ def fetch_order(
                 price=r["price"],
                 quantity=r["quantity"],
                 line_total=line_total,
-                image_url=build_image_url(r["image_path"]),
+                image_url=build_image_url(r["image_path"], request),
             )
         )
 
@@ -799,6 +816,7 @@ def fetch_order(
         customer_name=row["customer_name"],
         customer_phone=row["customer_phone"],
         customer_address=row["customer_address"],
+        delivery_method=delivery_method,
         items=items,
         history=history,
     )
@@ -938,6 +956,7 @@ def get_menu_item(
 @app.post("/orders", response_model=OrderOut, status_code=201)
 def create_order(
     order: OrderCreate,
+    request: Request,
     db: sqlite3.Connection = Depends(get_db),
     current_user: Optional[sqlite3.Row] = Depends(get_optional_user),
 ):
@@ -973,6 +992,12 @@ def create_order(
         )
         customer_id = cur.lastrowid
 
+    delivery_method = (order.delivery_method or "").strip().lower()
+    if delivery_method not in ("delivery", "pickup"):
+        delivery_method = (
+            "delivery" if (order.customer.address or "").strip() else "pickup"
+        )
+
     total_price = 0
     prices: dict[int, int] = {}
     for item in order.items:
@@ -991,8 +1016,8 @@ def create_order(
 
     cur.execute(
         """
-        INSERT INTO orders(customer_id, status_id, comment, total_price, user_id)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO orders(customer_id, status_id, comment, total_price, user_id, delivery_method)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             customer_id,
@@ -1000,6 +1025,7 @@ def create_order(
             order.comment,
             total_price,
             current_user["id"] if current_user else None,
+            delivery_method,
         ),
     )
     order_id = cur.lastrowid
@@ -1020,18 +1046,19 @@ def create_order(
         )
 
     db.commit()
-    _, out = fetch_order(db, order_id)
+    _, out = fetch_order(db, order_id, request=request)
     return out
 
 
 @app.get("/orders/{order_id}", response_model=OrderOut)
 def get_order(
     order_id: int,
+    request: Request,
     db: sqlite3.Connection = Depends(get_db),
     current_user: Optional[sqlite3.Row] = Depends(get_optional_user),
     phone: Optional[str] = None,
 ):
-    raw, out = fetch_order(db, order_id)
+    raw, out = fetch_order(db, order_id, request=request)
     if current_user and (current_user["is_admin"] or raw["user_id"] == current_user["id"]):
         return out
     if phone and raw["customer_phone"] and phone.strip() == raw["customer_phone"]:
@@ -1045,9 +1072,10 @@ def get_order(
 def track_order(
     order_id: int,
     phone: str,
+    request: Request,
     db: sqlite3.Connection = Depends(get_db),
 ):
-    raw, out = fetch_order(db, order_id)
+    raw, out = fetch_order(db, order_id, request=request)
     if raw["customer_phone"] and raw["customer_phone"] == phone.strip():
         return out
     raise HTTPException(status_code=403, detail="Телефон не совпадает с заказом")
@@ -1055,6 +1083,7 @@ def track_order(
 
 @app.get("/me/orders", response_model=List[OrderOut])
 def my_orders(
+    request: Request,
     db: sqlite3.Connection = Depends(get_db),
     current_user: sqlite3.Row = Depends(get_current_user),
 ):
@@ -1064,13 +1093,14 @@ def my_orders(
     ).fetchall()
     results: List[OrderOut] = []
     for r in orders_rows:
-        _, order_out = fetch_order(db, r["id"])
+        _, order_out = fetch_order(db, r["id"], request=request)
         results.append(order_out)
     return results
 
 
 @app.get("/admin/orders", response_model=List[OrderOut])
 def admin_orders(
+    request: Request,
     status: Optional[str] = None,
     db: sqlite3.Connection = Depends(get_db),
     _: sqlite3.Row = Depends(require_admin),
@@ -1097,7 +1127,7 @@ def admin_orders(
     rows = db.execute(query, params).fetchall()
     results: List[OrderOut] = []
     for r in rows:
-        _, order_out = fetch_order(db, r["id"], with_history=False)
+        _, order_out = fetch_order(db, r["id"], with_history=False, request=request)
         results.append(order_out)
     return results
 
@@ -1106,6 +1136,7 @@ def admin_orders(
 def update_order_status(
     order_id: int,
     body: OrderStatusUpdate,
+    request: Request,
     db: sqlite3.Connection = Depends(get_db),
     _: sqlite3.Row = Depends(require_admin),
 ):
@@ -1127,7 +1158,7 @@ def update_order_status(
 
     record_status_history(db, order_id, status_row["id"], body.comment)
     db.commit()
-    _, out = fetch_order(db, order_id)
+    _, out = fetch_order(db, order_id, request=request)
     return out
 # --- Auth --------------------------------------------------------------------
 

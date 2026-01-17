@@ -1413,6 +1413,43 @@ select {
   gap: 10px;
 }
 
+.delivery-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f3f4f6;
+  width: fit-content;
+}
+
+.delivery-toggle__btn {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.delivery-toggle__btn--active {
+  background: #fff;
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+}
+
+.pickup-hint {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  background: #f9fafb;
+}
+
 .cart-modal__success,
 .cart-modal__error {
   margin-top: 12px;

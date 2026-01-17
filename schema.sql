@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS orders (
     status_id    INTEGER NOT NULL,
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     comment      TEXT,
+    delivery_method TEXT,
     total_price  INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (customer_id) REFERENCES customers (id),
     FOREIGN KEY (user_id)     REFERENCES users (id),

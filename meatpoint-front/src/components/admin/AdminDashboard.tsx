@@ -95,7 +95,14 @@ const AdminDashboard: React.FC<Props> = ({
 
   const avgToday = todayOrders.length ? Math.round(revenueToday / todayOrders.length) : 0;
 
-  const deliveryCount = todayOrders.filter((o) => (o.customer_address ?? "").trim()).length;
+  const getDeliveryMethod = (order: AdminOrder) => {
+    if (order.delivery_method === "delivery" || order.delivery_method === "pickup") {
+      return order.delivery_method;
+    }
+    return (order.customer_address ?? "").trim() ? "delivery" : "pickup";
+  };
+
+  const deliveryCount = todayOrders.filter((o) => getDeliveryMethod(o) === "delivery").length;
   const pickupCount = Math.max(todayOrders.length - deliveryCount, 0);
 
   const orderTypeData = [
@@ -289,11 +296,11 @@ const AdminDashboard: React.FC<Props> = ({
         <SummaryCard
           title="Заказы сегодня"
           value={String(todayOrders.length)}
-          subtitle="За последние 24 часа"
+          subtitle="Общее количество заказов"
           accent="#1c7ed6"
         />
         <SummaryCard
-          title="Выручка сегодня"
+          title="Выручка сегодня" 
           value={`${formatMoney(revenueToday)} ₽`}
           subtitle="Сумма всех чеков"
           accent="#2f9e44"
@@ -322,7 +329,8 @@ const AdminDashboard: React.FC<Props> = ({
           <div className="active-strip">
             {activeList.map((order) => {
               const items = order.items ?? [];
-              const deliveryLabel = (order.customer_address ?? "").trim() ? "Доставка" : "Самовывоз";
+              const deliveryLabel =
+                getDeliveryMethod(order) === "delivery" ? "Доставка" : "Самовывоз";
               return (
                 <div key={order.id} className="order-mini-card">
                   <div className="order-mini-card__head">

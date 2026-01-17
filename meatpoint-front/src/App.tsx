@@ -316,7 +316,14 @@ const AppContent: React.FC = () => {
       .map((item) => item.image_url)
       .filter(Boolean)
       .slice(0, 3) as string[];
-    const deliveryLabel = order.customer_address ? "Доставка" : "Самовывоз";
+    const deliveryLabel =
+      order.delivery_method === "pickup"
+        ? "Самовывоз"
+        : order.delivery_method === "delivery"
+        ? "Доставка"
+        : order.customer_address
+        ? "Доставка"
+        : "Самовывоз";
 
     return (
       <div key={order.id} className="order-card order-card--profile">
