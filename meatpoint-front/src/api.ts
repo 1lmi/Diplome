@@ -163,8 +163,9 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
-  deleteCategory(id: number): Promise<{ ok: boolean }> {
-    return request(`/admin/categories/${id}`, { method: "DELETE" });
+  deleteCategory(id: number, deleteProducts?: boolean): Promise<{ ok: boolean }> {
+    const q = deleteProducts ? "?delete_products=true" : "";
+    return request(`/admin/categories/${id}${q}`, { method: "DELETE" });
   },
   createProduct(payload: {
     category_id: number;

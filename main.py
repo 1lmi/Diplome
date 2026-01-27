@@ -98,6 +98,48 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
+def relax_products_category_nullable(conn: sqlite3.Connection) -> None:
+    info = conn.execute("PRAGMA table_info(products)").fetchall()
+    if not info:
+        return
+    category_info = next((r for r in info if r["name"] == "category_id"), None)
+    if not category_info or category_info["notnull"] == 0:
+        return
+
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'products'"
+    ).fetchone()
+    if not row or not row["sql"]:
+        return
+
+    create_sql = row["sql"]
+    create_sql = re.sub(
+        r"CREATE TABLE\s+products",
+        "CREATE TABLE products_new",
+        create_sql,
+        flags=re.IGNORECASE,
+    )
+    create_sql = re.sub(
+        r"category_id\s+INTEGER\s+NOT\s+NULL",
+        "category_id INTEGER",
+        create_sql,
+        flags=re.IGNORECASE,
+    )
+    if create_sql == row["sql"]:
+        return
+
+    conn.execute("DROP VIEW IF EXISTS v_menu_items")
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("BEGIN")
+    conn.execute(create_sql)
+    columns = ", ".join([r["name"] for r in info])
+    conn.execute(f"INSERT INTO products_new ({columns}) SELECT {columns} FROM products")
+    conn.execute("DROP TABLE products")
+    conn.execute("ALTER TABLE products_new RENAME TO products")
+    conn.execute("COMMIT")
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def seed_statuses(conn: sqlite3.Connection) -> None:
     statuses = [
         ("new", "Новый"),
@@ -200,6 +242,7 @@ def apply_migrations() -> None:
         "image_path",
         f"TEXT NOT NULL DEFAULT '{DEFAULT_IMAGE_NAME}'",
     )
+    relax_products_category_nullable(conn)
     ensure_column(conn, "product_sizes", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "orders", "user_id", "INTEGER REFERENCES users(id)")
     ensure_column(conn, "orders", "delivery_method", "TEXT")
@@ -426,6 +469,7 @@ class Category(BaseModel):
     name: str
     description: Optional[str] = None
     sort_order: int
+    is_hidden: bool = False
 
 
 class CategoryCreate(BaseModel):
@@ -1334,7 +1378,7 @@ def create_category(
     )
     db.commit()
     row = db.execute(
-        "SELECT id, name, description, sort_order FROM categories WHERE id = ?",
+        "SELECT id, name, description, sort_order, is_hidden FROM categories WHERE id = ?",
         (cur.lastrowid,),
     ).fetchone()
     return Category(**dict(row))
@@ -1374,7 +1418,7 @@ def update_category(
         db.commit()
 
     updated = db.execute(
-        "SELECT id, name, description, sort_order FROM categories WHERE id = ?",
+        "SELECT id, name, description, sort_order, is_hidden FROM categories WHERE id = ?",
         (category_id,),
     ).fetchone()
     return Category(**dict(updated))
@@ -1383,6 +1427,7 @@ def update_category(
 @app.delete("/admin/categories/{category_id}")
 def delete_category(
     category_id: int,
+    delete_products: bool = False,
     db: sqlite3.Connection = Depends(get_db),
     _: sqlite3.Row = Depends(require_admin),
 ):
@@ -1390,9 +1435,17 @@ def delete_category(
     if row is None:
         raise HTTPException(status_code=404, detail="Категория не найдена")
 
-    # мягкое удаление: скрываем категорию и связанные товары
-    db.execute("UPDATE categories SET is_hidden = 1 WHERE id = ?", (category_id,))
-    db.execute("UPDATE products SET is_hidden = 1 WHERE category_id = ?", (category_id,))
+    if delete_products:
+        db.execute(
+            "UPDATE products SET is_hidden = 1, is_active = 0, category_id = NULL WHERE category_id = ?",
+            (category_id,),
+        )
+    else:
+        db.execute(
+            "UPDATE products SET is_hidden = 1, category_id = NULL WHERE category_id = ?",
+            (category_id,),
+        )
+    db.execute("DELETE FROM categories WHERE id = ?", (category_id,))
     db.commit()
     return {"ok": True}
 

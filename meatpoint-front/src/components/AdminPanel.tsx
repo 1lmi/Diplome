@@ -240,10 +240,10 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     patchCategoryInMenu(updated);
   };
 
-  const handleDeleteCategory = async (categoryId: number) => {
+  const handleDeleteCategory = async (categoryId: number, deleteProducts: boolean) => {
     setSaving(true);
     try {
-      await api.deleteCategory(categoryId);
+      await api.deleteCategory(categoryId, deleteProducts);
       setMenu((prev) => prev.filter((c) => c.id !== categoryId));
     } catch (e: any) {
       setError(e.message);

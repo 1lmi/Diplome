@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sizes (
 
 CREATE TABLE IF NOT EXISTS products (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    category_id  INTEGER NOT NULL,
+    category_id  INTEGER,
     name         TEXT NOT NULL,
     description  TEXT,
     is_active    INTEGER NOT NULL DEFAULT 1,

@@ -7,7 +7,7 @@ interface Props {
   onNewCategoryChange: (field: "name" | "description", value: string) => void;
   onCreateCategory: () => Promise<void> | void;
   onUpdateCategory: (id: number, payload: Partial<Category>) => Promise<void>;
-  onDeleteCategory: (id: number) => Promise<void>;
+  onDeleteCategory: (id: number, deleteProducts: boolean) => Promise<void>;
   onRefresh: () => void;
 }
 
@@ -22,6 +22,12 @@ const AdminCategoriesPage: React.FC<Props> = ({
 }) => {
   const [drafts, setDrafts] = useState<Record<number, Category>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [deleteState, setDeleteState] = useState<{
+    category: AdminCategory;
+    deleteProducts: boolean | null;
+    step: "choice" | "confirm";
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const map: Record<number, Category> = {};
@@ -64,6 +70,32 @@ const AdminCategoriesPage: React.FC<Props> = ({
       });
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const openDeleteModal = (cat: AdminCategory) => {
+    setDeleteState({ category: cat, deleteProducts: null, step: "choice" });
+  };
+
+  const closeDeleteModal = () => {
+    if (deleting) return;
+    setDeleteState(null);
+  };
+
+  const chooseDeleteMode = (deleteProducts: boolean) => {
+    setDeleteState((prev) =>
+      prev ? { ...prev, deleteProducts, step: "confirm" } : prev
+    );
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteState || deleteState.deleteProducts === null) return;
+    setDeleting(true);
+    try {
+      await onDeleteCategory(deleteState.category.id, deleteState.deleteProducts);
+      setDeleteState(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -111,43 +143,13 @@ const AdminCategoriesPage: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="stack gap-10">
+      <div className="category-list">
         {sortedCats.map((cat) => {
           const draft = drafts[cat.id] || cat;
+          const isActive = !draft.is_hidden;
           return (
-            <div key={cat.id} className="panel">
-              <div className="panel__header">
-                <div>
-                  <h3>{cat.name}</h3>
-                  <p className="muted">Сортировка: {cat.sort_order}</p>
-                </div>
-                <div className="panel__actions">
-                  <button
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => {
-                      if (window.confirm(`Удалить категорию “${cat.name}” и скрыть все её товары?`)) {
-                        onDeleteCategory(cat.id);
-                      }
-                    }}
-                  >
-                    Удалить
-                  </button>
-                  <button
-                    className="chip chip--ghost"
-                    onClick={() => handleDraftChange(cat.id, "is_hidden", !draft.is_hidden)}
-                  >
-                    {draft.is_hidden ? "Показать" : "Скрыть"}
-                  </button>
-                  <button
-                    className="btn btn--primary btn--sm"
-                    onClick={() => handleSave(cat.id)}
-                    disabled={savingId === cat.id}
-                  >
-                    {savingId === cat.id ? "Сохраняем..." : "Сохранить"}
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-3 gap-8">
+            <div key={cat.id} className="category-card">
+              <div className="category-card__fields">
                 <label className="field">
                   <span>Название</span>
                   <input
@@ -164,7 +166,7 @@ const AdminCategoriesPage: React.FC<Props> = ({
                     onChange={(e) => handleDraftChange(cat.id, "description", e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className="field category-card__sort">
                   <span>Сортировка</span>
                   <input
                     className="input"
@@ -174,10 +176,106 @@ const AdminCategoriesPage: React.FC<Props> = ({
                   />
                 </label>
               </div>
+              <div className="category-card__side">
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => handleDraftChange(cat.id, "is_hidden", !e.target.checked)}
+                  />
+                  <span>Активен</span>
+                </label>
+                <div className="category-card__actions">
+                  <button
+                    className="btn btn--primary btn--sm"
+                    onClick={() => handleSave(cat.id)}
+                    disabled={savingId === cat.id}
+                  >
+                    {savingId === cat.id ? "Сохраняем..." : "Сохранить"}
+                  </button>
+                  <button
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => openDeleteModal(cat)}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
             </div>
           );
         })}
       </div>
+
+      {deleteState && (
+        <div className="modal-backdrop" onClick={closeDeleteModal}>
+          <div className="modal admin-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal__close" onClick={closeDeleteModal} disabled={deleting}>
+              X
+            </button>
+            <div className="admin-modal__content">
+              {deleteState.step === "choice" ? (
+                <>
+                  <h3 className="admin-modal__title">
+                    Удалить категорию "{deleteState.category.name}"
+                  </h3>
+                  <p className="admin-modal__text">Удалить все товары в этой категории?</p>
+                  <div className="admin-modal__actions">
+                    <button
+                      className="btn btn--primary"
+                      onClick={() => chooseDeleteMode(true)}
+                      disabled={deleting}
+                    >
+                      Да, удалить товары
+                    </button>
+                    <button
+                      className="btn btn--outline"
+                      onClick={() => chooseDeleteMode(false)}
+                      disabled={deleting}
+                    >
+                      Нет, только категорию
+                    </button>
+                  </div>
+                  <div className="admin-modal__footer">
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      onClick={closeDeleteModal}
+                      disabled={deleting}
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="admin-modal__title">Точно удалить?</h3>
+                  <p className="admin-modal__text">
+                    Категория будет удалена.{" "}
+                    {deleteState.deleteProducts
+                      ? "Товары этой категории также будут удалены."
+                      : "Товары будут скрыты и отвязаны от категории."}
+                  </p>
+                  <div className="admin-modal__actions">
+                    <button
+                      className="btn btn--primary"
+                      onClick={confirmDelete}
+                      disabled={deleting}
+                    >
+                      Удалить
+                    </button>
+                    <button
+                      className="btn btn--outline"
+                      onClick={closeDeleteModal}
+                      disabled={deleting}
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
