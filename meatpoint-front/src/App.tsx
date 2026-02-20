@@ -6,6 +6,7 @@ import {
   useLocation,
   useNavigate,
   Navigate,
+  Link,
 } from "react-router-dom";
 import { api } from "./api";
 import type { Category, MenuItem, Order, SettingsMap, StatusOption } from "./types";
@@ -14,6 +15,7 @@ import { ProductCard } from "./components/ProductCard";
 import { ProductModal } from "./components/ProductModal";
 import { CartDrawer } from "./components/CartDrawer";
 import { AdminPanel } from "./components/AdminPanel";
+import OrderDetailsPage from "./components/OrderDetailsPage";
 import { useAuth } from "./authContext";
 
 type View = "menu" | "profile" | "admin";
@@ -70,6 +72,7 @@ const AppContent: React.FC = () => {
 
   const currentView: View = useMemo(() => {
     if (location.pathname.startsWith("/profile")) return "profile";
+    if (location.pathname.startsWith("/orders")) return "profile";
     if (location.pathname.startsWith("/admin")) return "admin";
     return "menu";
   }, [location.pathname]);
@@ -312,6 +315,7 @@ const AppContent: React.FC = () => {
   };
 
   const renderOrderCard = (order: Order) => {
+    const orderLink = `/orders/${order.id}`;
     const thumbs = order.items
       .map((item) => item.image_url)
       .filter(Boolean)
@@ -330,7 +334,9 @@ const AppContent: React.FC = () => {
         <div className="order-card__header">
           <div>
             <div className="order-card__label">Ваш заказ:</div>
-            <div className="order-card__title">№{order.id}</div>
+            <Link className="order-card__title order-card__title--link" to={orderLink}>
+              №{order.id}
+            </Link>
             <div className="order-card__meta">
               {deliveryLabel} · {formatDateTime(order.created_at)}
             </div>
@@ -375,6 +381,11 @@ const AppContent: React.FC = () => {
             <span>Итого</span>
             <span>{formatPrice(order.total_price)}</span>
           </div>
+        </div>
+        <div className="order-card__actions">
+          <Link className="btn btn--outline btn--sm" to={orderLink}>
+            Подробнее
+          </Link>
         </div>
       </div>
     );
@@ -551,6 +562,7 @@ const AppContent: React.FC = () => {
         <Routes>
           <Route path="/" element={MenuPanel} />
           <Route path="/auth" element={<Navigate to="/" replace />} />
+          <Route path="/orders/:orderId" element={<OrderDetailsPage />} />
           <Route
             path="/profile"
             element={

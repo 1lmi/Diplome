@@ -1,4 +1,5 @@
 ﻿import React, { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { AdminOrder, StatusOption } from "../../types";
 import { isSameDay, terminalStatuses } from "./utils";
 
@@ -94,7 +95,9 @@ const AdminOrdersPage: React.FC<Props> = ({
         {filteredOrders.map((order) => (
           <div key={order.id} className="admin-row">
             <div>
-              <div className="admin-row__title">№-{order.id} · {order.total_price} ₽</div>
+              <div className="admin-row__title">
+                <Link className="admin-row__link" to={`/orders/${order.id}`}>№-{order.id}</Link> · {order.total_price} ₽
+              </div>
               <div className="admin-row__meta">
                 {order.customer_name || "Гость"} · {order.customer_phone || "—"} · {new Date(order.created_at).toLocaleString()}
               </div>

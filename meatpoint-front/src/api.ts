@@ -53,7 +53,9 @@ async function request<T>(
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `API error ${res.status}`);
+    const err = new Error(text || `API error ${res.status}`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
   }
 
   if (res.status === 204) {
@@ -97,6 +99,9 @@ export const api = {
   },
   getMyOrders(): Promise<Order[]> {
     return request("/me/orders");
+  },
+  getOrder(orderId: number): Promise<Order> {
+    return request(`/orders/${orderId}`);
   },
   // Auth
   register(
