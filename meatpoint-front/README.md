@@ -1,73 +1,46 @@
-# React + TypeScript + Vite
+# Meat Point Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend-часть проекта Meat Point на `React + TypeScript + Vite`.
 
-Currently, two official plugins are available:
+## Что делает
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Показывает публичное меню с категориями.
+- Позволяет добавить товары в корзину и оформить заказ.
+- Поддерживает регистрацию/логин и личный кабинет.
+- Показывает историю и детали заказов.
+- Отображает админ-панель для пользователей с `is_admin=true`.
 
-## React Compiler
+## Запуск
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd c:\Users\mg853\VSCode_prodj\Diplome\meatpoint-front
+npm ci
+npm run dev -- --host --port 5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Приложение откроется по адресу из консоли Vite (обычно `http://localhost:5173`).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Важная настройка API
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Базовый URL backend задан в `src/api.ts`:
+
+```ts
+const API_BASE = "http://localhost:8000";
 ```
+
+Если backend запущен на другом хосте/порту, обновите это значение.
+
+## Скрипты
+
+- `npm run dev` - запуск dev-сервера.
+- `npm run build` - production-сборка.
+- `npm run preview` - локальный просмотр production-сборки.
+- `npm run lint` - проверка ESLint.
+
+## Структура
+
+- `src/App.tsx` - роутинг и основные экраны.
+- `src/api.ts` - HTTP-клиент для backend.
+- `src/authContext.tsx` - состояние авторизации.
+- `src/cartContext.tsx` - состояние корзины.
+- `src/components/` - UI-компоненты, включая админку.
