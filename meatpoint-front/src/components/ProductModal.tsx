@@ -1,13 +1,6 @@
 import React, { useEffect, useState } from "react";
-import type { MenuItem } from "../types";
+import type { MenuItem, ProductDisplay } from "../types";
 import { useCart } from "../cartContext";
-
-interface ProductDisplay {
-  name: string;
-  description?: string | null;
-  image_url: string;
-  variants: MenuItem[];
-}
 
 interface Props {
   product: ProductDisplay | null;
@@ -29,28 +22,32 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
   if (!product) return null;
 
   const variant =
-    product.variants.find((v) => v.id === variantId) || product.variants[0];
+    product.variants.find((item: MenuItem) => item.id === variantId) || product.variants[0];
 
   const weightValue =
     variant?.size_amount !== undefined && variant?.size_amount !== null
       ? `${variant.size_amount}${variant.size_unit ? ` ${variant.size_unit}` : ""}`
       : null;
 
-  const hasNutrition =
-    !!variant &&
+  const currentVariantLabel =
+    variant?.size_name ||
+    variant?.size_label ||
+    (product.variants.length > 1 ? "Выбранный размер" : "Подача");
+
+  const hasNutrition = !!variant &&
     [variant.calories, variant.carbs, variant.protein, variant.fat].some(
       (value) => value !== null && value !== undefined
     );
+
+  const handleClose = () => {
+    setClosing(true);
+    setTimeout(onClose, 180);
+  };
 
   const handleAdd = () => {
     if (!variant) return;
     addProduct(variant, 1);
     handleClose();
-  };
-
-  const handleClose = () => {
-    setClosing(true);
-    setTimeout(onClose, 180);
   };
 
   return (
@@ -60,45 +57,75 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
       onClick={handleClose}
     >
       <div
-        className="modal modal--wide"
+        className="modal modal--wide product-modal"
         data-leave={closing ? "true" : undefined}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
         <button className="modal__close" onClick={handleClose}>
-          {"×"}
+          ×
         </button>
         <div className="modal__content">
           <div className="modal__image-wrap">
-            <img className="modal__image" src={product.image_url} alt={product.name} />
+            <div className="product-modal__image-card">
+              <img className="modal__image" src={product.image_url} alt={product.name} />
+            </div>
           </div>
-          <div className="modal__info">
-            <h2 className="modal__title">{product.name}</h2>
-            {weightValue && <div className="modal__subtitle">{weightValue}</div>}
-            <p className="modal__subtitle">
-              {product.description || "ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð¿Ð¾ÐºÐ° Ð¿ÑÑÑÐ¾, Ð½Ð¾ Ð¼Ñ ÑÐ¶Ðµ Ð³Ð¾ÑÐ¾Ð²Ð¸Ð¼ ÐµÐ³Ð¾ Ð´Ð»Ñ Meat Point"}
-            </p>
 
-            {product.variants.length > 1 && (
-              <div className="size-tabs">
-                {product.variants.map((v) => {
-                  const label = v.size_name || v.size_label || "Ð Ð°Ð·Ð¼ÐµÑ";
-                  return (
-                    <button
-                      key={v.id}
-                      className={
-                        "size-tab" + (variantId === v.id ? " size-tab--active" : "")
-                      }
-                      onClick={() => setVariantId(v.id)}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
+          <div className="modal__info">
+            <div className="product-modal__header">
+              <h2 className="modal__title">{product.name}</h2>
+              {weightValue ? <div className="product-modal__weight">{weightValue}</div> : null}
+              <p className="modal__subtitle product-modal__description">
+                {product.description ||
+                  "Описание скоро появится. Пока можно ориентироваться на размер, состав и стоимость."}
+              </p>
+            </div>
+
+            {product.variants.length > 1 ? (
+              <div className="product-modal__section">
+                <p className="product-modal__section-title">Размер и цена</p>
+                <div className="size-tabs">
+                  {product.variants.map((item) => {
+                    const label = item.size_name || item.size_label || "Размер";
+                    const amount =
+                      item.size_amount !== undefined && item.size_amount !== null
+                        ? `${item.size_amount}${item.size_unit ? ` ${item.size_unit}` : ""}`
+                        : null;
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={"size-tab" + (variantId === item.id ? " size-tab--active" : "")}
+                        onClick={() => setVariantId(item.id)}
+                      >
+                        <span className="size-tab__label">{label}</span>
+                        <span className="size-tab__meta">
+                          {amount ? `${amount} · ` : ""}
+                          {item.price} руб.
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="product-modal__section">
+                <p className="product-modal__section-title">Формат</p>
+                <div className="size-tabs">
+                  <button type="button" className="size-tab size-tab--active">
+                    <span className="size-tab__label">
+                      {variant?.size_name || variant?.size_label || "Стандарт"}
+                    </span>
+                    <span className="size-tab__meta">{variant?.price || 0} руб.</span>
+                  </button>
+                </div>
               </div>
             )}
 
-            {hasNutrition && (
-              <>
+            {hasNutrition ? (
+              <div className="product-modal__section">
+                <p className="product-modal__section-title">Пищевая ценность</p>
                 <div className="stat-cards">
                   <div className="stat-card">
                     <div className="stat-card__value">{variant?.calories ?? "-"}</div>
@@ -117,13 +144,19 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
                     <div className="stat-card__label">Жиры</div>
                   </div>
                 </div>
-                <div className="stat-note">*На 100 грамм</div>
-              </>
-            )}
+                <div className="stat-note">* На 100 грамм</div>
+              </div>
+            ) : null}
 
-            <button className="btn btn--primary btn--full" onClick={handleAdd}>
-              {`В корзину за ${variant?.price || 0} руб.`}
-            </button>
+            <div className="product-modal__footer">
+              <div className="product-modal__price-box">
+                <span className="product-modal__price-label">{currentVariantLabel}</span>
+                <span className="product-modal__price">{variant?.price || 0} руб.</span>
+              </div>
+              <button className="btn btn--primary" type="button" onClick={handleAdd}>
+                Добавить в корзину
+              </button>
+            </div>
           </div>
         </div>
       </div>

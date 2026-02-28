@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../authContext";
+import { getOrderTracking } from "../orderTracking";
 import type { Order } from "../types";
 
 const formatPrice = (value: number) => `${value.toLocaleString("ru-RU")} ₽`;
@@ -18,6 +19,12 @@ const getDeliveryLabel = (order: Order) => {
   if (order.delivery_method === "delivery") return "Доставка";
   if (order.delivery_method === "pickup") return "Самовывоз";
   return (order.customer_address ?? "").trim() ? "Доставка" : "Самовывоз";
+};
+
+const getPaymentLabel = (order: Order) => {
+  if (order.payment_method === "card") return "Картой при получении";
+  if (order.payment_method === "cash") return "Наличными";
+  return "Не указан";
 };
 
 const OrderDetailsPage: React.FC = () => {
@@ -37,18 +44,20 @@ const OrderDetailsPage: React.FC = () => {
     setError(null);
     setNotFound(false);
 
-    if (!user) {
+    if (!Number.isFinite(parsedId) || parsedId <= 0) {
       setNotFound(true);
       return;
     }
-    if (!Number.isFinite(parsedId) || parsedId <= 0) {
+
+    const tracking = user ? null : getOrderTracking(parsedId);
+    if (!user && !tracking?.phone) {
       setNotFound(true);
       return;
     }
 
     setLoadingOrder(true);
     try {
-      const data = await api.getOrder(parsedId);
+      const data = await api.getOrder(parsedId, tracking?.phone);
       setOrder(data);
     } catch (e: any) {
       const status = e?.status;
@@ -76,9 +85,9 @@ const OrderDetailsPage: React.FC = () => {
       <div className="panel">
         <div className="panel__header">
           <div>
-            <h2>Страница не найдена</h2>
+            <h2>Заказ не найден</h2>
             <p className="muted">
-              Заказ не существует или у вас нет доступа к этой странице.
+              Страница недоступна или у вас нет данных для просмотра этого заказа.
             </p>
           </div>
           <button className="btn btn--outline" onClick={() => navigate("/")}>
@@ -111,7 +120,10 @@ const OrderDetailsPage: React.FC = () => {
 
   const adminBackLink =
     (location.state as { backTo?: string } | null)?.backTo || "/admin/orders/current";
-  const backLink = user?.is_admin ? adminBackLink : "/profile";
+  const fallbackBackLink = getOrderTracking(order.id)
+    ? `/checkout/success/${order.id}`
+    : "/profile";
+  const backLink = user?.is_admin ? adminBackLink : fallbackBackLink;
 
   return (
     <section className="order-page">
@@ -144,10 +156,15 @@ const OrderDetailsPage: React.FC = () => {
               <span className="align-right">Сумма</span>
             </div>
             {order.items.map((item) => (
-              <div key={`${item.product_size_id}-${item.product_name}`} className="order-card__table-row">
+              <div
+                key={`${item.product_size_id}-${item.product_name}`}
+                className="order-card__table-row"
+              >
                 <span>
                   {item.product_name}
-                  {item.size_name ? <em className="order-page__item-size"> · {item.size_name}</em> : null}
+                  {item.size_name ? (
+                    <em className="order-page__item-size"> · {item.size_name}</em>
+                  ) : null}
                 </span>
                 <span>{formatPrice(item.price)}</span>
                 <span>{item.quantity}</span>
@@ -189,12 +206,34 @@ const OrderDetailsPage: React.FC = () => {
               <span className="muted">Тип</span>
               <strong>{getDeliveryLabel(order)}</strong>
             </div>
-            {order.comment && (
+            <div className="order-page__info">
+              <span className="muted">Оплата</span>
+              <strong>{getPaymentLabel(order)}</strong>
+            </div>
+            {order.cash_change_from ? (
+              <div className="order-page__info">
+                <span className="muted">Подготовить сдачу с</span>
+                <strong>{formatPrice(order.cash_change_from)}</strong>
+              </div>
+            ) : null}
+            {order.delivery_time ? (
+              <div className="order-page__info">
+                <span className="muted">Желаемое время</span>
+                <strong>{order.delivery_time}</strong>
+              </div>
+            ) : null}
+            {order.do_not_call ? (
+              <div className="order-page__info">
+                <span className="muted">Связь</span>
+                <strong>Не перезванивать</strong>
+              </div>
+            ) : null}
+            {order.comment ? (
               <div className="order-page__info">
                 <span className="muted">Комментарий</span>
                 <strong>{order.comment}</strong>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -207,11 +246,13 @@ const OrderDetailsPage: React.FC = () => {
           <div className="muted">История статусов пока пуста.</div>
         ) : (
           <div className="order-history">
-            {order.history.map((item, idx) => (
-              <div key={`${item.status}-${idx}`} className="order-history__item">
+            {order.history.map((item, index) => (
+              <div key={`${item.status}-${index}`} className="order-history__item">
                 <div>
                   <div className="order-history__title">{item.status_name}</div>
-                  {item.comment && <div className="order-history__comment">{item.comment}</div>}
+                  {item.comment ? (
+                    <div className="order-history__comment">{item.comment}</div>
+                  ) : null}
                 </div>
                 <div className="order-history__time">{formatDateTime(item.changed_at)}</div>
               </div>

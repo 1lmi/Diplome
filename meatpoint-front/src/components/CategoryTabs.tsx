@@ -92,6 +92,7 @@ export const CategoryTabs: React.FC<Props> = ({ categories, activeId, onChange }
             className={
               "category-tab" + (activeId === cat.id ? " category-tab--active" : "")
             }
+            aria-pressed={activeId === cat.id}
             onClick={() => onChange(cat.id)}
           >
             {cat.name}
@@ -104,6 +105,7 @@ export const CategoryTabs: React.FC<Props> = ({ categories, activeId, onChange }
           <button
             type="button"
             className="category-tab category-tab--more"
+            aria-expanded={moreOpen}
             onClick={() => setMoreOpen((v) => !v)}
           >
             Ещё <span className="category-tab__chevron">▼</span>

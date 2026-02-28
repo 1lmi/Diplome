@@ -1,7 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import "./index.css";
+import "./styles/tokens.css";
+import "./styles/base.css";
+import "./styles/public.css";
 import { CartProvider } from "./cartContext";
 import { AuthProvider } from "./authContext";
 

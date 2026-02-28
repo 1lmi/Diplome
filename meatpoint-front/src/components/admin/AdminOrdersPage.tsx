@@ -1,69 +1,287 @@
-﻿import React, { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { AdminOrder, StatusOption } from "../../types";
-import { isSameDay, terminalStatuses } from "./utils";
+import {
+  canCancel,
+  formatTime,
+  getCurrentLane,
+  getEffectiveDeliveryKind,
+  getNextActionLabel,
+  getNextStatus,
+  getStatusDisplayName,
+  isSameDay,
+  isTerminalStatus,
+  terminalStatuses,
+  type CurrentOrderLane,
+} from "./utils";
 
 interface Props {
   orders: AdminOrder[];
   statuses: StatusOption[];
   mode: "current" | "history";
-  orderStatuses: Record<number, string>;
-  onStatusChange: (orderId: number, status: string) => void;
-  onApplyStatus: (orderId: number) => Promise<void>;
+  onTransition: (orderId: number, targetStatus: string) => Promise<boolean>;
   onRefresh: () => void;
 }
+
+type PendingOrderAction = {
+  orderId: number;
+  targetStatus: string;
+  kind: "advance" | "cancel";
+} | null;
+
+const laneConfig: Array<{ key: CurrentOrderLane; title: string; description: string }> = [
+  { key: "new", title: "Новый", description: "Только что поступили" },
+  { key: "cooking", title: "Готовится", description: "Заказы на кухне" },
+  { key: "ready", title: "Готов", description: "Ждут выдачи или курьера" },
+  { key: "on_way", title: "В пути", description: "Переданы на доставку" },
+];
+
+const formatPrice = (value: number) => `${value.toLocaleString("ru-RU")} ₽`;
+
+const formatOrderAge = (value: string) => {
+  const createdAt = new Date(value).getTime();
+  const diffMinutes = Math.max(0, Math.floor((Date.now() - createdAt) / 60000));
+  if (diffMinutes < 60) {
+    return `${Math.max(diffMinutes, 1)} мин назад`;
+  }
+  if (diffMinutes < 24 * 60) {
+    return `${Math.floor(diffMinutes / 60)} ч назад`;
+  }
+  return `${new Date(value).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "short",
+  })} · ${formatTime(value)}`;
+};
+
+const formatFullDateTime = (value: string) =>
+  new Date(value).toLocaleString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const getDeliveryLabel = (order: AdminOrder) =>
+  getEffectiveDeliveryKind(order) === "delivery" ? "Доставка" : "Самовывоз";
+
+const getPaymentLabel = (order: AdminOrder) => {
+  if (order.payment_method === "card") return "Картой";
+  if (order.payment_method === "cash") return "Наличными";
+  return null;
+};
+
+const getItemsPreview = (order: AdminOrder) => {
+  const primaryItems = order.items.slice(0, 2).map((item) => item.product_name);
+  const extraCount = order.items.length - primaryItems.length;
+  const parts = [...primaryItems];
+  if (extraCount > 0) {
+    parts.push(`+${extraCount}`);
+  }
+  return parts.join(" · ");
+};
 
 const AdminOrdersPage: React.FC<Props> = ({
   orders,
   statuses,
   mode,
-  orderStatuses,
-  onStatusChange,
-  onApplyStatus,
+  onTransition,
   onRefresh,
 }) => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [onlyToday, setOnlyToday] = useState(false);
   const [query, setQuery] = useState("");
+  const [pendingAction, setPendingAction] = useState<PendingOrderAction>(null);
+  const [submittingOrderId, setSubmittingOrderId] = useState<number | null>(null);
 
   const now = new Date();
   const isHistoryView = mode === "history";
 
   const availableStatuses = useMemo(() => {
     const filtered = statuses.filter((status) =>
-      isHistoryView
-        ? terminalStatuses.has(status.code.toLowerCase())
-        : !terminalStatuses.has(status.code.toLowerCase())
+      terminalStatuses.has(status.code.toLowerCase())
     );
     return filtered.length ? filtered : statuses;
-  }, [isHistoryView, statuses]);
+  }, [statuses]);
 
   const filteredOrders = useMemo(() => {
     return orders
-      .filter((o) => {
-        const isTerminal = terminalStatuses.has(o.status.toLowerCase());
+      .filter((order) => {
+        const isTerminal = isTerminalStatus(order.status);
         if (isHistoryView ? !isTerminal : isTerminal) return false;
-        if (statusFilter !== "all" && o.status !== statusFilter) return false;
-        if (onlyToday && !isSameDay(new Date(o.created_at), now)) return false;
+        if (isHistoryView && statusFilter !== "all" && order.status !== statusFilter) return false;
+        if (onlyToday && !isSameDay(new Date(order.created_at), now)) return false;
         if (!query.trim()) return true;
         const q = query.trim().toLowerCase();
         return (
-          String(o.id).includes(q) ||
-          (o.customer_phone || "").toLowerCase().includes(q) ||
-          (o.customer_name || "").toLowerCase().includes(q)
+          String(order.id).includes(q) ||
+          (order.customer_phone || "").toLowerCase().includes(q) ||
+          (order.customer_name || "").toLowerCase().includes(q)
         );
       })
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      .sort((a, b) => {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        return isHistoryView ? timeB - timeA : timeA - timeB;
+      });
   }, [orders, isHistoryView, statusFilter, onlyToday, query, now]);
+
+  const groupedCurrentOrders = useMemo(() => {
+    const lanes: Record<CurrentOrderLane, AdminOrder[]> = {
+      new: [],
+      cooking: [],
+      ready: [],
+      on_way: [],
+    };
+    const other: AdminOrder[] = [];
+
+    if (isHistoryView) {
+      return { lanes, other };
+    }
+
+    for (const order of filteredOrders) {
+      const lane = getCurrentLane(order.status);
+      if (lane) {
+        lanes[lane].push(order);
+      } else {
+        other.push(order);
+      }
+    }
+
+    return { lanes, other };
+  }, [filteredOrders, isHistoryView]);
 
   const title = isHistoryView ? "История заказов" : "Текущие заказы";
   const subtitle = isHistoryView
-    ? "Завершённые и отменённые заказы. Можно искать, фильтровать и при необходимости корректировать статус."
-    : "Все заказы в работе. Следите за новыми заказами и быстро меняйте их статус.";
+    ? "Завершённые и отменённые заказы. Можно быстро найти нужный заказ и открыть детали."
+    : "Компактная доска для быстрых действий: каждый заказ показывает только следующий допустимый шаг.";
   const emptyMessage = isHistoryView
     ? "История заказов пока пуста."
     : "Сейчас нет заказов в работе.";
   const backTo = isHistoryView ? "/admin/orders/history" : "/admin/orders/current";
+
+  const beginAction = (orderId: number, targetStatus: string, kind: "advance" | "cancel") => {
+    if (submittingOrderId !== null) return;
+    setPendingAction({ orderId, targetStatus, kind });
+  };
+
+  const cancelPendingAction = () => {
+    if (submittingOrderId !== null) return;
+    setPendingAction(null);
+  };
+
+  const confirmPendingAction = async () => {
+    if (!pendingAction) return;
+    setSubmittingOrderId(pendingAction.orderId);
+    const ok = await onTransition(pendingAction.orderId, pendingAction.targetStatus);
+    setSubmittingOrderId(null);
+    if (ok) {
+      setPendingAction(null);
+    }
+  };
+
+  const renderCurrentOrderCard = (order: AdminOrder) => {
+    const nextStatus = getNextStatus(order);
+    const nextActionLabel = getNextActionLabel(order);
+    const canCancelOrder = canCancel(order);
+    const isPending = pendingAction?.orderId === order.id;
+    const isBusy = submittingOrderId === order.id;
+    const pendingLabel =
+      pendingAction?.kind === "cancel"
+        ? "Отменить заказ?"
+        : `Перевести заказ в статус "${getStatusDisplayName(
+            pendingAction?.targetStatus || ""
+          )}"?`;
+
+    return (
+      <article
+        key={order.id}
+        className={
+          "current-order-card" +
+          (isPending ? " current-order-card--pending" : "") +
+          (isBusy ? " current-order-card--busy" : "")
+        }
+      >
+        <div className="current-order-card__top">
+          <div className="current-order-card__headline">
+            <Link className="current-order-card__link" to={`/orders/${order.id}`} state={{ backTo }}>
+              №{order.id}
+            </Link>
+            <span className="current-order-card__price">{formatPrice(order.total_price)}</span>
+          </div>
+          <div className="current-order-card__age">{formatOrderAge(order.created_at)}</div>
+        </div>
+
+        <div className="current-order-card__meta">
+          <strong>{order.customer_name || "Гость"}</strong>
+          <span>{order.customer_phone || "—"}</span>
+          <span>{getDeliveryLabel(order)}</span>
+        </div>
+
+        <div className="current-order-card__chips">
+          <span className="chip chip--soft">{order.status_name}</span>
+          {getPaymentLabel(order) ? (
+            <span className="chip chip--soft">{getPaymentLabel(order)}</span>
+          ) : null}
+          {order.do_not_call ? <span className="chip chip--soft">Не перезванивать</span> : null}
+          {order.delivery_time ? (
+            <span className="chip chip--soft">{order.delivery_time}</span>
+          ) : null}
+        </div>
+
+        <div className="current-order-card__items">{getItemsPreview(order) || "Состав заказа скрыт"}</div>
+
+        <div className="current-order-card__actions">
+          {nextStatus && nextActionLabel ? (
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={() => beginAction(order.id, nextStatus, "advance")}
+              disabled={isBusy}
+            >
+              {nextActionLabel}
+            </button>
+          ) : (
+            <div className="current-order-card__spacer" />
+          )}
+
+          {canCancelOrder ? (
+            <button
+              className="btn btn--outline btn--sm current-order-card__cancel"
+              onClick={() => beginAction(order.id, "canceled", "cancel")}
+              disabled={isBusy}
+            >
+              Отменить
+            </button>
+          ) : null}
+
+          <Link className="btn btn--ghost btn--sm current-order-card__details" to={`/orders/${order.id}`} state={{ backTo }}>
+            Подробнее
+          </Link>
+        </div>
+
+        {isPending ? (
+          <div className="current-order-card__confirm">
+            <div className="current-order-card__confirm-text">{pendingLabel}</div>
+            <div className="current-order-card__confirm-actions">
+              <button
+                className="btn btn--primary btn--sm"
+                onClick={confirmPendingAction}
+                disabled={isBusy}
+              >
+                {isBusy ? "Обновляем..." : "Подтвердить"}
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={cancelPendingAction}
+                disabled={isBusy}
+              >
+                {pendingAction?.kind === "cancel" ? "Назад" : "Отмена"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </article>
+    );
+  };
 
   return (
     <div className="admin-page">
@@ -80,26 +298,34 @@ const AdminOrdersPage: React.FC<Props> = ({
 
       <div className="panel filters">
         <div className="filters__group">
-          <label className="field-inline">
-            <span>Статус</span>
-            <select
-              className="input"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">Все</option>
-              {availableStatuses.map((s) => (
-                <option key={s.code} value={s.code}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {isHistoryView ? (
+            <label className="field-inline">
+              <span>Статус</span>
+              <select
+                className="input"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">Все</option>
+                {availableStatuses.map((status) => (
+                  <option key={status.code} value={status.code}>
+                    {status.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
           <label className="field-inline">
             <span>Только сегодня</span>
-            <input type="checkbox" checked={onlyToday} onChange={(e) => setOnlyToday(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={onlyToday}
+              onChange={(e) => setOnlyToday(e.target.checked)}
+            />
           </label>
         </div>
+
         <input
           className="input"
           placeholder="Поиск по номеру заказа, телефону или имени"
@@ -108,43 +334,83 @@ const AdminOrdersPage: React.FC<Props> = ({
         />
       </div>
 
-      <div className="stack gap-6">
-        {filteredOrders.map((order) => (
-          <div key={order.id} className="admin-row">
-            <div>
-              <div className="admin-row__title">
-                <Link className="admin-row__link" to={`/orders/${order.id}`} state={{ backTo }}>
-                  №-{order.id}
-                </Link>{" "}
-                · {order.total_price} ₽
+      {isHistoryView ? (
+        <div className="stack gap-6">
+          {filteredOrders.map((order) => (
+            <div key={order.id} className="admin-row admin-row--history">
+              <div>
+                <div className="admin-row__title">
+                  <Link className="admin-row__link" to={`/orders/${order.id}`} state={{ backTo }}>
+                    №{order.id}
+                  </Link>{" "}
+                  · {formatPrice(order.total_price)}
+                </div>
+                <div className="admin-row__meta">
+                  {order.customer_name || "Гость"} · {order.customer_phone || "—"} ·{" "}
+                  {formatFullDateTime(order.created_at)}
+                </div>
               </div>
-              <div className="admin-row__meta">
-                {order.customer_name || "Гость"} · {order.customer_phone || "—"} ·{" "}
-                {new Date(order.created_at).toLocaleString()}
+              <div className="admin-row__controls">
+                <span className="chip chip--soft">{order.status_name}</span>
+                <Link className="btn btn--ghost btn--sm" to={`/orders/${order.id}`} state={{ backTo }}>
+                  Подробнее
+                </Link>
               </div>
             </div>
-            <div className="admin-row__controls">
-              <select
-                className="input input--sm"
-                value={orderStatuses[order.id] ?? order.status}
-                onChange={(e) => onStatusChange(order.id, e.target.value)}
-              >
-                {statuses.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <button className="btn btn--primary btn--sm" onClick={() => onApplyStatus(order.id)}>
-                Применить
-              </button>
+          ))}
+
+          {filteredOrders.length === 0 ? (
+            <div className="muted">
+              {query || statusFilter !== "all" || onlyToday
+                ? "Ничего не найдено под выбранные фильтры."
+                : emptyMessage}
             </div>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <div className="orders-board">
+            {laneConfig.map((lane) => (
+              <section key={lane.key} className="orders-board__lane">
+                <div className="orders-board__lane-header">
+                  <div>
+                    <h3>{lane.title}</h3>
+                    <p className="muted">{lane.description}</p>
+                  </div>
+                  <span className="orders-board__lane-count">
+                    {groupedCurrentOrders.lanes[lane.key].length}
+                  </span>
+                </div>
+
+                <div className="orders-board__lane-body">
+                  {groupedCurrentOrders.lanes[lane.key].length > 0 ? (
+                    groupedCurrentOrders.lanes[lane.key].map(renderCurrentOrderCard)
+                  ) : (
+                    <div className="orders-board__empty">Нет заказов</div>
+                  )}
+                </div>
+              </section>
+            ))}
           </div>
-        ))}
-        {filteredOrders.length === 0 && (
-          <div className="muted">{query || statusFilter !== "all" || onlyToday ? "Ничего не найдено под выбранные фильтры." : emptyMessage}</div>
-        )}
-      </div>
+
+          {groupedCurrentOrders.other.length > 0 ? (
+            <section className="orders-board__fallback">
+              <div className="orders-board__lane-header">
+                <div>
+                  <h3>Прочее</h3>
+                  <p className="muted">Нетиповые активные статусы. Их можно открыть или отменить.</p>
+                </div>
+                <span className="orders-board__lane-count">{groupedCurrentOrders.other.length}</span>
+              </div>
+              <div className="orders-board__lane-body">
+                {groupedCurrentOrders.other.map(renderCurrentOrderCard)}
+              </div>
+            </section>
+          ) : null}
+
+          {filteredOrders.length === 0 ? <div className="muted">{emptyMessage}</div> : null}
+        </>
+      )}
     </div>
   );
 };

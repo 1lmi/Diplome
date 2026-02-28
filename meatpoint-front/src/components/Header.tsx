@@ -1,11 +1,11 @@
 import React from "react";
 import { useCart } from "../cartContext";
 import { CategoryTabs } from "./CategoryTabs";
-import type { User, Category } from "../types";
+import type { Category, User } from "../types";
 
 interface Props {
-  activeView: "menu" | "profile" | "admin";
-  onChange: (view: Props["activeView"]) => void;
+  activeView: "menu" | "profile" | "admin" | "checkout";
+  onChange: (view: "menu" | "profile" | "admin") => void;
   onCartClick: () => void;
   user: User | null;
   onLogout: () => void;
@@ -15,6 +15,8 @@ interface Props {
   onCategoryChange: (id: number) => void;
   compact: boolean;
 }
+
+const formatPrice = (value: number) => `${value.toLocaleString("ru-RU")} ₽`;
 
 export const Header: React.FC<Props> = ({
   activeView,
@@ -28,70 +30,75 @@ export const Header: React.FC<Props> = ({
   onCategoryChange,
   compact,
 }) => {
-  const { totalCount, totalPrice } = useCart();
+  const { lineCount, totalPrice } = useCart();
+  const showCategories = activeView === "menu" && categories.length > 0;
 
   return (
     <header className={"header" + (compact ? " header--compact" : "")}>
       <div className="header__inner">
-        <div className="header__row">
-          <div className="header__cluster">
-            <div
-              className="logo"
-              role="button"
-              onClick={() => onChange("menu")}
-            >
-              Meat&nbsp;Point
-            </div>            
-            <div className="header__categories">
-              <CategoryTabs
-                categories={categories}
-                activeId={activeCategoryId}
-                onChange={onCategoryChange}
-              />
-            </div>
-          </div>
+        <div className="header__top">
+          <button className="header__brand" type="button" onClick={() => onChange("menu")}>
+            <span className="header__brand-mark">MP</span>
+            <span className="header__brand-copy">
+              <span className="header__brand-title">Meat Point</span>
+              <span className="header__brand-subtitle">Доставка еды без лишних шагов</span>
+            </span>
+          </button>
 
           <div className="header__actions">
-            {user ? (
-              <>
-                <button
-                  className={
-                    "nav__link" + (activeView === "profile" ? " nav__link--active" : "")
-                  }
-                  onClick={() => onChange("profile")}
-                >
-                  Профиль
-                </button>
-                {user?.is_admin && (
+            <div className="header__nav">
+              {user ? (
+                <>
                   <button
+                    type="button"
                     className={
-                      "nav__link" + (activeView === "admin" ? " nav__link--active" : "")
+                      "nav__link" + (activeView === "profile" ? " nav__link--active" : "")
                     }
-                    onClick={() => onChange("admin")}
+                    onClick={() => onChange("profile")}
                   >
-                    Админка
+                    Профиль
                   </button>
-                )}
-                <button className="link-btn" onClick={onLogout}>
-                  Выйти
+                  {user.is_admin ? (
+                    <button
+                      type="button"
+                      className={
+                        "nav__link" + (activeView === "admin" ? " nav__link--active" : "")
+                      }
+                      onClick={() => onChange("admin")}
+                    >
+                      Админка
+                    </button>
+                  ) : null}
+                  <button type="button" className="link-btn" onClick={onLogout}>
+                    Выйти
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="link-btn" onClick={onAuthOpen}>
+                  Вход / Регистрация
                 </button>
-              </>
-            ) : (
-              <button className="link-btn" onClick={onAuthOpen}>
-                Вход / Регистрация
-              </button>
-            )}
-            <button className="cart-button" onClick={onCartClick}>
-              <span className="cart-button__price">
-                {totalPrice ? `${totalPrice} руб.` : "Корзина"}
+              )}
+            </div>
+
+            <button type="button" className="cart-button cart-button--compact" onClick={onCartClick}>
+              <span className="cart-button__label">Корзина</span>
+              <span className="cart-button__meta">
+                {lineCount > 0 ? formatPrice(totalPrice) : "Пока пусто"}
               </span>
-              <span className="cart-button__divider" />
-              <span className="cart-button__count">
-                {totalCount ? `${totalCount} поз.` : "Пусто"}
-              </span>
+              <span className="cart-button__badge">{lineCount} поз.</span>
             </button>
           </div>
         </div>
+
+        {showCategories ? (
+          <div className="header__categories">
+            <CategoryTabs
+              categories={categories}
+              activeId={activeCategoryId}
+              onChange={onCategoryChange}
+            />
+          </div>
+        ) : null}
       </div>
     </header>
   );

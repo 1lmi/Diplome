@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   AdminCategory,
   AdminOrder,
   AdminProduct,
@@ -19,6 +19,7 @@ let authToken: string | null =
 export function setAuthToken(token: string | null) {
   authToken = token;
   if (typeof localStorage === "undefined") return;
+
   if (token) {
     localStorage.setItem("auth_token", token);
   } else {
@@ -26,10 +27,7 @@ export function setAuthToken(token: string | null) {
   }
 }
 
-async function request<T>(
-  url: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
@@ -39,7 +37,7 @@ async function request<T>(
   }
 
   if (authToken) {
-    headers["Authorization"] = `Bearer ${authToken}`;
+    headers.Authorization = `Bearer ${authToken}`;
   }
 
   const res = await fetch(API_BASE + url, {
@@ -66,30 +64,35 @@ async function request<T>(
   if (contentType.includes("application/json")) {
     return res.json();
   }
+
   return (res.text() as unknown) as T;
 }
 
 export const api = {
-  // Public
   getSettings(): Promise<SettingsMap> {
     return request("/settings");
   },
+
   getStatuses(): Promise<StatusOption[]> {
     return request("/order-statuses");
   },
+
   getCategories(): Promise<Category[]> {
     return request("/categories");
   },
+
   getMenu(categoryId?: number): Promise<MenuItem[]> {
-    const q = categoryId ? `?category_id=${categoryId}` : "";
-    return request(`/menu${q}`);
+    const query = categoryId ? `?category_id=${categoryId}` : "";
+    return request(`/menu${query}`);
   },
+
   createOrder(body: OrderCreate): Promise<Order> {
     return request("/orders", {
       method: "POST",
       body: JSON.stringify(body),
     });
   },
+
   trackOrder(orderId: number, phone: string): Promise<Order> {
     const params = new URLSearchParams({
       order_id: String(orderId),
@@ -97,13 +100,21 @@ export const api = {
     });
     return request(`/orders/track?${params.toString()}`);
   },
+
   getMyOrders(): Promise<Order[]> {
     return request("/me/orders");
   },
-  getOrder(orderId: number): Promise<Order> {
-    return request(`/orders/${orderId}`);
+
+  getOrder(orderId: number, phone?: string): Promise<Order> {
+    const params = new URLSearchParams();
+    if (phone) {
+      params.set("phone", phone);
+    }
+
+    const query = params.toString();
+    return request(`/orders/${orderId}${query ? `?${query}` : ""}`);
   },
-  // Auth
+
   register(
     firstName: string,
     login: string,
@@ -124,15 +135,18 @@ export const api = {
       }),
     });
   },
+
   login(login: string, password: string): Promise<AuthResponse> {
     return request("/auth/login", {
       method: "POST",
       body: JSON.stringify({ login, password }),
     });
   },
+
   me(): Promise<AuthResponse["user"]> {
     return request("/auth/me");
   },
+
   updateProfile(payload: {
     first_name?: string | null;
     last_name?: string | null;
@@ -144,13 +158,15 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+
   logout(): Promise<{ ok: boolean }> {
     return request("/auth/logout", { method: "POST" });
   },
-  // Admin/menu
+
   adminMenu(): Promise<AdminCategory[]> {
     return request("/admin/menu");
   },
+
   createCategory(payload: {
     name: string;
     description?: string;
@@ -162,16 +178,19 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+
   updateCategory(id: number, payload: Partial<Category>): Promise<Category> {
     return request(`/admin/categories/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
   },
+
   deleteCategory(id: number, deleteProducts?: boolean): Promise<{ ok: boolean }> {
-    const q = deleteProducts ? "?delete_products=true" : "";
-    return request(`/admin/categories/${id}${q}`, { method: "DELETE" });
+    const query = deleteProducts ? "?delete_products=true" : "";
+    return request(`/admin/categories/${id}${query}`, { method: "DELETE" });
   },
+
   createProduct(payload: {
     category_id: number;
     name: string;
@@ -184,16 +203,22 @@ export const api = {
     size_name?: string;
     size_amount?: number;
     size_unit?: string;
-    sizes?: { size_name: string; amount?: number; unit?: string; price: number; is_hidden?: boolean }[];
+    sizes?: {
+      size_name: string;
+      amount?: number;
+      unit?: string;
+      price: number;
+      is_hidden?: boolean;
+    }[];
   }): Promise<AdminProduct> {
     const normalizedSizes =
       payload.sizes && payload.sizes.length
-        ? payload.sizes.map((s) => ({
-            size_name: s.size_name,
-            amount: s.amount,
-            unit: s.unit,
-            price: s.price,
-            is_hidden: s.is_hidden ?? false,
+        ? payload.sizes.map((size) => ({
+            size_name: size.size_name,
+            amount: size.amount,
+            unit: size.unit,
+            price: size.price,
+            is_hidden: size.is_hidden ?? false,
           }))
         : [
             {
@@ -204,30 +229,33 @@ export const api = {
               is_hidden: false,
             },
           ];
-    const body = {
-      category_id: payload.category_id,
-      name: payload.name,
-      description: payload.description,
-      image_path: payload.image_path,
-      is_hidden: payload.is_hidden ?? false,
-      is_active: payload.is_active ?? true,
-      sort_order: payload.sort_order ?? 0,
-      sizes: normalizedSizes,
-    };
+
     return request("/admin/products", {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        category_id: payload.category_id,
+        name: payload.name,
+        description: payload.description,
+        image_path: payload.image_path,
+        is_hidden: payload.is_hidden ?? false,
+        is_active: payload.is_active ?? true,
+        sort_order: payload.sort_order ?? 0,
+        sizes: normalizedSizes,
+      }),
     });
   },
+
   updateProduct(id: number, payload: any): Promise<AdminProduct> {
     return request(`/admin/products/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
   },
+
   deleteProduct(id: number): Promise<{ ok: boolean }> {
     return request(`/admin/products/${id}`, { method: "DELETE" });
   },
+
   uploadImage(file: File): Promise<{ filename: string; url: string }> {
     const form = new FormData();
     form.append("file", file);
@@ -237,16 +265,19 @@ export const api = {
       headers: {},
     });
   },
+
   updateSettings(values: Record<string, string>): Promise<{ ok: boolean }> {
     return request("/admin/settings", {
       method: "PUT",
       body: JSON.stringify({ values }),
     });
   },
+
   adminOrders(status?: string): Promise<AdminOrder[]> {
-    const q = status ? `?status=${status}` : "";
-    return request(`/admin/orders${q}`);
+    const query = status ? `?status=${status}` : "";
+    return request(`/admin/orders${query}`);
   },
+
   updateOrderStatus(orderId: number, status_code: string, comment?: string): Promise<Order> {
     return request(`/orders/${orderId}/status`, {
       method: "PATCH",
@@ -254,6 +285,3 @@ export const api = {
     });
   },
 };
-
-
-

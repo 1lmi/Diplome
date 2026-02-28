@@ -7,7 +7,7 @@ export interface Category {
 }
 
 export interface MenuItem {
-  id: number; // id product_sizes (v_menu_items.id)
+  id: number;
   category_id: number;
   name: string;
   product_name?: string;
@@ -25,11 +25,39 @@ export interface MenuItem {
   image_url: string;
 }
 
+export interface ProductDisplay {
+  key: string;
+  category_id: number;
+  name: string;
+  description?: string | null;
+  image_url: string;
+  variants: MenuItem[];
+  minPrice: number;
+}
+
 export interface CartItem {
   productSizeId: number;
   name: string;
+  productName: string;
+  sizeLabel?: string | null;
+  sizeAmount?: number | null;
+  sizeUnit?: string | null;
+  imageUrl: string;
   price: number;
   quantity: number;
+}
+
+export interface CheckoutDraft {
+  guestMode: boolean;
+  customerName: string;
+  customerPhone: string;
+  deliveryMethod: "delivery" | "pickup";
+  address: string;
+  deliveryTime: string;
+  comment: string;
+  paymentMethod: "cash" | "card";
+  cashChangeFrom: string;
+  doNotCall: boolean;
 }
 
 export interface OrderCreateItem {
@@ -44,6 +72,10 @@ export interface OrderCreate {
     address?: string | null;
   };
   delivery_method?: "delivery" | "pickup";
+  delivery_time?: string | null;
+  payment_method?: "cash" | "card";
+  cash_change_from?: number | null;
+  do_not_call?: boolean;
   comment?: string | null;
   items: OrderCreateItem[];
 }
@@ -111,6 +143,10 @@ export interface Order {
   customer_phone?: string | null;
   customer_address?: string | null;
   delivery_method?: "delivery" | "pickup" | null;
+  delivery_time?: string | null;
+  payment_method?: "cash" | "card" | null;
+  cash_change_from?: number | null;
+  do_not_call?: boolean | null;
   items: OrderLine[];
   history: OrderHistoryItem[];
 }

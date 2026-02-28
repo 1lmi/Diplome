@@ -71,7 +71,6 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     carbs: "",
     sizes: [{ name: "", amount: "", unit: "", price: "" }],
   });
-  const [orderStatuses, setOrderStatuses] = useState<Record<number, string>>({});
   const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null);
 
   useEffect(() => {
@@ -227,13 +226,16 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     }
   };
 
-  const handleOrderStatusChange = async (orderId: number) => {
-    const status = orderStatuses[orderId];
-    if (!status) return;
-    const updated = await api.updateOrderStatus(orderId, status);
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: updated.status, status_name: updated.status_name } : o))
-    );
+  const handleOrderTransition = async (orderId: number, targetStatus: string) => {
+    setError(null);
+    try {
+      const updated = await api.updateOrderStatus(orderId, targetStatus);
+      setOrders((prev) => prev.map((order) => (order.id === orderId ? updated : order)));
+      return true;
+    } catch (e: any) {
+      setError(e.message);
+      return false;
+    }
   };
 
   const handleUpdateCategory = async (id: number, payload: Partial<Category>) => {
@@ -415,9 +417,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 orders={orders}
                 statuses={statuses}
                 mode="current"
-                orderStatuses={orderStatuses}
-                onStatusChange={(id, status) => setOrderStatuses((s) => ({ ...s, [id]: status }))}
-                onApplyStatus={handleOrderStatusChange}
+                onTransition={handleOrderTransition}
                 onRefresh={refreshAll}
               />
             }
@@ -430,9 +430,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 orders={orders}
                 statuses={statuses}
                 mode="history"
-                orderStatuses={orderStatuses}
-                onStatusChange={(id, status) => setOrderStatuses((s) => ({ ...s, [id]: status }))}
-                onApplyStatus={handleOrderStatusChange}
+                onTransition={handleOrderTransition}
                 onRefresh={refreshAll}
               />
             }

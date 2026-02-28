@@ -144,8 +144,9 @@ def seed_statuses(conn: sqlite3.Connection) -> None:
     statuses = [
         ("new", "Новый"),
         ("cooking", "Готовится"),
+        ("ready", "Готов"),
         ("on_way", "В пути"),
-        ("done", "Готов"),
+        ("done", "Выдан"),
         ("canceled", "Отменён"),
     ]
     for code, name in statuses:
@@ -162,6 +163,40 @@ def seed_statuses(conn: sqlite3.Connection) -> None:
             conn.execute(
                 "INSERT INTO order_statuses(code, name) VALUES (?, ?)", (code, name)
             )
+
+
+TERMINAL_ORDER_STATUSES = {
+    "done",
+    "canceled",
+    "cancelled",
+    "delivered",
+    "completed",
+    "finished",
+}
+
+
+def get_effective_delivery_method(
+    delivery_method: Optional[str], customer_address: Optional[str]
+) -> str:
+    normalized = (delivery_method or "").strip().lower()
+    if normalized in ("delivery", "pickup"):
+        return normalized
+    return "delivery" if (customer_address and str(customer_address).strip()) else "pickup"
+
+
+def get_allowed_status_transitions(current_status: Optional[str], delivery_method: str) -> set[str]:
+    normalized = (current_status or "").strip().lower()
+    if normalized in TERMINAL_ORDER_STATUSES:
+        return set()
+    if normalized == "new":
+        return {"cooking", "canceled"}
+    if normalized == "cooking":
+        return {"ready", "canceled"}
+    if normalized == "ready":
+        return {"on_way", "canceled"} if delivery_method == "delivery" else {"done", "canceled"}
+    if normalized == "on_way":
+        return {"done", "canceled"}
+    return {"canceled"}
 
 
 def ensure_sort_order(conn: sqlite3.Connection, table: str) -> None:
@@ -246,6 +281,10 @@ def apply_migrations() -> None:
     ensure_column(conn, "product_sizes", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "orders", "user_id", "INTEGER REFERENCES users(id)")
     ensure_column(conn, "orders", "delivery_method", "TEXT")
+    ensure_column(conn, "orders", "delivery_time", "TEXT")
+    ensure_column(conn, "orders", "payment_method", "TEXT")
+    ensure_column(conn, "orders", "cash_change_from", "INTEGER")
+    ensure_column(conn, "orders", "do_not_call", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "users", "first_name", "TEXT")
     ensure_column(conn, "users", "last_name", "TEXT")
     ensure_column(conn, "users", "login", "TEXT")
@@ -519,6 +558,10 @@ class OrderItemIn(BaseModel):
 class OrderCreate(BaseModel):
     customer: CustomerIn
     delivery_method: Optional[str] = None
+    delivery_time: Optional[str] = None
+    payment_method: Optional[str] = None
+    cash_change_from: Optional[int] = None
+    do_not_call: bool = False
     comment: Optional[str] = None
     items: List[OrderItemIn]
 
@@ -551,6 +594,10 @@ class OrderOut(BaseModel):
     customer_phone: Optional[str]
     customer_address: Optional[str]
     delivery_method: Optional[str]
+    delivery_time: Optional[str]
+    payment_method: Optional[str]
+    cash_change_from: Optional[int]
+    do_not_call: bool = False
     items: List[OrderItemOut]
     history: List[OrderHistoryItem] = []
 
@@ -769,6 +816,10 @@ def fetch_order(
                o.created_at,
                o.user_id,
                o.delivery_method,
+               o.delivery_time,
+               o.payment_method,
+               o.cash_change_from,
+               o.do_not_call,
                os.code AS status,
                os.name AS status_name,
                c.name  AS customer_name,
@@ -785,15 +836,19 @@ def fetch_order(
     if row is None:
         raise HTTPException(status_code=404, detail="Заказ не найден")
 
-    delivery_method = row["delivery_method"]
-    if delivery_method:
-        delivery_method = delivery_method.strip().lower()
-    if delivery_method not in ("delivery", "pickup"):
-        delivery_method = (
-            "delivery"
-            if (row["customer_address"] and str(row["customer_address"]).strip())
-            else "pickup"
-        )
+    delivery_method = get_effective_delivery_method(
+        row["delivery_method"], row["customer_address"]
+    )
+
+    customer_address = row["customer_address"]
+    if delivery_method == "pickup":
+        customer_address = None
+
+    payment_method = row["payment_method"]
+    if payment_method:
+        payment_method = str(payment_method).strip().lower()
+    if payment_method not in ("cash", "card"):
+        payment_method = None
 
     items_rows = db.execute(
         """
@@ -859,8 +914,12 @@ def fetch_order(
         total_price=row["total_price"],
         customer_name=row["customer_name"],
         customer_phone=row["customer_phone"],
-        customer_address=row["customer_address"],
+        customer_address=customer_address,
         delivery_method=delivery_method,
+        delivery_time=row["delivery_time"],
+        payment_method=payment_method,
+        cash_change_from=row["cash_change_from"],
+        do_not_call=bool(row["do_not_call"]),
         items=items,
         history=history,
     )
@@ -928,7 +987,23 @@ def get_settings(db: sqlite3.Connection = Depends(get_db)) -> Dict[str, str]:
 
 @app.get("/order-statuses", response_model=List[OrderStatus])
 def list_statuses(db: sqlite3.Connection = Depends(get_db)):
-    rows = db.execute("SELECT code, name FROM order_statuses ORDER BY id").fetchall()
+    rows = db.execute(
+        """
+        SELECT code, name
+        FROM order_statuses
+        ORDER BY
+            CASE code
+                WHEN 'new' THEN 1
+                WHEN 'cooking' THEN 2
+                WHEN 'ready' THEN 3
+                WHEN 'on_way' THEN 4
+                WHEN 'done' THEN 5
+                WHEN 'canceled' THEN 6
+                ELSE 999
+            END,
+            id
+        """
+    ).fetchall()
     return [OrderStatus(code=r["code"], name=r["name"]) for r in rows]
 
 
@@ -1017,29 +1092,35 @@ def create_order(
     status_id = status_row["id"]
 
     customer_phone = order.customer.phone.strip()
-    customer_row = cur.execute(
-        "SELECT id FROM customers WHERE phone = ?", (customer_phone,)
-    ).fetchone()
-    if customer_row:
-        cur.execute(
-            "UPDATE customers SET name = COALESCE(?, name), address = COALESCE(?, address) WHERE id = ?",
-            (order.customer.name, order.customer.address, customer_row["id"]),
-        )
-        customer_id = customer_row["id"]
-    else:
-        cur.execute(
-            """
-            INSERT INTO customers(name, phone, address)
-            VALUES (?, ?, ?)
-            """,
-            (order.customer.name, customer_phone, order.customer.address),
-        )
-        customer_id = cur.lastrowid
+    if not customer_phone:
+        raise HTTPException(status_code=400, detail="РўРµР»РµС„РѕРЅ РѕР±СЏР·Р°С‚РµР»РµРЅ")
+    customer_name = (order.customer.name or "").strip() or None
+    customer_address = (order.customer.address or "").strip() or None
 
     delivery_method = (order.delivery_method or "").strip().lower()
     if delivery_method not in ("delivery", "pickup"):
         delivery_method = (
-            "delivery" if (order.customer.address or "").strip() else "pickup"
+            "delivery" if customer_address else "pickup"
+        )
+    if delivery_method == "delivery" and not customer_address:
+        raise HTTPException(status_code=400, detail="РђРґСЂРµСЃ РґРѕСЃС‚Р°РІРєРё РѕР±СЏР·Р°С‚РµР»РµРЅ")
+
+    delivery_time = (order.delivery_time or "").strip() or None
+
+    payment_method = (order.payment_method or "cash").strip().lower()
+    if payment_method not in ("cash", "card"):
+        raise HTTPException(status_code=400, detail="РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЃРїРѕСЃРѕР± РѕРїР»Р°С‚С‹")
+
+    cash_change_from = order.cash_change_from
+    if payment_method != "cash" and cash_change_from is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="РЎРґР°С‡Р° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РїСЂРё РѕРїР»Р°С‚Рµ РЅР°Р»РёС‡РЅС‹РјРё",
+        )
+    if cash_change_from is not None and cash_change_from <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="РЎСѓРјРјР° РґР»СЏ СЃРґР°С‡Рё РґРѕР»Р¶РЅР° Р±С‹С‚СЊ Р±РѕР»СЊС€Рµ РЅСѓР»СЏ",
         )
 
     total_price = 0
@@ -1063,18 +1144,58 @@ def create_order(
         prices[item.product_size_id] = price
         total_price += price * item.quantity
 
+    if cash_change_from is not None and cash_change_from < total_price:
+        raise HTTPException(
+            status_code=400,
+            detail="РЎСѓРјРјР° РґР»СЏ СЃРґР°С‡Рё РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РјРµРЅСЊС€Рµ СЃСѓРјРјС‹ Р·Р°РєР°Р·Р°",
+        )
+
+    customer_row = cur.execute(
+        "SELECT id FROM customers WHERE phone = ?", (customer_phone,)
+    ).fetchone()
+    if customer_row:
+        cur.execute(
+            "UPDATE customers SET name = COALESCE(?, name), address = COALESCE(?, address) WHERE id = ?",
+            (customer_name, customer_address, customer_row["id"]),
+        )
+        customer_id = customer_row["id"]
+    else:
+        cur.execute(
+            """
+            INSERT INTO customers(name, phone, address)
+            VALUES (?, ?, ?)
+            """,
+            (customer_name, customer_phone, customer_address),
+        )
+        customer_id = cur.lastrowid
+
     cur.execute(
         """
-        INSERT INTO orders(customer_id, status_id, comment, total_price, user_id, delivery_method)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO orders(
+            customer_id,
+            status_id,
+            comment,
+            total_price,
+            user_id,
+            delivery_method,
+            delivery_time,
+            payment_method,
+            cash_change_from,
+            do_not_call
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             customer_id,
             status_id,
-            order.comment,
+            (order.comment or "").strip() or None,
             total_price,
             current_user["id"] if current_user else None,
             delivery_method,
+            delivery_time,
+            payment_method,
+            cash_change_from,
+            1 if order.do_not_call else 0,
         ),
     )
     order_id = cur.lastrowid
@@ -1190,11 +1311,34 @@ def update_order_status(
     _: sqlite3.Row = Depends(require_admin),
 ):
     cur = db.cursor()
+    target_status = body.status_code.strip().lower()
+
+    order_row = cur.execute(
+        """
+        SELECT o.id,
+               o.delivery_method,
+               os.code AS status,
+               c.address AS customer_address
+        FROM orders o
+        JOIN order_statuses os ON os.id = o.status_id
+        LEFT JOIN customers c ON c.id = o.customer_id
+        WHERE o.id = ?
+        """,
+        (order_id,),
+    ).fetchone()
+    if order_row is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
 
     status_row = cur.execute(
         "SELECT id FROM order_statuses WHERE code = ?",
-        (body.status_code,),
+        (target_status,),
     ).fetchone()
+    delivery_method = get_effective_delivery_method(
+        order_row["delivery_method"], order_row["customer_address"]
+    )
+    allowed_statuses = get_allowed_status_transitions(order_row["status"], delivery_method)
+    if target_status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail="Недопустимый переход статуса")
     if status_row is None:
         raise HTTPException(status_code=400, detail="Неизвестный статус")
 
