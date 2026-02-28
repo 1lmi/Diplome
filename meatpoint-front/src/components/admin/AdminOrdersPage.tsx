@@ -6,6 +6,7 @@ import { isSameDay, terminalStatuses } from "./utils";
 interface Props {
   orders: AdminOrder[];
   statuses: StatusOption[];
+  mode: "current" | "history";
   orderStatuses: Record<number, string>;
   onStatusChange: (orderId: number, status: string) => void;
   onApplyStatus: (orderId: number) => Promise<void>;
@@ -15,24 +16,35 @@ interface Props {
 const AdminOrdersPage: React.FC<Props> = ({
   orders,
   statuses,
+  mode,
   orderStatuses,
   onStatusChange,
   onApplyStatus,
   onRefresh,
 }) => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [onlyToday, setOnlyToday] = useState(true);
-  const [onlyActive, setOnlyActive] = useState(false);
+  const [onlyToday, setOnlyToday] = useState(false);
   const [query, setQuery] = useState("");
 
   const now = new Date();
+  const isHistoryView = mode === "history";
+
+  const availableStatuses = useMemo(() => {
+    const filtered = statuses.filter((status) =>
+      isHistoryView
+        ? terminalStatuses.has(status.code.toLowerCase())
+        : !terminalStatuses.has(status.code.toLowerCase())
+    );
+    return filtered.length ? filtered : statuses;
+  }, [isHistoryView, statuses]);
 
   const filteredOrders = useMemo(() => {
     return orders
       .filter((o) => {
+        const isTerminal = terminalStatuses.has(o.status.toLowerCase());
+        if (isHistoryView ? !isTerminal : isTerminal) return false;
         if (statusFilter !== "all" && o.status !== statusFilter) return false;
         if (onlyToday && !isSameDay(new Date(o.created_at), now)) return false;
-        if (onlyActive && terminalStatuses.has(o.status.toLowerCase())) return false;
         if (!query.trim()) return true;
         const q = query.trim().toLowerCase();
         return (
@@ -42,15 +54,24 @@ const AdminOrdersPage: React.FC<Props> = ({
         );
       })
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [orders, statusFilter, onlyToday, onlyActive, query, now]);
+  }, [orders, isHistoryView, statusFilter, onlyToday, query, now]);
+
+  const title = isHistoryView ? "История заказов" : "Текущие заказы";
+  const subtitle = isHistoryView
+    ? "Завершённые и отменённые заказы. Можно искать, фильтровать и при необходимости корректировать статус."
+    : "Все заказы в работе. Следите за новыми заказами и быстро меняйте их статус.";
+  const emptyMessage = isHistoryView
+    ? "История заказов пока пуста."
+    : "Сейчас нет заказов в работе.";
+  const backTo = isHistoryView ? "/admin/orders/history" : "/admin/orders/current";
 
   return (
     <div className="admin-page">
       <div className="admin-page__header">
         <div>
           <p className="eyebrow">Заказы</p>
-          <h2 className="admin-page__title">Мониторинг и статусы</h2>
-          <p className="muted">Фильтруйте по статусу, актуальным заказам или ищите по телефону.</p>
+          <h2 className="admin-page__title">{title}</h2>
+          <p className="muted">{subtitle}</p>
         </div>
         <button className="btn btn--outline" onClick={onRefresh}>
           Обновить
@@ -67,7 +88,7 @@ const AdminOrdersPage: React.FC<Props> = ({
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="all">Все</option>
-              {statuses.map((s) => (
+              {availableStatuses.map((s) => (
                 <option key={s.code} value={s.code}>
                   {s.name}
                 </option>
@@ -77,10 +98,6 @@ const AdminOrdersPage: React.FC<Props> = ({
           <label className="field-inline">
             <span>Только сегодня</span>
             <input type="checkbox" checked={onlyToday} onChange={(e) => setOnlyToday(e.target.checked)} />
-          </label>
-          <label className="field-inline">
-            <span>Только активные</span>
-            <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
           </label>
         </div>
         <input
@@ -96,10 +113,14 @@ const AdminOrdersPage: React.FC<Props> = ({
           <div key={order.id} className="admin-row">
             <div>
               <div className="admin-row__title">
-                <Link className="admin-row__link" to={`/orders/${order.id}`}>№-{order.id}</Link> · {order.total_price} ₽
+                <Link className="admin-row__link" to={`/orders/${order.id}`} state={{ backTo }}>
+                  №-{order.id}
+                </Link>{" "}
+                · {order.total_price} ₽
               </div>
               <div className="admin-row__meta">
-                {order.customer_name || "Гость"} · {order.customer_phone || "—"} · {new Date(order.created_at).toLocaleString()}
+                {order.customer_name || "Гость"} · {order.customer_phone || "—"} ·{" "}
+                {new Date(order.created_at).toLocaleString()}
               </div>
             </div>
             <div className="admin-row__controls">
@@ -121,7 +142,7 @@ const AdminOrdersPage: React.FC<Props> = ({
           </div>
         ))}
         {filteredOrders.length === 0 && (
-          <div className="muted">Ничего не найдено под выбранные фильтры.</div>
+          <div className="muted">{query || statusFilter !== "all" || onlyToday ? "Ничего не найдено под выбранные фильтры." : emptyMessage}</div>
         )}
       </div>
     </div>

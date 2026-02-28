@@ -15,6 +15,7 @@ import AdminCategoriesPage from "./admin/AdminCategoriesPage";
 import AdminMenuPage from "./admin/AdminMenuPage";
 import AdminOrdersPage from "./admin/AdminOrdersPage";
 import AdminProductModal from "./admin/AdminProductModal";
+import AdminStatisticsPage from "./admin/AdminStatisticsPage";
 
 interface Props {
   statuses: StatusOption[];
@@ -305,6 +306,14 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             Дашборд
           </NavLink>
           <NavLink
+            to="/admin/stats"
+            className={({ isActive }) =>
+              "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
+            }
+          >
+            Статистика
+          </NavLink>
+          <NavLink
             to="/admin/categories"
             className={({ isActive }) =>
               "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
@@ -321,12 +330,20 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             Управление меню
           </NavLink>
           <NavLink
-            to="/admin/orders"
+            to="/admin/orders/current"
             className={({ isActive }) =>
               "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
             }
           >
-            Заказы
+            Текущие заказы
+          </NavLink>
+          <NavLink
+            to="/admin/orders/history"
+            className={({ isActive }) =>
+              "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
+            }
+          >
+            История заказов
           </NavLink>
         </nav>
         <button className="btn btn--ghost" onClick={refreshAll}>
@@ -343,13 +360,18 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             element={
               <AdminDashboard
                 orders={orders}
-                statuses={statuses}
                 settings={settings}
                 onSettingChange={(key, value) => setSettings((s) => ({ ...s, [key]: value }))}
                 onSaveSettings={handleSettingsSave}
                 onRefresh={refreshAll}
                 saving={saving}
               />
+            }
+          />
+          <Route
+            path="stats"
+            element={
+              <AdminStatisticsPage orders={orders} statuses={statuses} onRefresh={refreshAll} />
             }
           />
           <Route
@@ -384,12 +406,30 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
               />
             }
           />
+          <Route path="orders" element={<Navigate to="current" replace />} />
           <Route
-            path="orders"
+            path="orders/current"
             element={
               <AdminOrdersPage
+                key="current-orders"
                 orders={orders}
                 statuses={statuses}
+                mode="current"
+                orderStatuses={orderStatuses}
+                onStatusChange={(id, status) => setOrderStatuses((s) => ({ ...s, [id]: status }))}
+                onApplyStatus={handleOrderStatusChange}
+                onRefresh={refreshAll}
+              />
+            }
+          />
+          <Route
+            path="orders/history"
+            element={
+              <AdminOrdersPage
+                key="history-orders"
+                orders={orders}
+                statuses={statuses}
+                mode="history"
                 orderStatuses={orderStatuses}
                 onStatusChange={(id, status) => setOrderStatuses((s) => ({ ...s, [id]: status }))}
                 onApplyStatus={handleOrderStatusChange}

@@ -1046,10 +1046,15 @@ def create_order(
     prices: dict[int, int] = {}
     for item in order.items:
         row = cur.execute(
-            "SELECT price, is_hidden FROM product_sizes WHERE id = ?",
+            """
+            SELECT ps.price, ps.is_hidden, p.is_active
+            FROM product_sizes ps
+            JOIN products p ON p.id = ps.product_id
+            WHERE ps.id = ?
+            """,
             (item.product_size_id,),
         ).fetchone()
-        if row is None or row["is_hidden"]:
+        if row is None or row["is_hidden"] or not row["is_active"]:
             raise HTTPException(
                 status_code=400,
                 detail=f"product_size_id {item.product_size_id} недоступен",

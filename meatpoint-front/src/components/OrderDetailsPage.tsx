@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../authContext";
 import type { Order } from "../types";
@@ -24,6 +24,7 @@ const OrderDetailsPage: React.FC = () => {
   const { orderId } = useParams();
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [order, setOrder] = useState<Order | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -108,7 +109,9 @@ const OrderDetailsPage: React.FC = () => {
     return null;
   }
 
-  const backLink = user?.is_admin ? "/admin/orders" : "/profile";
+  const adminBackLink =
+    (location.state as { backTo?: string } | null)?.backTo || "/admin/orders/current";
+  const backLink = user?.is_admin ? adminBackLink : "/profile";
 
   return (
     <section className="order-page">

@@ -288,7 +288,10 @@ const AdminMenuPage: React.FC<Props> = ({
                     </div>
                   </div>
                   <div className="menu-product-card__footer">
-                    <label className="field-inline" onClick={(e) => e.stopPropagation()}>
+                    <label
+                      className="field-inline menu-product-card__sort"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <span>Порядок</span>
                       <input
                         className="input input--sm"
