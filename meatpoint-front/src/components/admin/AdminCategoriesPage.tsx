@@ -1,5 +1,21 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { AdminCategory, Category } from "../../types";
+import { focusFirstInvalidField } from "../../utils/forms";
 
 interface Props {
   categories: AdminCategory[];
@@ -8,8 +24,118 @@ interface Props {
   onCreateCategory: () => Promise<void> | void;
   onUpdateCategory: (id: number, payload: Partial<Category>) => Promise<void>;
   onDeleteCategory: (id: number, deleteProducts: boolean) => Promise<void>;
+  onReorderCategories: (categoryIds: number[]) => Promise<void>;
+  saving: boolean;
   onRefresh: () => void;
 }
+
+interface SortableCardProps {
+  category: AdminCategory;
+  draft: Category;
+  index: number;
+  error?: string;
+  saving: boolean;
+  onDraftChange: (
+    id: number,
+    field: keyof Category,
+    value: string | number | boolean | null
+  ) => void;
+  onSave: (id: number) => Promise<void>;
+  onDelete: (category: AdminCategory) => void;
+}
+
+const SortableCategoryCard: React.FC<SortableCardProps> = ({
+  category,
+  draft,
+  index,
+  error,
+  saving,
+  onDraftChange,
+  onSave,
+  onDelete,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: category.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={"category-card category-card--sortable" + (isDragging ? " category-card--dragging" : "")}
+    >
+      <div className="category-card__handle-col">
+        <button
+          type="button"
+          className="sortable-handle"
+          aria-label={`Переместить категорию ${category.name}`}
+          {...attributes}
+          {...listeners}
+        >
+          ⋮⋮
+        </button>
+        <span className="profile-badge">#{index + 1}</span>
+      </div>
+
+      <div className="category-card__fields">
+        <label className="field">
+          <span>Название</span>
+          <input
+            id={`category-name-${category.id}`}
+            className="input"
+            value={draft.name}
+            aria-invalid={error ? "true" : "false"}
+            onChange={(e) => onDraftChange(category.id, "name", e.target.value)}
+          />
+          {error ? <p className="field-note field-note--error">{error}</p> : null}
+        </label>
+        <label className="field">
+          <span>Описание</span>
+          <input
+            className="input"
+            value={draft.description || ""}
+            onChange={(e) => onDraftChange(category.id, "description", e.target.value)}
+          />
+        </label>
+      </div>
+
+      <div className="category-card__side">
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={!draft.is_hidden}
+            onChange={(e) => onDraftChange(category.id, "is_hidden", !e.target.checked)}
+          />
+          <span>Активна</span>
+        </label>
+        <div className="category-card__actions">
+          <button
+            className={"btn btn--primary btn--sm" + (saving ? " btn--loading" : "")}
+            onClick={() => onSave(category.id)}
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <span className="btn__spinner" />
+                Сохраняем
+              </>
+            ) : (
+              "Сохранить"
+            )}
+          </button>
+          <button className="btn btn--ghost btn--sm" onClick={() => onDelete(category)}>
+            Удалить
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AdminCategoriesPage: React.FC<Props> = ({
   categories,
@@ -18,16 +144,27 @@ const AdminCategoriesPage: React.FC<Props> = ({
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
+  onReorderCategories,
+  saving,
   onRefresh,
 }) => {
   const [drafts, setDrafts] = useState<Record<number, Category>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
+  const [draftErrors, setDraftErrors] = useState<Record<number, string>>({});
   const [deleteState, setDeleteState] = useState<{
     category: AdminCategory;
     deleteProducts: boolean | null;
     step: "choice" | "confirm";
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
 
   useEffect(() => {
     const map: Record<number, Category> = {};
@@ -43,11 +180,23 @@ const AdminCategoriesPage: React.FC<Props> = ({
     setDrafts(map);
   }, [categories]);
 
+  const sortedCats = useMemo(
+    () => [...categories].sort((a, b) => a.sort_order - b.sort_order),
+    [categories]
+  );
+
   const handleDraftChange = (
     id: number,
     field: keyof Category,
     value: string | number | boolean | null
   ) => {
+    setDraftErrors((prev) => {
+      const next = { ...prev };
+      if (field === "name") {
+        delete next[id];
+      }
+      return next;
+    });
     setDrafts((prev) => ({
       ...prev,
       [id]: {
@@ -57,17 +206,39 @@ const AdminCategoriesPage: React.FC<Props> = ({
     }));
   };
 
+  const handleCreate = async () => {
+    if (!newCategory.name.trim()) {
+      setNewCategoryError("Название категории обязательно.");
+      window.setTimeout(() => focusFirstInvalidField(["#new-category-name"]), 0);
+      return;
+    }
+
+    setNewCategoryError(null);
+    try {
+      await onCreateCategory();
+    } catch {
+      // Parent handles error presentation.
+    }
+  };
+
   const handleSave = async (id: number) => {
     const draft = drafts[id];
     if (!draft) return;
+    if (!draft.name?.trim()) {
+      setDraftErrors((prev) => ({ ...prev, [id]: "Название категории обязательно." }));
+      window.setTimeout(() => focusFirstInvalidField([`#category-name-${id}`]), 0);
+      return;
+    }
+
     setSavingId(id);
     try {
       await onUpdateCategory(id, {
-        name: draft.name?.trim() || undefined,
+        name: draft.name.trim(),
         description: draft.description || null,
-        sort_order: draft.sort_order,
         is_hidden: draft.is_hidden,
       });
+    } catch {
+      // Parent handles error presentation.
     } finally {
       setSavingId(null);
     }
@@ -83,9 +254,7 @@ const AdminCategoriesPage: React.FC<Props> = ({
   };
 
   const chooseDeleteMode = (deleteProducts: boolean) => {
-    setDeleteState((prev) =>
-      prev ? { ...prev, deleteProducts, step: "confirm" } : prev
-    );
+    setDeleteState((prev) => (prev ? { ...prev, deleteProducts, step: "confirm" } : prev));
   };
 
   const confirmDelete = async () => {
@@ -99,10 +268,24 @@ const AdminCategoriesPage: React.FC<Props> = ({
     }
   };
 
-  const sortedCats = useMemo(
-    () => [...categories].sort((a, b) => a.sort_order - b.sort_order),
-    [categories]
-  );
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const ids = sortedCats.map((category) => category.id);
+    const oldIndex = ids.indexOf(Number(active.id));
+    const newIndex = ids.indexOf(Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    setReordering(true);
+    try {
+      await onReorderCategories(arrayMove(ids, oldIndex, newIndex));
+    } catch {
+      // Parent handles error presentation.
+    } finally {
+      setReordering(false);
+    }
+  };
 
   return (
     <div className="admin-page">
@@ -110,115 +293,110 @@ const AdminCategoriesPage: React.FC<Props> = ({
         <div>
           <p className="eyebrow">Управление категориями</p>
           <h2 className="admin-page__title">Структура меню</h2>
-          <p className="muted">Создавайте, сортируйте и скрывайте категории.</p>
+          <p className="muted">Перетаскивайте категории, редактируйте названия и сразу сохраняйте.</p>
         </div>
         <button className="btn btn--outline" onClick={onRefresh}>
           Перезагрузить
         </button>
       </div>
 
-      <div className="panel">
+      <div className="panel menu-form">
         <div className="panel__header">
           <div>
             <h3>Новая категория</h3>
-            <p className="muted">Заполните и нажмите добавить</p>
+            <p className="muted">Новая категория автоматически попадёт в конец списка.</p>
           </div>
-          <button className="btn btn--primary" onClick={onCreateCategory}>
-            Добавить
+          <button
+            className={"btn btn--primary" + (saving ? " btn--loading" : "")}
+            onClick={handleCreate}
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <span className="btn__spinner" />
+                Добавляем
+              </>
+            ) : (
+              "Добавить"
+            )}
           </button>
         </div>
-        <div className="grid grid-2 gap-8">
-          <input
-            className="input"
-            placeholder="Название"
-            value={newCategory.name}
-            onChange={(e) => onNewCategoryChange("name", e.target.value)}
-          />
-          <input
-            className="input"
-            placeholder="Описание"
-            value={newCategory.description}
-            onChange={(e) => onNewCategoryChange("description", e.target.value)}
-          />
+
+        <div className="form-feedback">
+          {newCategoryError ? (
+            <div className="alert alert--error form-feedback__summary">{newCategoryError}</div>
+          ) : null}
+          <div className="grid grid-2 gap-8">
+            <label className="field">
+              <span>Название</span>
+              <input
+                id="new-category-name"
+                className="input"
+                placeholder="Например, Горячее"
+                value={newCategory.name}
+                aria-invalid={newCategoryError ? "true" : "false"}
+                onChange={(e) => {
+                  setNewCategoryError(null);
+                  onNewCategoryChange("name", e.target.value);
+                }}
+              />
+            </label>
+            <label className="field">
+              <span>Описание</span>
+              <input
+                className="input"
+                placeholder="Короткое описание категории"
+                value={newCategory.description}
+                onChange={(e) => onNewCategoryChange("description", e.target.value)}
+              />
+            </label>
+          </div>
         </div>
       </div>
 
       <div className="category-list">
-        {sortedCats.map((cat) => {
-          const draft = drafts[cat.id] || cat;
-          const isActive = !draft.is_hidden;
-          return (
-            <div key={cat.id} className="category-card">
-              <div className="category-card__fields">
-                <label className="field">
-                  <span>Название</span>
-                  <input
-                    className="input"
-                    value={draft.name}
-                    onChange={(e) => handleDraftChange(cat.id, "name", e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Описание</span>
-                  <input
-                    className="input"
-                    value={draft.description || ""}
-                    onChange={(e) => handleDraftChange(cat.id, "description", e.target.value)}
-                  />
-                </label>
-                <label className="field category-card__sort">
-                  <span>Сортировка</span>
-                  <input
-                    className="input"
-                    type="number"
-                    value={draft.sort_order}
-                    onChange={(e) => handleDraftChange(cat.id, "sort_order", Number(e.target.value))}
-                  />
-                </label>
-              </div>
-              <div className="category-card__side">
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={isActive}
-                    onChange={(e) => handleDraftChange(cat.id, "is_hidden", !e.target.checked)}
-                  />
-                  <span>Активен</span>
-                </label>
-                <div className="category-card__actions">
-                  <button
-                    className="btn btn--primary btn--sm"
-                    onClick={() => handleSave(cat.id)}
-                    disabled={savingId === cat.id}
-                  >
-                    {savingId === cat.id ? "Сохраняем..." : "Сохранить"}
-                  </button>
-                  <button
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => openDeleteModal(cat)}
-                  >
-                    Удалить
-                  </button>
-                </div>
-              </div>
+        <div className="category-list__header">
+          <div>
+            <h3>Порядок категорий</h3>
+            <p className="muted">Тяните за ручку слева. Ручная сортировка числами больше не нужна.</p>
+          </div>
+          {reordering ? <span className="profile-badge profile-badge--accent">Сохраняем порядок…</span> : null}
+        </div>
+
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={sortedCats.map((cat) => cat.id)} strategy={verticalListSortingStrategy}>
+            <div className="category-list">
+              {sortedCats.map((cat, index) => (
+                <SortableCategoryCard
+                  key={cat.id}
+                  category={cat}
+                  draft={drafts[cat.id] || cat}
+                  index={index}
+                  error={draftErrors[cat.id]}
+                  saving={savingId === cat.id}
+                  onDraftChange={handleDraftChange}
+                  onSave={handleSave}
+                  onDelete={openDeleteModal}
+                />
+              ))}
             </div>
-          );
-        })}
+          </SortableContext>
+        </DndContext>
       </div>
 
       {deleteState && (
         <div className="modal-backdrop" onClick={closeDeleteModal}>
           <div className="modal admin-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal__close" onClick={closeDeleteModal} disabled={deleting}>
-              X
+              ×
             </button>
             <div className="admin-modal__content">
               {deleteState.step === "choice" ? (
                 <>
                   <h3 className="admin-modal__title">
-                    Удалить категорию "{deleteState.category.name}"
+                    Удалить категорию "{deleteState.category.name}"?
                   </h3>
-                  <p className="admin-modal__text">Удалить все товары в этой категории?</p>
+                  <p className="admin-modal__text">Нужно ли удалить все товары внутри неё?</p>
                   <div className="admin-modal__actions">
                     <button
                       className="btn btn--primary"
@@ -247,7 +425,7 @@ const AdminCategoriesPage: React.FC<Props> = ({
                 </>
               ) : (
                 <>
-                  <h3 className="admin-modal__title">Точно удалить?</h3>
+                  <h3 className="admin-modal__title">Подтвердите удаление</h3>
                   <p className="admin-modal__text">
                     Категория будет удалена.{" "}
                     {deleteState.deleteProducts
@@ -256,11 +434,18 @@ const AdminCategoriesPage: React.FC<Props> = ({
                   </p>
                   <div className="admin-modal__actions">
                     <button
-                      className="btn btn--primary"
+                      className={"btn btn--primary" + (deleting ? " btn--loading" : "")}
                       onClick={confirmDelete}
                       disabled={deleting}
                     >
-                      Удалить
+                      {deleting ? (
+                        <>
+                          <span className="btn__spinner" />
+                          Удаляем
+                        </>
+                      ) : (
+                        "Удалить"
+                      )}
                     </button>
                     <button
                       className="btn btn--outline"

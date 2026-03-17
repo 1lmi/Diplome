@@ -5,6 +5,8 @@ import { useAuth } from "../../authContext";
 import { useCart } from "../../cartContext";
 import { saveOrderTracking } from "../../orderTracking";
 import type { CheckoutDraft, UserAddress } from "../../types";
+import { focusFirstInvalidField } from "../../utils/forms";
+import { useToast } from "../../ui/ToastProvider";
 import CheckoutAuthGate from "./CheckoutAuthGate";
 import OrderSummaryCard from "./OrderSummaryCard";
 
@@ -20,6 +22,7 @@ export const CheckoutPage: React.FC<Props> = ({
   addressesLoading,
 }) => {
   const { user } = useAuth();
+  const { pushToast } = useToast();
   const {
     items,
     totalPrice,
@@ -31,15 +34,14 @@ export const CheckoutPage: React.FC<Props> = ({
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const defaultAddress = addresses.find((item) => item.is_default) || null;
 
   useEffect(() => {
     if (!user) return;
 
     const patch: Partial<CheckoutDraft> = {};
-    if (checkoutDraft.guestMode) {
-      patch.guestMode = false;
-    }
+    if (checkoutDraft.guestMode) patch.guestMode = false;
     if (!checkoutDraft.customerName.trim() && user.full_name) {
       patch.customerName = user.full_name;
     }
@@ -87,13 +89,23 @@ export const CheckoutPage: React.FC<Props> = ({
   const trimmedName = checkoutDraft.customerName.trim();
   const trimmedPhone = checkoutDraft.customerPhone.trim();
   const trimmedAddress = checkoutDraft.address.trim();
-  const canSubmit =
-    !authGateLocked &&
-    items.length > 0 &&
-    !submitting &&
-    Boolean(trimmedName) &&
-    Boolean(trimmedPhone) &&
-    (!needsAddress || Boolean(trimmedAddress));
+
+  const clearFieldError = (key: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const validateCheckout = () => {
+    const nextErrors: Record<string, string> = {};
+    if (!trimmedName) nextErrors.customerName = "Укажите имя получателя.";
+    if (!trimmedPhone) nextErrors.customerPhone = "Укажите номер телефона.";
+    if (needsAddress && !trimmedAddress) nextErrors.address = "Укажите адрес доставки.";
+    return nextErrors;
+  };
 
   if (items.length === 0) {
     return (
@@ -116,7 +128,39 @@ export const CheckoutPage: React.FC<Props> = ({
   }
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (submitting) return;
+
+    if (authGateLocked) {
+      const message = "Выберите вход или продолжите как гость, чтобы оформить заказ.";
+      setError(message);
+      pushToast({
+        tone: "info",
+        title: "Требуется способ оформления",
+        description: message,
+      });
+      return;
+    }
+
+    const nextErrors = validateCheckout();
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      setError("Заполните обязательные поля перед оформлением заказа.");
+      pushToast({
+        tone: "error",
+        title: "Форма заполнена не полностью",
+        description: "Проверьте имя, телефон и адрес доставки.",
+      });
+      window.setTimeout(() => {
+        focusFirstInvalidField(
+          [
+            nextErrors.customerName ? "#checkout-customer-name" : "",
+            nextErrors.customerPhone ? "#checkout-customer-phone" : "",
+            nextErrors.address ? "#checkout-address" : "",
+          ].filter(Boolean)
+        );
+      }, 0);
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
@@ -125,9 +169,7 @@ export const CheckoutPage: React.FC<Props> = ({
     const deliveryTime = checkoutDraft.deliveryTime.trim();
     const changeValue = checkoutDraft.cashChangeFrom.trim();
     const cashChangeFrom =
-      checkoutDraft.paymentMethod === "cash" && changeValue
-        ? Number(changeValue)
-        : undefined;
+      checkoutDraft.paymentMethod === "cash" && changeValue ? Number(changeValue) : undefined;
 
     try {
       const order = await api.createOrder({
@@ -140,9 +182,7 @@ export const CheckoutPage: React.FC<Props> = ({
         delivery_time: deliveryTime || null,
         payment_method: checkoutDraft.paymentMethod,
         cash_change_from:
-          cashChangeFrom !== undefined && Number.isFinite(cashChangeFrom)
-            ? cashChangeFrom
-            : null,
+          cashChangeFrom !== undefined && Number.isFinite(cashChangeFrom) ? cashChangeFrom : null,
         do_not_call: checkoutDraft.doNotCall,
         comment: comment || null,
         items: items.map((item) => ({
@@ -159,7 +199,13 @@ export const CheckoutPage: React.FC<Props> = ({
       resetCheckoutDraft();
       navigate(`/checkout/success/${order.id}`);
     } catch (e: any) {
-      setError(e?.message || "Не удалось оформить заказ.");
+      const message = e?.message || "Не удалось оформить заказ.";
+      setError(message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось оформить заказ",
+        description: message,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -193,24 +239,36 @@ export const CheckoutPage: React.FC<Props> = ({
                 <label className="field">
                   <span>Имя</span>
                   <input
+                    id="checkout-customer-name"
                     className="input"
                     value={checkoutDraft.customerName}
-                    disabled={authGateLocked || submitting}
-                    onChange={(event) =>
-                      updateCheckoutDraft({ customerName: event.target.value })
-                    }
+                    aria-invalid={fieldErrors.customerName ? "true" : "false"}
+                    disabled={submitting}
+                    onChange={(event) => {
+                      clearFieldError("customerName");
+                      updateCheckoutDraft({ customerName: event.target.value });
+                    }}
                   />
+                  {fieldErrors.customerName ? (
+                    <p className="field-note field-note--error">{fieldErrors.customerName}</p>
+                  ) : null}
                 </label>
                 <label className="field">
                   <span>Телефон</span>
                   <input
+                    id="checkout-customer-phone"
                     className="input"
                     value={checkoutDraft.customerPhone}
-                    disabled={authGateLocked || submitting}
-                    onChange={(event) =>
-                      updateCheckoutDraft({ customerPhone: event.target.value })
-                    }
+                    aria-invalid={fieldErrors.customerPhone ? "true" : "false"}
+                    disabled={submitting}
+                    onChange={(event) => {
+                      clearFieldError("customerPhone");
+                      updateCheckoutDraft({ customerPhone: event.target.value });
+                    }}
                   />
+                  {fieldErrors.customerPhone ? (
+                    <p className="field-note field-note--error">{fieldErrors.customerPhone}</p>
+                  ) : null}
                 </label>
               </div>
             </section>
@@ -228,7 +286,7 @@ export const CheckoutPage: React.FC<Props> = ({
                       ? " checkout-toggle__btn--active"
                       : "")
                   }
-                  disabled={authGateLocked || submitting}
+                  disabled={submitting}
                   onClick={() => updateCheckoutDraft({ deliveryMethod: "delivery" })}
                 >
                   Доставка
@@ -241,8 +299,11 @@ export const CheckoutPage: React.FC<Props> = ({
                       ? " checkout-toggle__btn--active"
                       : "")
                   }
-                  disabled={authGateLocked || submitting}
-                  onClick={() => updateCheckoutDraft({ deliveryMethod: "pickup" })}
+                  disabled={submitting}
+                  onClick={() => {
+                    clearFieldError("address");
+                    updateCheckoutDraft({ deliveryMethod: "pickup" });
+                  }}
                 >
                   Самовывоз
                 </button>
@@ -269,10 +330,11 @@ export const CheckoutPage: React.FC<Props> = ({
                                     "checkout-address-chip" +
                                     (active ? " checkout-address-chip--active" : "")
                                   }
-                                  disabled={authGateLocked || submitting}
-                                  onClick={() =>
-                                    updateCheckoutDraft({ address: address.address })
-                                  }
+                                  disabled={submitting}
+                                  onClick={() => {
+                                    clearFieldError("address");
+                                    updateCheckoutDraft({ address: address.address });
+                                  }}
                                 >
                                   <strong>{address.label || "Адрес"}</strong>
                                   <span>{address.address}</span>
@@ -292,13 +354,19 @@ export const CheckoutPage: React.FC<Props> = ({
                     <label className="field">
                       <span>Адрес доставки</span>
                       <input
+                        id="checkout-address"
                         className="input"
                         value={checkoutDraft.address}
-                        disabled={authGateLocked || submitting}
-                        onChange={(event) =>
-                          updateCheckoutDraft({ address: event.target.value })
-                        }
+                        aria-invalid={fieldErrors.address ? "true" : "false"}
+                        disabled={submitting}
+                        onChange={(event) => {
+                          clearFieldError("address");
+                          updateCheckoutDraft({ address: event.target.value });
+                        }}
                       />
+                      {fieldErrors.address ? (
+                        <p className="field-note field-note--error">{fieldErrors.address}</p>
+                      ) : null}
                     </label>
                   </>
                 ) : (
@@ -317,7 +385,7 @@ export const CheckoutPage: React.FC<Props> = ({
                     className="input"
                     placeholder="Например, к 19:30"
                     value={checkoutDraft.deliveryTime}
-                    disabled={authGateLocked || submitting}
+                    disabled={submitting}
                     onChange={(event) =>
                       updateCheckoutDraft({ deliveryTime: event.target.value })
                     }
@@ -335,7 +403,7 @@ export const CheckoutPage: React.FC<Props> = ({
                 className="textarea"
                 value={checkoutDraft.comment}
                 maxLength={300}
-                disabled={authGateLocked || submitting}
+                disabled={submitting}
                 placeholder="Укажите важную информацию для кухни или курьера"
                 onChange={(event) =>
                   updateCheckoutDraft({ comment: event.target.value.slice(0, 300) })
@@ -356,7 +424,7 @@ export const CheckoutPage: React.FC<Props> = ({
                       ? " checkout-toggle__btn--active"
                       : "")
                   }
-                  disabled={authGateLocked || submitting}
+                  disabled={submitting}
                   onClick={() => updateCheckoutDraft({ paymentMethod: "cash" })}
                 >
                   Наличными
@@ -369,7 +437,7 @@ export const CheckoutPage: React.FC<Props> = ({
                       ? " checkout-toggle__btn--active"
                       : "")
                   }
-                  disabled={authGateLocked || submitting}
+                  disabled={submitting}
                   onClick={() =>
                     updateCheckoutDraft({
                       paymentMethod: "card",
@@ -388,7 +456,7 @@ export const CheckoutPage: React.FC<Props> = ({
                     className="input"
                     inputMode="numeric"
                     value={checkoutDraft.cashChangeFrom}
-                    disabled={authGateLocked || submitting}
+                    disabled={submitting}
                     onChange={(event) =>
                       updateCheckoutDraft({
                         cashChangeFrom: event.target.value.replace(/[^\d]/g, ""),
@@ -402,7 +470,7 @@ export const CheckoutPage: React.FC<Props> = ({
                 <input
                   type="checkbox"
                   checked={checkoutDraft.doNotCall}
-                  disabled={authGateLocked || submitting}
+                  disabled={submitting}
                   onChange={(event) =>
                     updateCheckoutDraft({ doNotCall: event.target.checked })
                   }
@@ -423,11 +491,18 @@ export const CheckoutPage: React.FC<Props> = ({
               {error ? <div className="alert alert--error">{error}</div> : null}
               <button
                 type="button"
-                className="btn btn--primary"
-                disabled={!canSubmit}
+                className={"btn btn--primary" + (submitting ? " btn--loading" : "")}
+                disabled={submitting}
                 onClick={handleSubmit}
               >
-                {submitting ? "Отправляем заказ..." : "Оформить заказ"}
+                {submitting ? (
+                  <>
+                    <span className="btn__spinner" />
+                    Отправляем заказ
+                  </>
+                ) : (
+                  "Оформить заказ"
+                )}
               </button>
             </div>
           </div>

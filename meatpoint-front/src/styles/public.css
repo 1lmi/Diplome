@@ -166,6 +166,10 @@
   filter: brightness(1.02);
 }
 
+.cart-button--pulse {
+  animation: cartPulse 720ms ease;
+}
+
 .cart-button__price,
 .cart-button__count {
   font-size: 13px;
@@ -177,6 +181,23 @@
   width: 1px;
   height: 18px;
   background: rgba(255, 255, 255, 0.4);
+}
+
+@keyframes cartPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 14px 24px rgba(230, 122, 46, 0.22);
+  }
+
+  28% {
+    transform: scale(1.03);
+    box-shadow: 0 18px 32px rgba(230, 122, 46, 0.3);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 14px 24px rgba(230, 122, 46, 0.22);
+  }
 }
 
 .header__categories {
@@ -457,6 +478,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.product-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(230, 122, 46, 0.22);
+  box-shadow: 0 18px 28px rgba(31, 26, 22, 0.1);
 }
 
 .product-card__image-wrap {
@@ -623,7 +654,14 @@
   transition:
     border-color var(--transition-fast),
     background-color var(--transition-fast),
-    color var(--transition-fast);
+    color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.size-tab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(230, 122, 46, 0.08);
 }
 
 .size-tab__label {
@@ -781,6 +819,15 @@
   font-weight: 800;
   cursor: pointer;
   color: var(--text-soft);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.auth-tab:hover {
+  transform: translateY(-1px);
 }
 
 .auth-tab--active {
@@ -1557,6 +1604,7 @@
   top: 14px;
   height: 2px;
   background: rgba(234, 223, 211, 0.98);
+  z-index: 0;
 }
 
 .order-progress__step::before {
@@ -1598,6 +1646,7 @@
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.82);
+  z-index: 2;
 }
 
 .order-progress__step--completed .order-progress__marker {
@@ -1622,6 +1671,8 @@
 }
 
 .order-progress__copy {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 4px;
   text-align: center;
@@ -2569,6 +2620,16 @@
   font-size: 14px;
   font-weight: 800;
   cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.checkout-toggle__btn:hover {
+  transform: translateY(-1px);
 }
 
 .checkout-toggle__btn--active {

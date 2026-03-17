@@ -88,6 +88,10 @@ a {
   transform: translateY(-1px);
 }
 
+.btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
 .btn--primary {
   background: linear-gradient(135deg, var(--accent), #f09344);
   color: #fff;
@@ -128,6 +132,56 @@ a {
   min-height: 40px;
   padding: 0 14px;
   font-size: 13px;
+}
+
+.btn--loading,
+.btn--success {
+  position: relative;
+}
+
+.btn--loading {
+  pointer-events: none;
+}
+
+.btn--success {
+  box-shadow: 0 12px 24px rgba(31, 157, 104, 0.18);
+}
+
+.btn__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+.form-feedback {
+  display: grid;
+  gap: 12px;
+}
+
+.form-feedback__summary {
+  border-radius: var(--radius-sm);
+}
+
+.field-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.field-note--error {
+  color: #b04631;
+}
+
+.input[aria-invalid="true"],
+.textarea[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: rgba(196, 80, 61, 0.46);
+  background: rgba(255, 245, 242, 0.92);
+  box-shadow: 0 0 0 4px rgba(196, 80, 61, 0.1);
 }
 
 .input,
@@ -479,6 +533,88 @@ select:focus {
   }
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toast-viewport {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+.toast {
+  position: relative;
+  padding: 14px 48px 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(234, 223, 211, 0.94);
+  background: rgba(255, 253, 249, 0.98);
+  box-shadow: var(--shadow-md);
+  animation: toastSlideIn 220ms ease both;
+}
+
+.toast--success {
+  border-color: rgba(31, 157, 104, 0.22);
+  background: linear-gradient(180deg, rgba(242, 255, 248, 0.98), rgba(255, 255, 255, 0.98));
+}
+
+.toast--error {
+  border-color: rgba(196, 80, 61, 0.26);
+  background: linear-gradient(180deg, rgba(255, 244, 241, 0.98), rgba(255, 255, 255, 0.98));
+}
+
+.toast--info {
+  border-color: rgba(230, 122, 46, 0.22);
+}
+
+.toast__title {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.toast__description {
+  margin-top: 4px;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.toast__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (max-width: 900px) {
   .modal__content {
     flex-direction: column;
@@ -487,5 +623,23 @@ select:focus {
 
   .modal__image-wrap {
     min-height: 260px;
+  }
+
+  .toast-viewport {
+    right: 12px;
+    left: 12px;
+    bottom: 12px;
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

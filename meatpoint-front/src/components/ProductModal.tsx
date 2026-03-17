@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { MenuItem, ProductDisplay } from "../types";
 import { useCart } from "../cartContext";
+import { useToast } from "../ui/ToastProvider";
 
 interface Props {
   product: ProductDisplay | null;
@@ -9,14 +10,16 @@ interface Props {
 
 export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
   const { addProduct } = useCart();
+  const { pushToast } = useToast();
   const [variantId, setVariantId] = useState<number | null>(null);
   const [closing, setClosing] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    if (product?.variants?.length) {
-      setVariantId(product.variants[0].id);
-      setClosing(false);
-    }
+    if (!product?.variants?.length) return;
+    setVariantId(product.variants[0].id);
+    setClosing(false);
+    setAdding(false);
   }, [product]);
 
   if (!product) return null;
@@ -34,20 +37,29 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
     variant?.size_label ||
     (product.variants.length > 1 ? "Выбранный размер" : "Подача");
 
-  const hasNutrition = !!variant &&
+  const hasNutrition =
+    !!variant &&
     [variant.calories, variant.carbs, variant.protein, variant.fat].some(
       (value) => value !== null && value !== undefined
     );
 
   const handleClose = () => {
     setClosing(true);
-    setTimeout(onClose, 180);
+    window.setTimeout(onClose, 180);
   };
 
   const handleAdd = () => {
-    if (!variant) return;
+    if (!variant || adding) return;
+    setAdding(true);
     addProduct(variant, 1);
-    handleClose();
+    pushToast({
+      tone: "success",
+      title: "Товар добавлен в корзину",
+      description: `${product.name}${currentVariantLabel ? ` · ${currentVariantLabel}` : ""}`,
+    });
+    window.setTimeout(() => {
+      handleClose();
+    }, 320);
   };
 
   return (
@@ -153,8 +165,13 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
                 <span className="product-modal__price-label">{currentVariantLabel}</span>
                 <span className="product-modal__price">{variant?.price || 0} руб.</span>
               </div>
-              <button className="btn btn--primary" type="button" onClick={handleAdd}>
-                Добавить в корзину
+              <button
+                className={"btn btn--primary" + (adding ? " btn--success" : "")}
+                type="button"
+                onClick={handleAdd}
+                disabled={adding}
+              >
+                {adding ? "Добавлено" : "Добавить в корзину"}
               </button>
             </div>
           </div>

@@ -16,6 +16,7 @@ import AdminMenuPage from "./admin/AdminMenuPage";
 import AdminOrdersPage from "./admin/AdminOrdersPage";
 import AdminProductModal from "./admin/AdminProductModal";
 import AdminStatisticsPage from "./admin/AdminStatisticsPage";
+import { useToast } from "../ui/ToastProvider";
 
 interface Props {
   statuses: StatusOption[];
@@ -47,12 +48,17 @@ interface ProductUpdateDraft {
     unit?: string | null;
     price: number;
     is_hidden?: boolean;
+    calories?: number | null;
+    protein?: number | null;
+    fat?: number | null;
+    carbs?: number | null;
   }[];
   remove_size_ids: number[];
   image_file?: File;
 }
 
 export const AdminPanel: React.FC<Props> = ({ statuses }) => {
+  const { pushToast } = useToast();
   const [menu, setMenu] = useState<AdminCategory[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [settings, setSettings] = useState<SettingsMap>({});
@@ -94,7 +100,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     setMenu((prev) =>
       prev.map((cat) =>
         cat.id === product.category_id
-          ? { ...cat, products: [product, ...cat.products] }
+          ? { ...cat, products: [...cat.products, product] }
           : cat
       )
     );
@@ -140,31 +146,60 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
   };
 
   const handleToggleProduct = async (product: AdminProduct) => {
-    const updated = await api.updateProduct(product.id, { is_hidden: !product.is_hidden });
-    patchProductInMenu(updated);
-  };
-
-  const handleSortChange = async (product: AdminProduct, sort: number) => {
-    const updated = await api.updateProduct(product.id, { sort_order: sort });
-    patchProductInMenu(updated);
+    try {
+      const updated = await api.updateProduct(product.id, { is_hidden: !product.is_hidden });
+      patchProductInMenu(updated);
+      pushToast({
+        tone: "success",
+        title: updated.is_hidden ? "Товар скрыт" : "Товар снова виден",
+        description: updated.name,
+      });
+    } catch (e: any) {
+      setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось изменить видимость товара",
+        description: e.message,
+      });
+      throw e;
+    }
   };
 
   const handleCreateCategory = async () => {
     if (!newCategory.name.trim()) return;
-    const created = await api.createCategory({
-      name: newCategory.name.trim(),
-      description: newCategory.description || undefined,
-    });
-    setNewCategory({ name: "", description: "" });
-    setMenu((prev) => [
-      ...prev,
-      {
-        ...created,
-        description: created.description ?? null,
-        is_hidden: created.is_hidden ?? false,
-        products: [],
-      } as AdminCategory,
-    ]);
+    setSaving(true);
+    try {
+      const created = await api.createCategory({
+        name: newCategory.name.trim(),
+        description: newCategory.description || undefined,
+        sort_order: menu.length,
+      });
+      setNewCategory({ name: "", description: "" });
+      setMenu((prev) => [
+        ...prev,
+        {
+          ...created,
+          description: created.description ?? null,
+          is_hidden: created.is_hidden ?? false,
+          products: [],
+        } as AdminCategory,
+      ]);
+      pushToast({
+        tone: "success",
+        title: "Категория добавлена",
+        description: created.name,
+      });
+    } catch (e: any) {
+      setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось добавить категорию",
+        description: e.message,
+      });
+      throw e;
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCreateProduct = async () => {
@@ -193,7 +228,8 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
         description: newProduct.description || undefined,
         image_path: imagePath,
         sizes: sizePayload,
-        sort_order: Number(newProduct.sortOrder) || 0,
+        sort_order:
+          menu.find((category) => category.id === Number(newProduct.categoryId))?.products.length || 0,
       });
       setNewProduct({
         categoryId: "",
@@ -208,8 +244,18 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
         sizes: [{ name: "", amount: "", unit: "", price: "" }],
       });
       addProductToMenu(created);
+      pushToast({
+        tone: "success",
+        title: "Товар добавлен",
+        description: created.name,
+      });
     } catch (e: any) {
       setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось добавить товар",
+        description: e.message,
+      });
     } finally {
       setSaving(false);
     }
@@ -219,8 +265,17 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     setSaving(true);
     try {
       await api.updateSettings(settings);
+      pushToast({
+        tone: "success",
+        title: "Настройки сохранены",
+      });
     } catch (e: any) {
       setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось сохранить настройки",
+        description: e.message,
+      });
     } finally {
       setSaving(false);
     }
@@ -239,17 +294,43 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
   };
 
   const handleUpdateCategory = async (id: number, payload: Partial<Category>) => {
-    const updated = await api.updateCategory(id, payload);
-    patchCategoryInMenu(updated);
+    try {
+      const updated = await api.updateCategory(id, payload);
+      patchCategoryInMenu(updated);
+      pushToast({
+        tone: "success",
+        title: "Категория обновлена",
+        description: updated.name,
+      });
+    } catch (e: any) {
+      setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось сохранить категорию",
+        description: e.message,
+      });
+      throw e;
+    }
   };
 
   const handleDeleteCategory = async (categoryId: number, deleteProducts: boolean) => {
     setSaving(true);
     try {
+      const deleted = menu.find((c) => c.id === categoryId);
       await api.deleteCategory(categoryId, deleteProducts);
       setMenu((prev) => prev.filter((c) => c.id !== categoryId));
+      pushToast({
+        tone: "success",
+        title: "Категория удалена",
+        description: deleted?.name,
+      });
     } catch (e: any) {
       setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось удалить категорию",
+        description: e.message,
+      });
     } finally {
       setSaving(false);
     }
@@ -257,8 +338,24 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
 
   const handleDeleteProduct = async (productId: number) => {
     const cat = menu.find((c) => c.products.some((p) => p.id === productId));
-    await api.deleteProduct(productId);
-    if (cat) removeProductFromMenu(productId, cat.id);
+    const product = cat?.products.find((p) => p.id === productId);
+    try {
+      await api.deleteProduct(productId);
+      if (cat) removeProductFromMenu(productId, cat.id);
+      pushToast({
+        tone: "success",
+        title: "Товар удален",
+        description: product?.name,
+      });
+    } catch (e: any) {
+      setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось удалить товар",
+        description: e.message,
+      });
+      throw e;
+    }
   };
 
   const handleSaveProduct = async (productId: number, payload: ProductUpdateDraft) => {
@@ -275,10 +372,96 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
       });
       patchProductInMenu(updated);
       setEditingProduct(null);
+      pushToast({
+        tone: "success",
+        title: "Изменения сохранены",
+        description: updated.name,
+      });
     } catch (e: any) {
       setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось сохранить товар",
+        description: e.message,
+      });
+      throw e;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReorderCategories = async (categoryIds: number[]) => {
+    const previous = menu;
+    const byId = new Map(previous.map((category) => [category.id, category]));
+    const reordered = categoryIds
+      .map((id, index) => {
+        const category = byId.get(id);
+        return category ? { ...category, sort_order: index } : null;
+      })
+      .filter(Boolean) as AdminCategory[];
+
+    setMenu(reordered);
+    try {
+      await Promise.all(
+        reordered.map((category, index) =>
+          api.updateCategory(category.id, { sort_order: index })
+        )
+      );
+      pushToast({
+        tone: "success",
+        title: "Порядок категорий обновлен",
+      });
+    } catch (e: any) {
+      setMenu(previous);
+      setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось сохранить порядок категорий",
+        description: e.message,
+      });
+      throw e;
+    }
+  };
+
+  const handleReorderProducts = async (categoryId: number, productIds: number[]) => {
+    const previous = menu;
+    const category = previous.find((item) => item.id === categoryId);
+    if (!category) return;
+
+    const byId = new Map(category.products.map((product) => [product.id, product]));
+    const reorderedProducts = productIds
+      .map((id, index) => {
+        const product = byId.get(id);
+        return product ? { ...product, sort_order: index } : null;
+      })
+      .filter(Boolean) as AdminProduct[];
+
+    setMenu((prev) =>
+      prev.map((item) =>
+        item.id === categoryId ? { ...item, products: reorderedProducts } : item
+      )
+    );
+
+    try {
+      await Promise.all(
+        reorderedProducts.map((product, index) =>
+          api.updateProduct(product.id, { sort_order: index })
+        )
+      );
+      pushToast({
+        tone: "success",
+        title: "Порядок товаров обновлен",
+        description: category.name,
+      });
+    } catch (e: any) {
+      setMenu(previous);
+      setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось сохранить порядок товаров",
+        description: e.message,
+      });
+      throw e;
     }
   };
 
@@ -386,6 +569,8 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 onCreateCategory={handleCreateCategory}
                 onUpdateCategory={handleUpdateCategory}
                 onDeleteCategory={handleDeleteCategory}
+                onReorderCategories={handleReorderCategories}
+                saving={saving}
                 onRefresh={refreshAll}
               />
             }
@@ -400,7 +585,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 onNewProductChange={(field, value) => setNewProduct((p) => ({ ...p, [field]: value }))}
                 onCreateProduct={handleCreateProduct}
                 onToggleProduct={handleToggleProduct}
-                onSortChange={handleSortChange}
+                onReorderProducts={handleReorderProducts}
                 onDelete={handleDeleteProduct}
                 onEdit={(product) => setEditingProduct(product)}
                 saving={saving}

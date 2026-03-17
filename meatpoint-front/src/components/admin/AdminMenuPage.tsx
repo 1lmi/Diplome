@@ -1,5 +1,21 @@
-﻿import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { AdminCategory, AdminProduct } from "../../types";
+import { focusFirstInvalidField } from "../../utils/forms";
 
 interface Props {
   categories: AdminCategory[];
@@ -19,12 +35,115 @@ interface Props {
   onNewProductChange: (field: string, value: any) => void;
   onCreateProduct: () => Promise<void>;
   onToggleProduct: (product: AdminProduct) => Promise<void>;
-  onSortChange: (product: AdminProduct, sort: number) => Promise<void>;
+  onReorderProducts: (categoryId: number, productIds: number[]) => Promise<void>;
   onDelete: (productId: number) => Promise<void>;
   onEdit: (product: AdminProduct) => void;
   saving: boolean;
   onRefresh: () => void;
 }
+
+interface SortableRowProps {
+  product: AdminProduct;
+  busy: boolean;
+  onToggle: (product: AdminProduct) => Promise<void>;
+  onDelete: (product: AdminProduct) => void;
+  onEdit: (product: AdminProduct) => void;
+}
+
+const SortableProductRow: React.FC<SortableRowProps> = ({
+  product,
+  busy,
+  onToggle,
+  onDelete,
+  onEdit,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: product.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={"menu-product-row" + (isDragging ? " menu-product-row--dragging" : "")}
+    >
+      <div className="menu-product-row__handle-col">
+        <button
+          type="button"
+          className="sortable-handle"
+          aria-label={`Переместить товар ${product.name}`}
+          {...attributes}
+          {...listeners}
+        >
+          ⋮⋮
+        </button>
+      </div>
+
+      <div className="menu-product-row__media">
+        <img src={product.image_url} alt={product.name} />
+      </div>
+
+      <div className="menu-product-row__main">
+        <div className="menu-product-row__top">
+          <div>
+            <div className="menu-product-row__title">{product.name}</div>
+            {product.description ? <div className="menu-product-row__desc">{product.description}</div> : null}
+          </div>
+          <div className="menu-product-row__badges">
+            {!product.is_active ? <span className="chip chip--ghost">Отключен</span> : null}
+            {product.is_hidden ? <span className="chip chip--ghost">Скрыт</span> : null}
+            <span className="profile-badge">#{product.sort_order + 1}</span>
+          </div>
+        </div>
+
+        <div className="menu-product-row__sizes">
+          {product.sizes.map((size) => {
+            const amountLabel =
+              size.amount !== null && size.amount !== undefined && size.amount !== 0
+                ? `${size.amount}${size.unit ? ` ${size.unit}` : ""}`
+                : "без объема";
+
+            return (
+              <span key={size.id} className="chip chip--ghost">
+                {(size.name || "Размер")} · {amountLabel} · {size.price} ₽
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="menu-product-row__actions">
+        <button
+          className={"btn btn--outline btn--sm" + (busy ? " btn--loading" : "")}
+          onClick={() => onToggle(product)}
+          disabled={busy}
+        >
+          {busy ? (
+            <>
+              <span className="btn__spinner" />
+              Сохраняем
+            </>
+          ) : product.is_hidden ? (
+            "Показать"
+          ) : (
+            "Скрыть"
+          )}
+        </button>
+        <button className="btn btn--ghost btn--sm" onClick={() => onDelete(product)} disabled={busy}>
+          Удалить
+        </button>
+        <button className="btn btn--primary btn--sm" onClick={() => onEdit(product)} disabled={busy}>
+          Редактировать
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const AdminMenuPage: React.FC<Props> = ({
   categories,
@@ -33,18 +152,103 @@ const AdminMenuPage: React.FC<Props> = ({
   onNewProductChange,
   onCreateProduct,
   onToggleProduct,
-  onSortChange,
+  onReorderProducts,
   onDelete,
   onEdit,
   saving,
   onRefresh,
 }) => {
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [deleteTarget, setDeleteTarget] = useState<AdminProduct | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [busyProductId, setBusyProductId] = useState<number | null>(null);
+  const [reorderingCategoryId, setReorderingCategoryId] = useState<number | null>(null);
 
-  const openDeleteModal = (product: AdminProduct) => {
-    setDeleteTarget(product);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
+
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => a.sort_order - b.sort_order),
+    [categories]
+  );
+
+  const clearFieldError = (key: string) => {
+    setFormErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
+
+  const updateSizeDraft = (
+    idx: number,
+    patch: Partial<{ name: string; amount: string; unit: string; price: string }>
+  ) => {
+    const next = [...newProduct.sizes];
+    next[idx] = { ...next[idx], ...patch };
+    onNewProductChange("sizes", next);
+  };
+
+  const validateCreateProduct = () => {
+    const errors: Record<string, string> = {};
+    if (!newProduct.categoryId) errors.categoryId = "Выберите категорию.";
+    if (!newProduct.name.trim()) errors.name = "Название товара обязательно.";
+
+    let validSizes = 0;
+    newProduct.sizes.forEach((size, idx) => {
+      const hasAnyValue = [size.name, size.amount, size.unit, size.price].some((value) => value.trim());
+      const hasName = size.name.trim().length > 0;
+      const hasPrice = size.price.trim().length > 0;
+
+      if (hasName && hasPrice) {
+        validSizes += 1;
+      }
+
+      if (hasAnyValue && !hasName) {
+        errors[`size-${idx}-name`] = "Укажите название размера.";
+      }
+      if (hasAnyValue && !hasPrice) {
+        errors[`size-${idx}-price`] = "Укажите цену.";
+      }
+    });
+
+    if (validSizes === 0) {
+      errors.sizes = "Добавьте хотя бы один вариант размера с названием и ценой.";
+    }
+
+    return errors;
+  };
+
+  const handleCreateClick = async () => {
+    const errors = validateCreateProduct();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      window.setTimeout(() => {
+        focusFirstInvalidField(
+          [
+            errors.categoryId ? "#new-product-category" : "",
+            errors.name ? "#new-product-name" : "",
+            errors["size-0-name"] || errors.sizes ? "#new-product-size-name-0" : "",
+            errors["size-0-price"] ? "#new-product-size-price-0" : "",
+          ].filter(Boolean)
+        );
+      }, 0);
+      return;
+    }
+
+    setFormErrors({});
+    try {
+      await onCreateProduct();
+    } catch {
+      // Parent handles error presentation.
+    }
+  };
+
+  const openDeleteModal = (product: AdminProduct) => setDeleteTarget(product);
 
   const closeDeleteModal = () => {
     if (deleting) return;
@@ -57,8 +261,42 @@ const AdminMenuPage: React.FC<Props> = ({
     try {
       await onDelete(deleteTarget.id);
       setDeleteTarget(null);
+    } catch {
+      // Parent handles error presentation.
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleToggle = async (product: AdminProduct) => {
+    setBusyProductId(product.id);
+    try {
+      await onToggleProduct(product);
+    } catch {
+      // Parent handles error presentation.
+    } finally {
+      setBusyProductId(null);
+    }
+  };
+
+  const handleDragEnd = async (categoryId: number, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const category = sortedCategories.find((item) => item.id === categoryId);
+    if (!category) return;
+    const ids = category.products.map((product) => product.id);
+    const oldIndex = ids.indexOf(Number(active.id));
+    const newIndex = ids.indexOf(Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    setReorderingCategoryId(categoryId);
+    try {
+      await onReorderProducts(categoryId, arrayMove(ids, oldIndex, newIndex));
+    } catch {
+      // Parent handles error presentation.
+    } finally {
+      setReorderingCategoryId(null);
     }
   };
 
@@ -67,9 +305,9 @@ const AdminMenuPage: React.FC<Props> = ({
       <div className="admin-page__header">
         <div>
           <p className="eyebrow">Меню</p>
-          <h2 className="admin-page__title">Товары, варианты и цены</h2>
+          <h2 className="admin-page__title">Товары, размеры и порядок показа</h2>
           <p className="muted">
-            Добавляйте варианты размеров; КБЖУ задаётся один раз на 100 г продукта и применяется ко всем размерам.
+            Товары сортируются перетаскиванием. Порядок больше не нужно задавать вручную числами.
           </p>
         </div>
         <button className="btn btn--outline" onClick={onRefresh}>
@@ -81,262 +319,281 @@ const AdminMenuPage: React.FC<Props> = ({
         <div className="panel__header">
           <div>
             <h3>Новый товар</h3>
-            <p className="muted">Заполните карточку и варианты размера</p>
+            <p className="muted">Заполните карточку, добавьте хотя бы один размер и сохраните.</p>
           </div>
-          <button className="btn btn--primary" onClick={onCreateProduct} disabled={saving}>
-            Добавить товар
+          <button
+            className={"btn btn--primary" + (saving ? " btn--loading" : "")}
+            onClick={handleCreateClick}
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <span className="btn__spinner" />
+                Добавляем
+              </>
+            ) : (
+              "Добавить товар"
+            )}
           </button>
         </div>
-        <div className="menu-form__grid">
-          <div className="menu-form__section">
-            <div className="menu-form__section-title">Основное</div>
-            <div className="menu-form__fields">
-              <select
-                className="input"
-                value={newProduct.categoryId}
-                onChange={(e) => onNewProductChange("categoryId", e.target.value)}
-              >
-                <option value="">Категория</option>
-                {categoriesOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                className="input"
-                placeholder="Название"
-                value={newProduct.name}
-                onChange={(e) => onNewProductChange("name", e.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="Описание"
-                value={newProduct.description}
-                onChange={(e) => onNewProductChange("description", e.target.value)}
-              />
-              <input
-                className="input"
-                type="number"
-                placeholder="Порядок"
-                value={newProduct.sortOrder}
-                onChange={(e) => onNewProductChange("sortOrder", e.target.value)}
-              />
-              <input
-                className="input input--file"
-                type="file"
-                accept="image/*"
-                onChange={(e) => onNewProductChange("file", e.target.files?.[0])}
-              />
+
+        <div className="form-feedback">
+          {Object.keys(formErrors).length > 0 ? (
+            <div className="alert alert--error form-feedback__summary">
+              Проверьте обязательные поля товара перед добавлением.
             </div>
-          </div>
-          <div className="menu-form__section">
-            <div className="menu-form__section-title">КБЖУ (на 100 г)</div>
-            <div className="menu-form__nutrition">
-              <input
-                className="input input--sm"
-                type="number"
-                placeholder="Ккал"
-                value={newProduct.calories}
-                onChange={(e) => onNewProductChange("calories", e.target.value)}
-              />
-              <input
-                className="input input--sm"
-                type="number"
-                placeholder="Белки"
-                value={newProduct.protein}
-                onChange={(e) => onNewProductChange("protein", e.target.value)}
-              />
-              <input
-                className="input input--sm"
-                type="number"
-                placeholder="Жиры"
-                value={newProduct.fat}
-                onChange={(e) => onNewProductChange("fat", e.target.value)}
-              />
-              <input
-                className="input input--sm"
-                type="number"
-                placeholder="Углеводы"
-                value={newProduct.carbs}
-                onChange={(e) => onNewProductChange("carbs", e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-        <div className="menu-form__sizes">
-          <div className="menu-form__section-title">Размеры и цены</div>
-          {newProduct.sizes.map((s, idx) => (
-            <div key={idx} className="menu-size-row">
-              <div className="menu-size-row__fields">
-                <input
-                  className="input"
-                  placeholder="Название (S, M, L)"
-                  value={s.name}
-                  onChange={(e) => {
-                    const next = [...newProduct.sizes];
-                    next[idx] = { ...s, name: e.target.value };
-                    onNewProductChange("sizes", next);
-                  }}
-                />
-                <input
-                  className="input"
-                  type="number"
-                  placeholder="Размер (200, 350, 500)"
-                  value={s.amount}
-                  onChange={(e) => {
-                    const next = [...newProduct.sizes];
-                    next[idx] = { ...s, amount: e.target.value };
-                    onNewProductChange("sizes", next);
-                  }}
-                />
-                <input
-                  className="input"
-                  placeholder="Ед. измерения (грамм, мл, шт.)"
-                  value={s.unit}
-                  onChange={(e) => {
-                    const next = [...newProduct.sizes];
-                    next[idx] = { ...s, unit: e.target.value };
-                    onNewProductChange("sizes", next);
-                  }}
-                />
-                <input
-                  className="input"
-                  type="number"
-                  placeholder="Цена"
-                  value={s.price}
-                  onChange={(e) => {
-                    const next = [...newProduct.sizes];
-                    next[idx] = { ...s, price: e.target.value };
-                    onNewProductChange("sizes", next);
-                  }}
-                />
-              </div>
-              <div className="menu-size-row__actions">
-                {newProduct.sizes.length > 1 && (
-                  <button
-                    className="btn btn--ghost btn--sm"
-                    onClick={() =>
-                      onNewProductChange(
-                        "sizes",
-                        newProduct.sizes.filter((_, i) => i !== idx)
-                      )
-                    }
+          ) : null}
+
+          <div className="menu-form__grid">
+            <div className="menu-form__section">
+              <div className="menu-form__section-title">Основное</div>
+              <div className="menu-form__fields">
+                <label className="field">
+                  <span>Категория</span>
+                  <select
+                    id="new-product-category"
+                    className="input"
+                    value={newProduct.categoryId}
+                    aria-invalid={formErrors.categoryId ? "true" : "false"}
+                    onChange={(e) => {
+                      clearFieldError("categoryId");
+                      onNewProductChange("categoryId", e.target.value);
+                    }}
                   >
-                    Удалить
-                  </button>
-                )}
-                {idx === newProduct.sizes.length - 1 && (
-                  <button
-                    className="btn btn--outline btn--sm"
-                    onClick={() =>
-                      onNewProductChange("sizes", [
-                        ...newProduct.sizes,
-                        { name: "", amount: "", unit: "", price: "" },
-                      ])
-                    }
-                  >
-                    + Размер
-                  </button>
-                )}
+                    <option value="">Выберите категорию</option>
+                    {categoriesOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {formErrors.categoryId ? (
+                    <p className="field-note field-note--error">{formErrors.categoryId}</p>
+                  ) : null}
+                </label>
+
+                <label className="field">
+                  <span>Название</span>
+                  <input
+                    id="new-product-name"
+                    className="input"
+                    placeholder="Например, Острая"
+                    value={newProduct.name}
+                    aria-invalid={formErrors.name ? "true" : "false"}
+                    onChange={(e) => {
+                      clearFieldError("name");
+                      onNewProductChange("name", e.target.value);
+                    }}
+                  />
+                  {formErrors.name ? <p className="field-note field-note--error">{formErrors.name}</p> : null}
+                </label>
+
+                <label className="field">
+                  <span>Описание</span>
+                  <input
+                    className="input"
+                    placeholder="Краткое описание"
+                    value={newProduct.description}
+                    onChange={(e) => onNewProductChange("description", e.target.value)}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Фото</span>
+                  <input
+                    className="input input--file"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => onNewProductChange("file", e.target.files?.[0])}
+                  />
+                </label>
               </div>
             </div>
-          ))}
+
+            <div className="menu-form__section">
+              <div className="menu-form__section-title">КБЖУ (на 100 г)</div>
+              <div className="menu-form__nutrition">
+                <input
+                  className="input input--sm"
+                  type="number"
+                  placeholder="Ккал"
+                  value={newProduct.calories}
+                  onChange={(e) => onNewProductChange("calories", e.target.value)}
+                />
+                <input
+                  className="input input--sm"
+                  type="number"
+                  placeholder="Белки"
+                  value={newProduct.protein}
+                  onChange={(e) => onNewProductChange("protein", e.target.value)}
+                />
+                <input
+                  className="input input--sm"
+                  type="number"
+                  placeholder="Жиры"
+                  value={newProduct.fat}
+                  onChange={(e) => onNewProductChange("fat", e.target.value)}
+                />
+                <input
+                  className="input input--sm"
+                  type="number"
+                  placeholder="Углеводы"
+                  value={newProduct.carbs}
+                  onChange={(e) => onNewProductChange("carbs", e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="menu-form__sizes">
+            <div className="menu-form__section-title">Размеры и цены</div>
+            {formErrors.sizes ? <div className="alert alert--error">{formErrors.sizes}</div> : null}
+
+            {newProduct.sizes.map((size, idx) => (
+              <div key={idx} className="menu-size-row">
+                <div className="menu-size-row__fields">
+                  <label className="field">
+                    <span>Название размера</span>
+                    <input
+                      id={`new-product-size-name-${idx}`}
+                      className="input"
+                      placeholder="S, M, L или Стандарт"
+                      value={size.name}
+                      aria-invalid={formErrors[`size-${idx}-name`] ? "true" : "false"}
+                      onChange={(e) => {
+                        clearFieldError(`size-${idx}-name`);
+                        clearFieldError("sizes");
+                        updateSizeDraft(idx, { name: e.target.value });
+                      }}
+                    />
+                    {formErrors[`size-${idx}-name`] ? (
+                      <p className="field-note field-note--error">{formErrors[`size-${idx}-name`]}</p>
+                    ) : null}
+                  </label>
+
+                  <label className="field">
+                    <span>Размер</span>
+                    <input
+                      className="input"
+                      type="number"
+                      placeholder="200"
+                      value={size.amount}
+                      onChange={(e) => updateSizeDraft(idx, { amount: e.target.value })}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>Единица</span>
+                    <input
+                      className="input"
+                      placeholder="г, мл, шт"
+                      value={size.unit}
+                      onChange={(e) => updateSizeDraft(idx, { unit: e.target.value })}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>Цена</span>
+                    <input
+                      id={`new-product-size-price-${idx}`}
+                      className="input"
+                      type="number"
+                      placeholder="250"
+                      value={size.price}
+                      aria-invalid={formErrors[`size-${idx}-price`] ? "true" : "false"}
+                      onChange={(e) => {
+                        clearFieldError(`size-${idx}-price`);
+                        clearFieldError("sizes");
+                        updateSizeDraft(idx, { price: e.target.value });
+                      }}
+                    />
+                    {formErrors[`size-${idx}-price`] ? (
+                      <p className="field-note field-note--error">{formErrors[`size-${idx}-price`]}</p>
+                    ) : null}
+                  </label>
+                </div>
+
+                <div className="menu-size-row__actions">
+                  {newProduct.sizes.length > 1 ? (
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      onClick={() =>
+                        onNewProductChange(
+                          "sizes",
+                          newProduct.sizes.filter((_, index) => index !== idx)
+                        )
+                      }
+                    >
+                      Удалить
+                    </button>
+                  ) : null}
+
+                  {idx === newProduct.sizes.length - 1 ? (
+                    <button
+                      className="btn btn--outline btn--sm"
+                      onClick={() =>
+                        onNewProductChange("sizes", [
+                          ...newProduct.sizes,
+                          { name: "", amount: "", unit: "", price: "" },
+                        ])
+                      }
+                    >
+                      + Размер
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="menu-categories">
-        {categories.map((cat) => (
-          <div key={cat.id} className="menu-category">
+        {sortedCategories.map((category) => (
+          <div key={category.id} className="menu-category">
             <div className="menu-category__header">
               <div>
-                <h3>{cat.name}</h3>
-                {cat.description && <p className="muted">{cat.description}</p>}
+                <h3>{category.name}</h3>
+                {category.description ? <p className="muted">{category.description}</p> : null}
               </div>
               <div className="menu-category__meta">
-                <span className="chip chip--soft">{cat.products.length} позиций</span>
+                <span className="chip chip--soft">{category.products.length} позиций</span>
+                {reorderingCategoryId === category.id ? (
+                  <span className="profile-badge profile-badge--accent">Сохраняем порядок…</span>
+                ) : null}
               </div>
             </div>
-            <div className="menu-product-grid">
-              {cat.products.map((product) => (
-                <div key={product.id} className="menu-product-card">
-                  <div className="menu-product-card__main" onClick={() => onEdit(product)}>
-                    <div className="menu-product-card__media">
-                      <img src={product.image_url} alt={product.name} />
-                    </div>
-                    <div className="menu-product-card__info">
-                      <div className="menu-product-card__title">
-                        <span>{product.name}</span>
-                        {product.is_hidden && <span className="chip chip--ghost">Скрыт</span>}
-                      </div>
-                      {product.description && (
-                        <div className="menu-product-card__desc">{product.description}</div>
-                      )}
-                      <div className="menu-product-card__sizes">
-                        {product.sizes.map((s) => {
-                          const amountLabel =
-                            s.amount !== null && s.amount !== undefined && s.amount !== 0
-                              ? `${s.amount}${s.unit ? ` ${s.unit}` : ""}`
-                              : "без объема";
-                          return (
-                            <span key={s.id} className="chip chip--ghost">
-                              {(s.name || "Размер")} · {amountLabel} · {s.price} ₽
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="menu-product-card__footer">
-                    <label
-                      className="field-inline menu-product-card__sort"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span>Порядок</span>
-                      <input
-                        className="input input--sm"
-                        type="number"
-                        value={product.sort_order}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => onSortChange(product, Number(e.target.value))}
+
+            {category.products.length > 0 ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event) => handleDragEnd(category.id, event)}
+              >
+                <SortableContext
+                  items={category.products.map((product) => product.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="menu-product-list">
+                    {category.products.map((product) => (
+                      <SortableProductRow
+                        key={product.id}
+                        product={product}
+                        busy={busyProductId === product.id}
+                        onToggle={handleToggle}
+                        onDelete={openDeleteModal}
+                        onEdit={onEdit}
                       />
-                    </label>
-                    <div className="menu-product-card__actions">
-                      <button
-                        className="btn btn--outline btn--sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleProduct(product);
-                        }}
-                      >
-                        {product.is_hidden ? "Показать" : "Скрыть"}
-                      </button>
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDeleteModal(product);
-                        }}
-                      >
-                        Удалить
-                      </button>
-                      <button
-                        className="btn btn--primary btn--sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEdit(product);
-                        }}
-                      >
-                        Редактировать
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                </div>
-              ))}
-              {cat.products.length === 0 && (
-                <div className="muted">Товары пока не добавлены.</div>
-              )}
-            </div>
+                </SortableContext>
+              </DndContext>
+            ) : (
+              <div className="profile-empty-state">
+                <strong>Товаров пока нет</strong>
+                <p>Добавьте первую позицию в эту категорию через форму выше.</p>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -345,16 +602,27 @@ const AdminMenuPage: React.FC<Props> = ({
         <div className="modal-backdrop" onClick={closeDeleteModal}>
           <div className="modal admin-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal__close" onClick={closeDeleteModal} disabled={deleting}>
-              X
+              ×
             </button>
             <div className="admin-modal__content">
-              <h3 className="admin-modal__title">Точно удалить товар?</h3>
+              <h3 className="admin-modal__title">Удалить товар?</h3>
               <p className="admin-modal__text">
-                Товар "{deleteTarget.name}" будет скрыт из меню и удалён из списка.
+                Товар "{deleteTarget.name}" будет удалён из списка и скроется из меню.
               </p>
               <div className="admin-modal__actions">
-                <button className="btn btn--primary" onClick={confirmDelete} disabled={deleting}>
-                  Удалить
+                <button
+                  className={"btn btn--primary" + (deleting ? " btn--loading" : "")}
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <>
+                      <span className="btn__spinner" />
+                      Удаляем
+                    </>
+                  ) : (
+                    "Удалить"
+                  )}
                 </button>
                 <button className="btn btn--outline" onClick={closeDeleteModal} disabled={deleting}>
                   Отмена

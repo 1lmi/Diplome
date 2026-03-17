@@ -27,6 +27,8 @@ interface CartContextValue {
   totalCount: number;
   lineCount: number;
   checkoutDraft: CheckoutDraft;
+  lastAddedAt: number | null;
+  lastAddedName: string | null;
   addProduct(item: MenuItem, quantity?: number): void;
   changeQuantity(productSizeId: number, quantity: number): void;
   removeItem(productSizeId: number): void;
@@ -137,6 +139,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const persisted = useMemo(readPersistedState, []);
   const [items, setItems] = useState<CartItem[]>(persisted.items);
   const [checkoutDraft, setCheckoutDraft] = useState<CheckoutDraft>(persisted.checkoutDraft);
+  const [lastAddedAt, setLastAddedAt] = useState<number | null>(null);
+  const [lastAddedName, setLastAddedName] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -145,6 +149,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [items, checkoutDraft]);
 
   const addProduct = (product: MenuItem, quantity: number = 1) => {
+    setLastAddedAt(Date.now());
+    setLastAddedName(product.product_name || product.name);
     setItems((prev) => {
       const existing = prev.find((item) => item.productSizeId === product.id);
       if (existing) {
@@ -200,6 +206,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     totalCount,
     lineCount,
     checkoutDraft,
+    lastAddedAt,
+    lastAddedName,
     addProduct,
     changeQuantity,
     removeItem,

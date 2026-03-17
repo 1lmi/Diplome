@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useCart } from "../cartContext";
 import { CategoryTabs } from "./CategoryTabs";
 import type { Category, User } from "../types";
@@ -30,8 +30,16 @@ export const Header: React.FC<Props> = ({
   onCategoryChange,
   compact,
 }) => {
-  const { lineCount, totalPrice } = useCart();
+  const { lineCount, totalPrice, lastAddedAt } = useCart();
   const showCategories = activeView === "menu" && categories.length > 0;
+  const [cartPulse, setCartPulse] = useState(false);
+
+  useEffect(() => {
+    if (!lastAddedAt) return;
+    setCartPulse(true);
+    const timeoutId = window.setTimeout(() => setCartPulse(false), 720);
+    return () => window.clearTimeout(timeoutId);
+  }, [lastAddedAt]);
 
   return (
     <header className={"header" + (compact ? " header--compact" : "")}>
@@ -80,7 +88,13 @@ export const Header: React.FC<Props> = ({
               )}
             </div>
 
-            <button type="button" className="cart-button cart-button--compact" onClick={onCartClick}>
+            <button
+              type="button"
+              className={
+                "cart-button cart-button--compact" + (cartPulse ? " cart-button--pulse" : "")
+              }
+              onClick={onCartClick}
+            >
               <span className="cart-button__label">Корзина</span>
               <span className="cart-button__meta">
                 {lineCount > 0 ? formatPrice(totalPrice) : "Пока пусто"}

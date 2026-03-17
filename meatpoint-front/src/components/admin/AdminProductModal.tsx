@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { AdminProduct } from "../../types";
+import { focusFirstInvalidField } from "../../utils/forms";
 
 interface SizeDraft {
   id?: number;
@@ -43,16 +44,15 @@ interface Props {
 type EditorTab = "main" | "nutrition" | "sizes";
 
 const EDITOR_SECTIONS: { id: EditorTab; label: string; subtitle: string }[] = [
-  { id: "main", label: "Основные", subtitle: "Основные настройки" },
-  { id: "nutrition", label: "КБЖУ товара", subtitle: "Пищевая ценность на 100 г" },
-  { id: "sizes", label: "Цены и варианты", subtitle: "Размеры, стоимость и видимость" },
+  { id: "main", label: "Основное", subtitle: "Название, описание, фото и статус товара" },
+  { id: "nutrition", label: "КБЖУ", subtitle: "Пищевая ценность применяется ко всем размерам" },
+  { id: "sizes", label: "Размеры", subtitle: "Цены, размеры и видимость каждого варианта" },
 ];
 
 const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }) => {
   const [activeTab, setActiveTab] = useState<EditorTab>("main");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [sortOrder, setSortOrder] = useState("0");
   const [isHidden, setIsHidden] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [sizes, setSizes] = useState<SizeDraft[]>([]);
@@ -63,22 +63,23 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
   const [protein, setProtein] = useState("");
   const [fat, setFat] = useState("");
   const [carbs, setCarbs] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!product) return;
     setName(product.name);
     setDescription(product.description || "");
-    setSortOrder(String(product.sort_order ?? 0));
     setIsHidden(!!product.is_hidden);
     setIsActive(!!product.is_active);
     setSizes(
-      product.sizes.map((s) => ({
-        id: s.id,
-        name: s.name || "",
-        amount: s.amount !== null && s.amount !== undefined ? String(s.amount) : "",
-        unit: s.unit || "",
-        price: String(s.price),
-        is_hidden: s.is_hidden,
+      product.sizes.map((size) => ({
+        id: size.id,
+        name: size.name || "",
+        amount: size.amount !== null && size.amount !== undefined ? String(size.amount) : "",
+        unit: size.unit || "",
+        price: String(size.price),
+        is_hidden: size.is_hidden,
       }))
     );
     const base = product.sizes[0];
@@ -90,6 +91,8 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
     setFile(undefined);
     setClosing(false);
     setActiveTab("main");
+    setFormError(null);
+    setFieldErrors({});
   }, [product]);
 
   const imagePreview = useMemo(() => {
@@ -108,8 +111,9 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
   if (!product) return null;
 
   const handleClose = () => {
+    if (saving) return;
     setClosing(true);
-    setTimeout(onClose, 180);
+    window.setTimeout(onClose, 180);
   };
 
   const handleRemoveSize = (idx: number) => {
@@ -117,39 +121,107 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
     if (draft?.id) {
       setRemoveSizeIds((prev) => [...prev, draft.id!]);
     }
-    setSizes((prev) => prev.filter((_, i) => i !== idx));
+    setSizes((prev) => prev.filter((_, index) => index !== idx));
   };
 
   const updateSize = (idx: number, patch: Partial<SizeDraft>) => {
-    setSizes((prev) => prev.map((size, i) => (i === idx ? { ...size, ...patch } : size)));
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[`size-${idx}-name`];
+      delete next[`size-${idx}-price`];
+      delete next.sizes;
+      return next;
+    });
+    setSizes((prev) => prev.map((size, index) => (index === idx ? { ...size, ...patch } : size)));
+  };
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+
+    if (!name.trim()) {
+      errors.name = "Название товара обязательно.";
+    }
+
+    let validSizes = 0;
+    sizes.forEach((size, idx) => {
+      const hasAnyValue = [size.name, size.amount, size.unit, size.price].some((value) => value.trim());
+      const hasName = size.name.trim().length > 0;
+      const hasPrice = size.price.trim().length > 0;
+
+      if (hasName && hasPrice) {
+        validSizes += 1;
+      }
+
+      if (hasAnyValue && !hasName) {
+        errors[`size-${idx}-name`] = "Укажите название варианта.";
+      }
+
+      if (hasAnyValue && !hasPrice) {
+        errors[`size-${idx}-price`] = "Укажите цену.";
+      }
+    });
+
+    if (validSizes === 0) {
+      errors.sizes = "Добавьте хотя бы один размер с названием и ценой.";
+    }
+
+    return errors;
   };
 
   const handleSave = async () => {
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setFormError("Проверьте поля товара перед сохранением.");
+      if (errors.name) {
+        setActiveTab("main");
+      } else {
+        setActiveTab("sizes");
+      }
+      window.setTimeout(() => {
+        focusFirstInvalidField(
+          [
+            errors.name ? "#admin-product-name" : "",
+            errors["size-0-name"] || errors.sizes ? "#admin-size-name-0" : "",
+            errors["size-0-price"] ? "#admin-size-price-0" : "",
+          ].filter(Boolean)
+        );
+      }, 0);
+      return;
+    }
+
+    setFormError(null);
+    setFieldErrors({});
+
     const preparedSizes = sizes
-      .filter((s) => s.name.trim() && s.price.trim())
-      .map((s) => ({
-        id: s.id,
-        size_name: s.name.trim(),
-        amount: s.amount ? Number(s.amount) : null,
-        unit: s.unit.trim() || null,
-        price: Number(s.price),
-        is_hidden: !!s.is_hidden,
+      .filter((size) => size.name.trim() && size.price.trim())
+      .map((size) => ({
+        id: size.id,
+        size_name: size.name.trim(),
+        amount: size.amount ? Number(size.amount) : null,
+        unit: size.unit.trim() || null,
+        price: Number(size.price),
+        is_hidden: !!size.is_hidden,
         calories: calories ? Number(calories) : null,
         protein: protein ? Number(protein) : null,
         fat: fat ? Number(fat) : null,
         carbs: carbs ? Number(carbs) : null,
       }));
 
-    await onSave(product.id, {
-      name: name.trim() || product.name,
-      description: description.trim() ? description.trim() : null,
-      sort_order: Number(sortOrder) || 0,
-      is_hidden: isHidden,
-      is_active: isActive,
-      sizes: preparedSizes,
-      remove_size_ids: removeSizeIds,
-      image_file: file,
-    });
+    try {
+      await onSave(product.id, {
+        name: name.trim(),
+        description: description.trim() ? description.trim() : null,
+        sort_order: product.sort_order,
+        is_hidden: isHidden,
+        is_active: isActive,
+        sizes: preparedSizes,
+        remove_size_ids: removeSizeIds,
+        image_file: file,
+      });
+    } catch {
+      // Parent handles error presentation.
+    }
   };
 
   const activeSection =
@@ -164,9 +236,9 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
       <div
         className="modal modal--wide admin-edit-modal-shell"
         data-leave={closing ? "true" : undefined}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
-        <button className="modal__close" onClick={handleClose}>
+        <button className="modal__close" onClick={handleClose} disabled={saving}>
           ×
         </button>
         <div className="modal__content admin-edit-modal">
@@ -176,16 +248,17 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                 {imagePreview ? (
                   <img className="admin-edit-modal__image" src={imagePreview} alt={product.name} />
                 ) : (
-                  <div className="admin-edit-modal__image-placeholder">Фото не загружено</div>
+                  <div className="admin-edit-modal__image-placeholder">Фото пока не загружено</div>
                 )}
               </div>
+
               <label className="admin-edit-modal__photo-button">
-                Изменить фото
+                Обновить фото
                 <input
                   className="admin-edit-modal__file-input"
                   type="file"
                   accept="image/*"
-                  onChange={(e) => setFile(e.target.files?.[0] || undefined)}
+                  onChange={(event) => setFile(event.target.files?.[0] || undefined)}
                 />
               </label>
             </div>
@@ -213,16 +286,30 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
             </div>
 
             <div className="admin-edit-modal__body">
-              {activeTab === "main" && (
+              {formError ? <div className="alert alert--error">{formError}</div> : null}
+
+              {activeTab === "main" ? (
                 <div className="admin-edit-modal__section stack gap-12">
                   <label className="admin-edit-modal__field">
                     <span className="admin-edit-modal__label">Название позиции</span>
                     <input
+                      id="admin-product-name"
                       className="input admin-edit-modal__input"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      aria-invalid={fieldErrors.name ? "true" : "false"}
+                      onChange={(event) => {
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.name;
+                          return next;
+                        });
+                        setName(event.target.value);
+                      }}
                       placeholder="Введите название товара"
                     />
+                    {fieldErrors.name ? (
+                      <p className="field-note field-note--error">{fieldErrors.name}</p>
+                    ) : null}
                   </label>
 
                   <label className="admin-edit-modal__field">
@@ -230,19 +317,8 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                     <textarea
                       className="input admin-edit-modal__input admin-edit-modal__textarea"
                       value={description}
-                      onChange={(e) => setDescription(e.target.value)}
+                      onChange={(event) => setDescription(event.target.value)}
                       placeholder="Кратко опишите товар"
-                    />
-                  </label>
-
-                  <label className="admin-edit-modal__field">
-                    <span className="admin-edit-modal__label">Порядок</span>
-                    <input
-                      className="input admin-edit-modal__input"
-                      value={sortOrder}
-                      onChange={(e) => setSortOrder(e.target.value)}
-                      type="number"
-                      placeholder="0"
                     />
                   </label>
 
@@ -253,7 +329,7 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                         <input
                           type="checkbox"
                           checked={!isActive}
-                          onChange={(e) => setIsActive(!e.target.checked)}
+                          onChange={(event) => setIsActive(!event.target.checked)}
                         />
                         <span>Отключить товар</span>
                       </label>
@@ -261,19 +337,19 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                         <input
                           type="checkbox"
                           checked={isHidden}
-                          onChange={(e) => setIsHidden(e.target.checked)}
+                          onChange={(event) => setIsHidden(event.target.checked)}
                         />
                         <span>Скрыть из меню</span>
                       </label>
                     </div>
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {activeTab === "nutrition" && (
+              {activeTab === "nutrition" ? (
                 <div className="admin-edit-modal__section stack gap-12">
                   <p className="admin-edit-modal__section-note">
-                    Значения применяются ко всем вариантам этого товара.
+                    Эти значения используются для всех размеров данного товара.
                   </p>
                   <div className="admin-edit-modal__nutrition-grid">
                     <label className="admin-edit-modal__field">
@@ -283,7 +359,7 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                         type="number"
                         placeholder="0"
                         value={calories}
-                        onChange={(e) => setCalories(e.target.value)}
+                        onChange={(event) => setCalories(event.target.value)}
                       />
                     </label>
                     <label className="admin-edit-modal__field">
@@ -293,7 +369,7 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                         type="number"
                         placeholder="0"
                         value={protein}
-                        onChange={(e) => setProtein(e.target.value)}
+                        onChange={(event) => setProtein(event.target.value)}
                       />
                     </label>
                     <label className="admin-edit-modal__field">
@@ -303,7 +379,7 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                         type="number"
                         placeholder="0"
                         value={fat}
-                        onChange={(e) => setFat(e.target.value)}
+                        onChange={(event) => setFat(event.target.value)}
                       />
                     </label>
                     <label className="admin-edit-modal__field">
@@ -313,66 +389,82 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                         type="number"
                         placeholder="0"
                         value={carbs}
-                        onChange={(e) => setCarbs(e.target.value)}
+                        onChange={(event) => setCarbs(event.target.value)}
                       />
                     </label>
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {activeTab === "sizes" && (
+              {activeTab === "sizes" ? (
                 <div className="admin-edit-modal__section stack gap-12">
                   <p className="admin-edit-modal__section-note">
-                    Здесь настраиваются размеры, цена и видимость каждого варианта.
+                    Минимум один размер должен иметь название и цену. Порядок товара задаётся вне
+                    модалки перетаскиванием.
                   </p>
 
-                  <div className="admin-edit-modal__sizes-list">
-                    {sizes.length === 0 && (
-                      <div className="admin-edit-modal__empty">
-                        Добавьте первый вариант, чтобы товар можно было заказать.
-                      </div>
-                    )}
+                  {fieldErrors.sizes ? <div className="alert alert--error">{fieldErrors.sizes}</div> : null}
 
-                    {sizes.map((s, idx) => (
-                      <div key={s.id || idx} className="admin-size-row admin-edit-modal__size-card">
+                  <div className="admin-edit-modal__sizes-list">
+                    {sizes.length === 0 ? (
+                      <div className="admin-edit-modal__empty">
+                        Добавьте первый размер, чтобы товар можно было заказать.
+                      </div>
+                    ) : null}
+
+                    {sizes.map((size, idx) => (
+                      <div key={size.id || idx} className="admin-size-row admin-edit-modal__size-card">
                         <div className="admin-edit-modal__size-grid">
                           <label className="admin-edit-modal__field">
                             <span className="admin-edit-modal__label">Название</span>
                             <input
+                              id={`admin-size-name-${idx}`}
                               className="input admin-edit-modal__input"
                               placeholder="Например, Стандарт"
-                              value={s.name}
-                              onChange={(e) => updateSize(idx, { name: e.target.value })}
+                              value={size.name}
+                              aria-invalid={fieldErrors[`size-${idx}-name`] ? "true" : "false"}
+                              onChange={(event) => updateSize(idx, { name: event.target.value })}
                             />
+                            {fieldErrors[`size-${idx}-name`] ? (
+                              <p className="field-note field-note--error">{fieldErrors[`size-${idx}-name`]}</p>
+                            ) : null}
                           </label>
+
                           <label className="admin-edit-modal__field">
                             <span className="admin-edit-modal__label">Размер</span>
                             <input
                               className="input admin-edit-modal__input"
                               type="number"
                               placeholder="0"
-                              value={s.amount}
-                              onChange={(e) => updateSize(idx, { amount: e.target.value })}
+                              value={size.amount}
+                              onChange={(event) => updateSize(idx, { amount: event.target.value })}
                             />
                           </label>
+
                           <label className="admin-edit-modal__field">
                             <span className="admin-edit-modal__label">Единица</span>
                             <input
                               className="input admin-edit-modal__input"
                               placeholder="г, мл, шт"
-                              value={s.unit}
-                              onChange={(e) => updateSize(idx, { unit: e.target.value })}
+                              value={size.unit}
+                              onChange={(event) => updateSize(idx, { unit: event.target.value })}
                             />
                           </label>
+
                           <label className="admin-edit-modal__field">
                             <span className="admin-edit-modal__label">Цена</span>
                             <input
+                              id={`admin-size-price-${idx}`}
                               className="input admin-edit-modal__input"
                               type="number"
                               placeholder="0"
-                              value={s.price}
-                              onChange={(e) => updateSize(idx, { price: e.target.value })}
+                              value={size.price}
+                              aria-invalid={fieldErrors[`size-${idx}-price`] ? "true" : "false"}
+                              onChange={(event) => updateSize(idx, { price: event.target.value })}
                             />
+                            {fieldErrors[`size-${idx}-price`] ? (
+                              <p className="field-note field-note--error">{fieldErrors[`size-${idx}-price`]}</p>
+                            ) : null}
                           </label>
                         </div>
 
@@ -380,8 +472,8 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                           <label className="checkbox admin-edit-modal__toggle admin-edit-modal__toggle--inline">
                             <input
                               type="checkbox"
-                              checked={!!s.is_hidden}
-                              onChange={(e) => updateSize(idx, { is_hidden: e.target.checked })}
+                              checked={!!size.is_hidden}
+                              onChange={(event) => updateSize(idx, { is_hidden: event.target.checked })}
                             />
                             <span>Скрыт в меню</span>
                           </label>
@@ -407,20 +499,27 @@ const AdminProductModal: React.FC<Props> = ({ product, onClose, onSave, saving }
                     + Добавить размер
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
 
             <div className="panel__actions admin-edit-modal__actions">
-              <button type="button" className="btn btn--ghost" onClick={handleClose}>
+              <button type="button" className="btn btn--ghost" onClick={handleClose} disabled={saving}>
                 Закрыть
               </button>
               <button
                 type="button"
-                className="btn btn--primary"
+                className={"btn btn--primary" + (saving ? " btn--loading" : "")}
                 onClick={handleSave}
                 disabled={saving}
               >
-                Сохранить изменения
+                {saving ? (
+                  <>
+                    <span className="btn__spinner" />
+                    Сохраняем
+                  </>
+                ) : (
+                  "Сохранить изменения"
+                )}
               </button>
             </div>
           </div>

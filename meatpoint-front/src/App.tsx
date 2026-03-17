@@ -215,7 +215,7 @@ const AppContent: React.FC = () => {
   }, [location.pathname, navigate, user, loading]);
 
   const productsByCategory = useMemo(() => {
-    const grouped: Record<string, ProductDisplay> = {};
+    const grouped = new Map<string, ProductDisplay>();
 
     for (const item of menu) {
       const baseName =
@@ -223,8 +223,8 @@ const AppContent: React.FC = () => {
         item.name.replace(/\s*\([^)]*\)\s*$/, "");
       const key = `${item.category_id}|${baseName}`;
 
-      if (!grouped[key]) {
-        grouped[key] = {
+      if (!grouped.has(key)) {
+        grouped.set(key, {
           key,
           category_id: item.category_id,
           name: baseName,
@@ -232,25 +232,22 @@ const AppContent: React.FC = () => {
           image_url: item.image_url,
           variants: [],
           minPrice: item.price,
-        };
+        });
       }
 
-      grouped[key].variants.push(item);
-      grouped[key].minPrice = Math.min(grouped[key].minPrice, item.price);
+      const entry = grouped.get(key)!;
+      entry.variants.push(item);
+      entry.minPrice = Math.min(entry.minPrice, item.price);
     }
 
     const byCategory: Record<number, ProductDisplay[]> = {};
-    Object.values(grouped).forEach((product) => {
+    grouped.forEach((product) => {
       product.variants.sort((a, b) => a.price - b.price);
       if (!byCategory[product.category_id]) {
         byCategory[product.category_id] = [];
       }
       byCategory[product.category_id].push(product);
     });
-
-    Object.values(byCategory).forEach((list) =>
-      list.sort((a, b) => a.name.localeCompare(b.name, "ru"))
-    );
 
     return byCategory;
   }, [menu]);

@@ -6,13 +6,16 @@ import "./styles/base.css";
 import "./styles/public.css";
 import { CartProvider } from "./cartContext";
 import { AuthProvider } from "./authContext";
+import { ToastProvider } from "./ui/ToastProvider";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <AuthProvider>
-      <CartProvider>
-        <App />
-      </CartProvider>
+      <ToastProvider>
+        <CartProvider>
+          <App />
+        </CartProvider>
+      </ToastProvider>
     </AuthProvider>
   </React.StrictMode>
 );
