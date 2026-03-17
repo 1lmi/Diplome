@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   BrowserRouter,
-  Link,
   Navigate,
   Route,
   Routes,
@@ -13,6 +12,7 @@ import { useAuth } from "./authContext";
 import { AdminPanel } from "./components/AdminPanel";
 import { Header } from "./components/Header";
 import OrderDetailsPage from "./components/OrderDetailsPage";
+import ProfilePage from "./components/ProfilePage";
 import { ProductCard } from "./components/ProductCard";
 import { ProductModal } from "./components/ProductModal";
 import CartPage from "./components/cart/CartPage";
@@ -26,19 +26,10 @@ import type {
   ProductDisplay,
   SettingsMap,
   StatusOption,
+  UserAddress,
 } from "./types";
 
 type View = "menu" | "profile" | "admin" | "checkout";
-
-const formatPrice = (value: number) => `${value.toLocaleString("ru-RU")} ₽`;
-
-const formatDateTime = (value: string) =>
-  new Date(value).toLocaleString("ru-RU", {
-    day: "numeric",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 const AppContent: React.FC = () => {
   const [compactHeader, setCompactHeader] = useState(false);
@@ -54,6 +45,8 @@ const AppContent: React.FC = () => {
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [myAddresses, setMyAddresses] = useState<UserAddress[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authForm, setAuthForm] = useState({
     mode: "login" as "login" | "register",
@@ -61,15 +54,6 @@ const AppContent: React.FC = () => {
     login: "",
     password: "",
   });
-  const [profileForm, setProfileForm] = useState({
-    firstName: "",
-    lastName: "",
-    birthDate: "",
-    gender: "",
-  });
-  const [profileStatus, setProfileStatus] = useState<string | null>(null);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [profileSaving, setProfileSaving] = useState(false);
 
   const passwordStrong = useMemo(
     () => /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(authForm.password),
@@ -116,6 +100,30 @@ const AppContent: React.FC = () => {
     };
   }, [location.pathname]);
 
+  const refreshMyOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const orders = await api.getMyOrders();
+      setMyOrders(orders);
+    } catch {
+      setMyOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const refreshMyAddresses = async () => {
+    setAddressesLoading(true);
+    try {
+      const addresses = await api.getMyAddresses();
+      setMyAddresses(addresses);
+    } catch {
+      setMyAddresses([]);
+    } finally {
+      setAddressesLoading(false);
+    }
+  };
+
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => undefined);
     api.getStatuses().then(setStatuses).catch(() => undefined);
@@ -138,25 +146,11 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!user) {
       setMyOrders([]);
+      setMyAddresses([]);
       return;
     }
 
-    setOrdersLoading(true);
-    api
-      .getMyOrders()
-      .then(setMyOrders)
-      .catch(() => setMyOrders([]))
-      .finally(() => setOrdersLoading(false));
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    setProfileForm({
-      firstName: user.first_name || "",
-      lastName: user.last_name || "",
-      birthDate: user.birth_date || "",
-      gender: user.gender || "",
-    });
+    void Promise.all([refreshMyOrders(), refreshMyAddresses()]);
   }, [user]);
 
   useEffect(() => {
@@ -345,197 +339,6 @@ const AppContent: React.FC = () => {
     settings.hero_subtitle ||
     "Тёплые блюда и десерты с быстрой доставкой по городу.";
 
-  const handleProfileSave = async () => {
-    setProfileError(null);
-    setProfileStatus(null);
-    setProfileSaving(true);
-
-    try {
-      await api.updateProfile({
-        first_name: profileForm.firstName.trim() || null,
-        last_name: profileForm.lastName.trim() || null,
-        birth_date: profileForm.birthDate || null,
-        gender: profileForm.gender || null,
-      });
-      await refresh();
-      setProfileStatus("Данные сохранены");
-    } catch (e: any) {
-      setProfileError(e?.message || "Не удалось сохранить данные.");
-    } finally {
-      setProfileSaving(false);
-    }
-  };
-
-  const renderOrderCard = (order: Order) => {
-    const orderLink = `/orders/${order.id}`;
-    const thumbs = order.items
-      .map((item) => item.image_url)
-      .filter(Boolean)
-      .slice(0, 3) as string[];
-    const deliveryLabel =
-      order.delivery_method === "pickup"
-        ? "Самовывоз"
-        : order.delivery_method === "delivery"
-        ? "Доставка"
-        : order.customer_address
-        ? "Доставка"
-        : "Самовывоз";
-
-    return (
-      <div key={order.id} className="order-card order-card--profile">
-        <div className="order-card__header">
-          <div>
-            <div className="order-card__label">Ваш заказ:</div>
-            <Link className="order-card__title order-card__title--link" to={orderLink}>
-              №{order.id}
-            </Link>
-            <div className="order-card__meta">
-              {deliveryLabel} · {formatDateTime(order.created_at)}
-            </div>
-          </div>
-          <div className="order-card__header-meta">
-            {thumbs.length > 0 ? (
-              <div className="order-card__thumbs">
-                {thumbs.map((src, index) => (
-                  <span
-                    key={index}
-                    className="order-card__thumb"
-                    style={{ backgroundImage: `url(${src})` }}
-                  />
-                ))}
-              </div>
-            ) : null}
-            <div className="order-card__sum">{formatPrice(order.total_price)}</div>
-          </div>
-        </div>
-
-        <div className="order-card__table order-card__table--modern">
-          <div className="order-card__table-head">
-            <span>Наименование</span>
-            <span>Кол-во</span>
-            <span className="align-right">Сумма</span>
-          </div>
-          {order.items.map((item) => (
-            <div key={item.product_size_id} className="order-card__table-row">
-              <span>{item.product_name}</span>
-              <span>{item.quantity}</span>
-              <span className="align-right">{formatPrice(item.line_total)}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="order-card__summary">
-          <div className="order-card__summary-row">
-            <span>Сумма заказа</span>
-            <span>{formatPrice(order.total_price)}</span>
-          </div>
-          <div className="order-card__summary-row order-card__summary-row--total">
-            <span>Итого</span>
-            <span>{formatPrice(order.total_price)}</span>
-          </div>
-        </div>
-
-        <div className="order-card__actions">
-          <Link className="btn btn--outline btn--sm" to={orderLink}>
-            Подробнее
-          </Link>
-        </div>
-      </div>
-    );
-  };
-
-  const profilePanel = (
-    <section className="profile-page">
-      <div className="profile-page__header">
-        <p className="eyebrow">Профиль</p>
-        <h1>Личный кабинет</h1>
-        <p className="muted">
-          Управляйте данными аккаунта и отслеживайте историю заказов без лишних шагов.
-        </p>
-      </div>
-
-      <div className="profile-page__grid">
-        <div className="profile-card profile-card--data">
-          <h3>Личные данные</h3>
-          <p className="muted">
-            Обновите информацию о себе, чтобы курьер мог быстрее с вами связаться.
-          </p>
-          <div className="profile-form">
-            <label className="profile-form__label">Логин</label>
-            <input className="input" value={user?.login || ""} disabled />
-
-            <label className="profile-form__label">Имя</label>
-            <input
-              className="input"
-              value={profileForm.firstName}
-              onChange={(event) =>
-                setProfileForm((prev) => ({ ...prev, firstName: event.target.value }))
-              }
-            />
-
-            <label className="profile-form__label">Фамилия</label>
-            <input
-              className="input"
-              value={profileForm.lastName}
-              onChange={(event) =>
-                setProfileForm((prev) => ({ ...prev, lastName: event.target.value }))
-              }
-            />
-
-            <label className="profile-form__label">Дата рождения</label>
-            <input
-              className="input"
-              type="date"
-              value={profileForm.birthDate}
-              onChange={(event) =>
-                setProfileForm((prev) => ({ ...prev, birthDate: event.target.value }))
-              }
-            />
-
-            <label className="profile-form__label">Пол</label>
-            <select
-              className="input"
-              value={profileForm.gender}
-              onChange={(event) =>
-                setProfileForm((prev) => ({ ...prev, gender: event.target.value }))
-              }
-            >
-              <option value="">Не выбрано</option>
-              <option value="Мужской">Мужской</option>
-              <option value="Женский">Женский</option>
-              <option value="Другое">Другое</option>
-            </select>
-          </div>
-
-          {profileStatus ? <div className="alert alert--success">{profileStatus}</div> : null}
-          {profileError ? <div className="alert alert--error">{profileError}</div> : null}
-
-          <button className="btn btn--primary" onClick={handleProfileSave} disabled={profileSaving}>
-            {profileSaving ? "Сохраняем..." : "Сохранить"}
-          </button>
-        </div>
-
-        <div className="profile-card profile-card--orders">
-          <div className="profile-card__header">
-            <h3>История заказов</h3>
-            <button className="btn btn--outline" onClick={() => api.getMyOrders().then(setMyOrders)}>
-              Обновить
-            </button>
-          </div>
-
-          {ordersLoading ? <div className="muted">Загружаем заказы...</div> : null}
-          {!ordersLoading && myOrders.length === 0 ? (
-            <div className="muted">У вас пока нет заказов.</div>
-          ) : null}
-
-          <div className="orders-list orders-list--modern">
-            {myOrders.map((order) => renderOrderCard(order))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-
   const menuPanel = (
     <section className="menu-section">
       <div className="section-header">
@@ -681,7 +484,13 @@ const AppContent: React.FC = () => {
           <Route path="/cart" element={<CartPage products={allProducts} onSelectProduct={setSelectedProduct} />} />
           <Route
             path="/checkout"
-            element={<CheckoutPage onLoginRequest={() => openAuth("login", "/checkout")} />}
+            element={
+              <CheckoutPage
+                onLoginRequest={() => openAuth("login", "/checkout")}
+                addresses={myAddresses}
+                addressesLoading={addressesLoading}
+              />
+            }
           />
           <Route path="/checkout/success/:orderId" element={<CheckoutSuccessPage />} />
           <Route path="/orders/:orderId" element={<OrderDetailsPage />} />
@@ -689,7 +498,16 @@ const AppContent: React.FC = () => {
             path="/profile"
             element={
               user ? (
-                profilePanel
+                <ProfilePage
+                  user={user}
+                  orders={myOrders}
+                  ordersLoading={ordersLoading}
+                  addresses={myAddresses}
+                  addressesLoading={addressesLoading}
+                  onRefreshOrders={refreshMyOrders}
+                  onRefreshAddresses={refreshMyAddresses}
+                  onRefreshUser={refresh}
+                />
               ) : (
                 <div className="panel">
                   <div className="panel__header">

@@ -98,6 +98,12 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
+def model_dump_unset(model: BaseModel) -> Dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return model.model_dump(exclude_unset=True)
+    return model.dict(exclude_unset=True)
+
+
 def relax_products_category_nullable(conn: sqlite3.Connection) -> None:
     info = conn.execute("PRAGMA table_info(products)").fetchall()
     if not info:
@@ -246,6 +252,20 @@ def apply_migrations() -> None:
 
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS user_addresses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            label TEXT,
+            address TEXT NOT NULL,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS site_settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -326,9 +346,19 @@ def apply_migrations() -> None:
             WHERE id = ?
             """,
             (first_name, last_name, login_value, full_name, user_row["id"]),
-        )
+    )
 
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login ON users(login)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_addresses_user_id ON user_addresses(user_id)"
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_user_addresses_default
+        ON user_addresses(user_id)
+        WHERE is_default = 1
+        """
+    )
 
     conn.executescript(
         f"""
@@ -650,6 +680,26 @@ class ProfileUpdate(BaseModel):
     gender: Optional[str] = None
 
 
+class UserAddressCreate(BaseModel):
+    label: Optional[str] = None
+    address: str = Field(min_length=1)
+    is_default: bool = False
+
+
+class UserAddressUpdate(BaseModel):
+    label: Optional[str] = None
+    address: Optional[str] = None
+    is_default: Optional[bool] = None
+
+
+class UserAddressOut(BaseModel):
+    id: int
+    label: Optional[str] = None
+    address: str
+    is_default: bool
+    created_at: datetime
+
+
 class ProductSizePayload(BaseModel):
     id: Optional[int] = None
     size_name: Optional[str] = None
@@ -755,6 +805,78 @@ def serialize_user(row: sqlite3.Row) -> Dict[str, Any]:
         "gender": gender,
         "is_admin": bool(row["is_admin"]),
     }
+
+
+def normalize_optional_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def normalize_required_text(value: Optional[str], detail: str) -> str:
+    normalized = normalize_optional_text(value)
+    if not normalized:
+        raise HTTPException(status_code=400, detail=detail)
+    return normalized
+
+
+def serialize_user_address(row: sqlite3.Row) -> UserAddressOut:
+    return UserAddressOut(
+        id=row["id"],
+        label=normalize_optional_text(row["label"]),
+        address=(row["address"] or "").strip(),
+        is_default=bool(row["is_default"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
+
+
+def list_user_address_rows(db: sqlite3.Connection, user_id: int) -> List[sqlite3.Row]:
+    return db.execute(
+        """
+        SELECT id, user_id, label, address, is_default, created_at
+        FROM user_addresses
+        WHERE user_id = ?
+        ORDER BY is_default DESC, datetime(created_at) DESC, id DESC
+        """,
+        (user_id,),
+    ).fetchall()
+
+
+def get_user_address_row_or_404(
+    db: sqlite3.Connection, user_id: int, address_id: int
+) -> sqlite3.Row:
+    row = db.execute(
+        """
+        SELECT id, user_id, label, address, is_default, created_at
+        FROM user_addresses
+        WHERE id = ? AND user_id = ?
+        """,
+        (address_id, user_id),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Адрес не найден")
+    return row
+
+
+def ensure_user_address_default(
+    db: sqlite3.Connection, user_id: int, preferred_id: Optional[int] = None
+) -> None:
+    rows = list_user_address_rows(db, user_id)
+    if not rows:
+        return
+
+    if preferred_id is None:
+        preferred_id = next(
+            (row["id"] for row in rows if bool(row["is_default"])),
+            rows[0]["id"],
+        )
+
+    db.execute("UPDATE user_addresses SET is_default = 0 WHERE user_id = ?", (user_id,))
+    db.execute(
+        "UPDATE user_addresses SET is_default = 1 WHERE user_id = ? AND id = ?",
+        (user_id, preferred_id),
+    )
 
 
 def ensure_size(
@@ -1249,6 +1371,135 @@ def track_order(
     if raw["customer_phone"] and raw["customer_phone"] == phone.strip():
         return out
     raise HTTPException(status_code=403, detail="Телефон не совпадает с заказом")
+
+
+@app.get("/me/addresses", response_model=List[UserAddressOut])
+def my_addresses(
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(get_current_user),
+):
+    rows = list_user_address_rows(db, current_user["id"])
+    return [serialize_user_address(row) for row in rows]
+
+
+@app.post("/me/addresses", response_model=UserAddressOut, status_code=201)
+def create_my_address(
+    body: UserAddressCreate,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(get_current_user),
+):
+    user_id = current_user["id"]
+    label = normalize_optional_text(body.label)
+    address = normalize_required_text(body.address, "Адрес обязателен")
+    has_existing = db.execute(
+        "SELECT 1 FROM user_addresses WHERE user_id = ? LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    has_default = db.execute(
+        "SELECT 1 FROM user_addresses WHERE user_id = ? AND is_default = 1 LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    make_default = body.is_default or has_existing is None or has_default is None
+
+    if make_default:
+        db.execute("UPDATE user_addresses SET is_default = 0 WHERE user_id = ?", (user_id,))
+
+    cur = db.execute(
+        """
+        INSERT INTO user_addresses(user_id, label, address, is_default)
+        VALUES (?, ?, ?, ?)
+        """,
+        (user_id, label, address, 1 if make_default else 0),
+    )
+
+    if make_default:
+        ensure_user_address_default(db, user_id, cur.lastrowid)
+
+    db.commit()
+    row = get_user_address_row_or_404(db, user_id, cur.lastrowid)
+    return serialize_user_address(row)
+
+
+@app.patch("/me/addresses/{address_id}", response_model=UserAddressOut)
+def update_my_address(
+    address_id: int,
+    body: UserAddressUpdate,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(get_current_user),
+):
+    user_id = current_user["id"]
+    existing = get_user_address_row_or_404(db, user_id, address_id)
+    payload = model_dump_unset(body)
+
+    fields: List[str] = []
+    params: List[Any] = []
+
+    if "label" in payload:
+        fields.append("label = ?")
+        params.append(normalize_optional_text(payload["label"]))
+
+    if "address" in payload:
+        fields.append("address = ?")
+        params.append(normalize_required_text(payload["address"], "Адрес обязателен"))
+
+    if fields:
+        params.append(address_id)
+        params.append(user_id)
+        db.execute(
+            f"UPDATE user_addresses SET {', '.join(fields)} WHERE id = ? AND user_id = ?",
+            params,
+        )
+
+    if payload.get("is_default"):
+        ensure_user_address_default(db, user_id, address_id)
+    elif "is_default" in payload and bool(existing["is_default"]):
+        replacement = db.execute(
+            """
+            SELECT id
+            FROM user_addresses
+            WHERE user_id = ? AND id != ?
+            ORDER BY datetime(created_at) DESC, id DESC
+            LIMIT 1
+            """,
+            (user_id, address_id),
+        ).fetchone()
+        ensure_user_address_default(
+            db,
+            user_id,
+            replacement["id"] if replacement is not None else address_id,
+        )
+
+    db.commit()
+    row = get_user_address_row_or_404(db, user_id, address_id)
+    return serialize_user_address(row)
+
+
+@app.delete("/me/addresses/{address_id}")
+def delete_my_address(
+    address_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(get_current_user),
+):
+    user_id = current_user["id"]
+    existing = get_user_address_row_or_404(db, user_id, address_id)
+    db.execute("DELETE FROM user_addresses WHERE id = ? AND user_id = ?", (address_id, user_id))
+
+    if bool(existing["is_default"]):
+        replacement = db.execute(
+            """
+            SELECT id
+            FROM user_addresses
+            WHERE user_id = ?
+            ORDER BY datetime(created_at) DESC, id DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+        if replacement is not None:
+            ensure_user_address_default(db, user_id, replacement["id"])
+
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/me/orders", response_model=List[OrderOut])

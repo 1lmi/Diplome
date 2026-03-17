@@ -72,6 +72,21 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login ON users(login);
 
+CREATE TABLE IF NOT EXISTS user_addresses (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    label      TEXT,
+    address    TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_addresses_user_id ON user_addresses(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_addresses_default
+    ON user_addresses(user_id)
+    WHERE is_default = 1;
+
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
     user_id    INTEGER NOT NULL,

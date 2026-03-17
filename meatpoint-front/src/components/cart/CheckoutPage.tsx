@@ -4,15 +4,21 @@ import { api } from "../../api";
 import { useAuth } from "../../authContext";
 import { useCart } from "../../cartContext";
 import { saveOrderTracking } from "../../orderTracking";
-import type { CheckoutDraft } from "../../types";
+import type { CheckoutDraft, UserAddress } from "../../types";
 import CheckoutAuthGate from "./CheckoutAuthGate";
 import OrderSummaryCard from "./OrderSummaryCard";
 
 interface Props {
   onLoginRequest: () => void;
+  addresses: UserAddress[];
+  addressesLoading: boolean;
 }
 
-export const CheckoutPage: React.FC<Props> = ({ onLoginRequest }) => {
+export const CheckoutPage: React.FC<Props> = ({
+  onLoginRequest,
+  addresses,
+  addressesLoading,
+}) => {
   const { user } = useAuth();
   const {
     items,
@@ -25,6 +31,7 @@ export const CheckoutPage: React.FC<Props> = ({ onLoginRequest }) => {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const defaultAddress = addresses.find((item) => item.is_default) || null;
 
   useEffect(() => {
     if (!user) return;
@@ -50,6 +57,15 @@ export const CheckoutPage: React.FC<Props> = ({ onLoginRequest }) => {
     updateCheckoutDraft,
     user,
   ]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (checkoutDraft.deliveryMethod !== "delivery") return;
+    if (checkoutDraft.address.trim()) return;
+    if (!defaultAddress) return;
+
+    updateCheckoutDraft({ address: defaultAddress.address });
+  }, [checkoutDraft.address, checkoutDraft.deliveryMethod, defaultAddress, updateCheckoutDraft, user]);
 
   const summaryLines = useMemo(
     () =>
@@ -234,17 +250,57 @@ export const CheckoutPage: React.FC<Props> = ({ onLoginRequest }) => {
 
               <div className="checkout-stack">
                 {needsAddress ? (
-                  <label className="field">
-                    <span>Адрес доставки</span>
-                    <input
-                      className="input"
-                      value={checkoutDraft.address}
-                      disabled={authGateLocked || submitting}
-                      onChange={(event) =>
-                        updateCheckoutDraft({ address: event.target.value })
-                      }
-                    />
-                  </label>
+                  <>
+                    {user ? (
+                      <div className="checkout-addresses">
+                        <div className="checkout-addresses__head">
+                          <span>Сохранённые адреса</span>
+                          {addressesLoading ? <small>Обновляем...</small> : null}
+                        </div>
+                        {addresses.length > 0 ? (
+                          <div className="checkout-addresses__list">
+                            {addresses.map((address) => {
+                              const active = checkoutDraft.address.trim() === address.address.trim();
+                              return (
+                                <button
+                                  key={address.id}
+                                  type="button"
+                                  className={
+                                    "checkout-address-chip" +
+                                    (active ? " checkout-address-chip--active" : "")
+                                  }
+                                  disabled={authGateLocked || submitting}
+                                  onClick={() =>
+                                    updateCheckoutDraft({ address: address.address })
+                                  }
+                                >
+                                  <strong>{address.label || "Адрес"}</strong>
+                                  <span>{address.address}</span>
+                                  {address.is_default ? <em>Основной</em> : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="checkout-hint">
+                            Сохранённых адресов пока нет. Добавить их можно в личном кабинете.
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+
+                    <label className="field">
+                      <span>Адрес доставки</span>
+                      <input
+                        className="input"
+                        value={checkoutDraft.address}
+                        disabled={authGateLocked || submitting}
+                        onChange={(event) =>
+                          updateCheckoutDraft({ address: event.target.value })
+                        }
+                      />
+                    </label>
+                  </>
                 ) : (
                   <div className="checkout-hint">
                     Адрес не требуется. Заказ можно забрать самостоятельно.

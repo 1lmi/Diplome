@@ -163,6 +163,26 @@ export interface User {
   is_admin: boolean;
 }
 
+export interface UserAddress {
+  id: number;
+  label?: string | null;
+  address: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface UserAddressCreate {
+  label?: string | null;
+  address: string;
+  is_default?: boolean;
+}
+
+export interface UserAddressPatch {
+  label?: string | null;
+  address?: string;
+  is_default?: boolean;
+}
+
 export interface AuthResponse {
   token: string;
   user: User;

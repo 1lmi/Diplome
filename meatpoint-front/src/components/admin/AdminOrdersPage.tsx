@@ -80,6 +80,15 @@ const getItemsPreview = (order: AdminOrder) => {
   return parts.join(" · ");
 };
 
+const getServiceMeta = (order: AdminOrder) => {
+  const parts: string[] = [];
+  const payment = getPaymentLabel(order);
+  if (payment) parts.push(payment);
+  if (order.delivery_time) parts.push(order.delivery_time);
+  if (order.do_not_call) parts.push("без звонка");
+  return parts.join(" · ");
+};
+
 const AdminOrdersPage: React.FC<Props> = ({
   orders,
   statuses,
@@ -183,6 +192,7 @@ const AdminOrdersPage: React.FC<Props> = ({
     const nextStatus = getNextStatus(order);
     const nextActionLabel = getNextActionLabel(order);
     const canCancelOrder = canCancel(order);
+    const serviceMeta = getServiceMeta(order);
     const isPending = pendingAction?.orderId === order.id;
     const isBusy = submittingOrderId === order.id;
     const pendingLabel =
@@ -201,61 +211,76 @@ const AdminOrdersPage: React.FC<Props> = ({
           (isBusy ? " current-order-card--busy" : "")
         }
       >
-        <div className="current-order-card__top">
-          <div className="current-order-card__headline">
+        <div className="current-order-card__header">
+          <div className="current-order-card__header-main">
             <Link className="current-order-card__link" to={`/orders/${order.id}`} state={{ backTo }}>
               №{order.id}
             </Link>
-            <span className="current-order-card__price">{formatPrice(order.total_price)}</span>
+            <div className="current-order-card__stamp">{formatTime(order.created_at)}</div>
           </div>
-          <div className="current-order-card__age">{formatOrderAge(order.created_at)}</div>
+          <div className="current-order-card__sum">
+            <span className="current-order-card__age">{formatOrderAge(order.created_at)}</span>
+            <strong className="current-order-card__sum-value">{formatPrice(order.total_price)}</strong>
+          </div>
         </div>
 
-        <div className="current-order-card__meta">
-          <strong>{order.customer_name || "Гость"}</strong>
-          <span>{order.customer_phone || "—"}</span>
-          <span>{getDeliveryLabel(order)}</span>
+        <div className="current-order-card__customer">
+          <strong className="current-order-card__customer-name">
+            {order.customer_name || "Гость"}
+          </strong>
+          <span className="current-order-card__customer-phone">{order.customer_phone || "—"}</span>
         </div>
 
-        <div className="current-order-card__chips">
-          <span className="chip chip--soft">{order.status_name}</span>
-          {getPaymentLabel(order) ? (
-            <span className="chip chip--soft">{getPaymentLabel(order)}</span>
-          ) : null}
-          {order.do_not_call ? <span className="chip chip--soft">Не перезванивать</span> : null}
-          {order.delivery_time ? (
-            <span className="chip chip--soft">{order.delivery_time}</span>
-          ) : null}
+        <div className="current-order-card__facts">
+          <div className="current-order-card__fact">
+            <span>Тип</span>
+            <strong>{getDeliveryLabel(order)}</strong>
+          </div>
+          <div className="current-order-card__fact">
+            <span>Позиций</span>
+            <strong>{order.items.length}</strong>
+          </div>
         </div>
 
-        <div className="current-order-card__items">{getItemsPreview(order) || "Состав заказа скрыт"}</div>
+        {serviceMeta ? <div className="current-order-card__service">{serviceMeta}</div> : null}
+
+        <div className="current-order-card__items-box">
+          <div className="current-order-card__items-label">Состав</div>
+          <div className="current-order-card__items">
+            {getItemsPreview(order) || "Состав заказа скрыт"}
+          </div>
+        </div>
 
         <div className="current-order-card__actions">
           {nextStatus && nextActionLabel ? (
             <button
-              className="btn btn--primary btn--sm"
+              className="btn btn--primary btn--sm current-order-card__primary-action"
               onClick={() => beginAction(order.id, nextStatus, "advance")}
               disabled={isBusy}
             >
               {nextActionLabel}
             </button>
-          ) : (
-            <div className="current-order-card__spacer" />
-          )}
-
-          {canCancelOrder ? (
-            <button
-              className="btn btn--outline btn--sm current-order-card__cancel"
-              onClick={() => beginAction(order.id, "canceled", "cancel")}
-              disabled={isBusy}
-            >
-              Отменить
-            </button>
           ) : null}
 
-          <Link className="btn btn--ghost btn--sm current-order-card__details" to={`/orders/${order.id}`} state={{ backTo }}>
-            Подробнее
-          </Link>
+          <div className="current-order-card__secondary-actions">
+            {canCancelOrder ? (
+              <button
+                className="btn btn--outline btn--sm current-order-card__cancel"
+                onClick={() => beginAction(order.id, "canceled", "cancel")}
+                disabled={isBusy}
+              >
+                Отменить
+              </button>
+            ) : null}
+
+            <Link
+              className="btn btn--ghost btn--sm current-order-card__details"
+              to={`/orders/${order.id}`}
+              state={{ backTo }}
+            >
+              Подробнее
+            </Link>
+          </div>
         </div>
 
         {isPending ? (

@@ -9,6 +9,9 @@ import type {
   OrderCreate,
   SettingsMap,
   StatusOption,
+  UserAddress,
+  UserAddressCreate,
+  UserAddressPatch,
 } from "./types";
 
 const API_BASE = "http://localhost:8000";
@@ -156,6 +159,30 @@ export const api = {
     return request("/me", {
       method: "PUT",
       body: JSON.stringify(payload),
+    });
+  },
+
+  getMyAddresses(): Promise<UserAddress[]> {
+    return request("/me/addresses");
+  },
+
+  createAddress(payload: UserAddressCreate): Promise<UserAddress> {
+    return request("/me/addresses", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateAddress(id: number, payload: UserAddressPatch): Promise<UserAddress> {
+    return request(`/me/addresses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteAddress(id: number): Promise<{ ok: boolean }> {
+    return request(`/me/addresses/${id}`, {
+      method: "DELETE",
     });
   },
 

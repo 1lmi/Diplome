@@ -2350,7 +2350,7 @@
 }
 
 .current-order-card__actions .btn--primary {
-  flex: 1 1 148px;
+  flex: 1 1 40px;
 }
 
 .current-order-card__cancel {
@@ -2448,5 +2448,227 @@
   .admin-row--history .admin-row__controls {
     width: 100%;
     justify-content: space-between;
+  }
+}
+
+/* Orders board usability pass */
+.orders-board {
+  grid-template-columns: repeat(4, minmax(280px, 1fr));
+}
+
+.current-order-card {
+  gap: 14px;
+  padding: 18px;
+}
+
+.current-order-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.current-order-card__header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.current-order-card__link {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.current-order-card__stamp {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.current-order-card__sum {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.current-order-card__age {
+  font-size: 11px;
+}
+
+.current-order-card__sum-value {
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.current-order-card__customer {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.current-order-card__customer-name {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.current-order-card__customer-phone {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.current-order-card__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.current-order-card__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(234, 223, 211, 0.9);
+  background: rgba(251, 248, 244, 0.9);
+}
+
+.current-order-card__fact span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.current-order-card__fact strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.current-order-card__service {
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(230, 122, 46, 0.08);
+  color: var(--accent-hover);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.current-order-card__items-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(234, 223, 211, 0.92);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.current-order-card__items-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.current-order-card__items {
+  min-height: 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.current-order-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.current-order-card__actions .current-order-card__primary-action,
+.current-order-card__secondary-actions .btn {
+  min-height: 34px;
+}
+
+.current-order-card__primary-action {
+  width: 100%;
+  align-self: stretch;
+  flex: 0 0 auto;
+  padding-inline: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 6px 12px rgba(230, 122, 46, 0.12);
+  background: linear-gradient(135deg, var(--accent), #ea8a42);
+}
+
+.current-order-card__primary-action:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-hover), #de7a31);
+  box-shadow: 0 8px 14px rgba(230, 122, 46, 0.14);
+}
+
+.current-order-card__secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.current-order-card__details,
+.current-order-card__cancel {
+  width: 100%;
+  margin-left: 0;
+}
+
+.current-order-card__confirm {
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.current-order-card__confirm-text {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.current-order-card__confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.current-order-card__confirm-actions .btn {
+  flex: initial;
+  min-height: 42px;
+}
+
+@media (max-width: 1320px) {
+  .orders-board__lane {
+    flex: 0 0 min(340px, 84vw);
+  }
+}
+
+@media (max-width: 640px) {
+  .current-order-card__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .current-order-card__sum {
+    align-items: flex-start;
+  }
+
+  .current-order-card__facts,
+  .current-order-card__secondary-actions,
+  .current-order-card__confirm-actions {
+    grid-template-columns: 1fr;
   }
 }
