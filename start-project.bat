@@ -5,6 +5,7 @@ set "ROOT_DIR=%~dp0"
 if "%ROOT_DIR:~-1%"=="\" set "ROOT_DIR=%ROOT_DIR:~0,-1%"
 
 set "FRONTEND_DIR=%ROOT_DIR%\meatpoint-front"
+set "MOBILE_DIR=%ROOT_DIR%\meatpoint-mobile"
 set "VENV_DIR=%ROOT_DIR%\.venv"
 set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
 
@@ -54,6 +55,22 @@ if not exist "%FRONTEND_DIR%\node_modules" (
   popd
 )
 
+if exist "%MOBILE_DIR%\package.json" (
+  if not exist "%MOBILE_DIR%\node_modules" (
+    echo Installing mobile dependencies...
+    pushd "%MOBILE_DIR%" || exit /b 1
+    call npm ci
+    if errorlevel 1 (
+      popd
+      exit /b 1
+    )
+    popd
+  )
+)
+
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "(Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.NetAdapter.Status -eq 'Up' -and $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.InterfaceDescription -notmatch 'Hyper-V|VMware|VirtualBox|WSL|Tailscale|WireGuard|Hamachi|ZeroTier' } | ForEach-Object { $_.IPv4Address | Where-Object { $_.IPAddress -match '^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)' } | Select-Object -First 1 -ExpandProperty IPAddress } | Select-Object -First 1)"`) do set "LAN_IP=%%I"
+if not defined LAN_IP set "LAN_IP=127.0.0.1"
+
 echo Starting backend on http://127.0.0.1:8000 ...
 start "Meat Point API" powershell -NoExit -ExecutionPolicy Bypass -Command "Set-Location -LiteralPath '%ROOT_DIR%'; & '%PYTHON_EXE%' -m uvicorn main:app --reload --host 0.0.0.0 --port 8000"
 if errorlevel 1 (
@@ -68,8 +85,18 @@ if errorlevel 1 (
   exit /b 1
 )
 
+if exist "%MOBILE_DIR%\package.json" (
+  echo Starting mobile Expo Go on http://%LAN_IP% ...
+  start "Meat Point Mobile (Expo Go)" powershell -NoExit -ExecutionPolicy Bypass -Command "$env:EXPO_PUBLIC_API_BASE_URL='http://%LAN_IP%:8000'; Set-Location -LiteralPath '%MOBILE_DIR%'; npm run start:lan"
+  if errorlevel 1 (
+    echo Failed to start the mobile window.
+    exit /b 1
+  )
+)
+
 echo Project launch started.
 echo Backend:  http://127.0.0.1:8000/docs
 echo Frontend: http://127.0.0.1:5173
+if exist "%MOBILE_DIR%\package.json" echo Expo Go:  exp://%LAN_IP%:8081
 
 endlocal
