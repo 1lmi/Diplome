@@ -18,8 +18,11 @@ export function Screen({
 }) {
   const content = scroll ? (
     <ScrollView
+      alwaysBounceVertical={false}
+      bounces={false}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={[styles.content, padded && styles.padded]}
+      overScrollMode="never"
       showsVerticalScrollIndicator={false}
     >
       {children}

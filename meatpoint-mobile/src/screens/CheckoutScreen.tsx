@@ -198,9 +198,12 @@ export default function CheckoutScreen() {
     <Screen padded={false} scroll={false} keyboard>
       <View style={styles.root}>
         <ScrollView
+          alwaysBounceVertical={false}
+          bounces={false}
           ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
+          overScrollMode="never"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.headerWrap}>

@@ -55,7 +55,13 @@ export default function CartScreen() {
         title="Корзина"
       />
 
-      <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        alwaysBounceVertical={false}
+        bounces={false}
+        contentContainerStyle={styles.stack}
+        overScrollMode="never"
+        showsVerticalScrollIndicator={false}
+      >
         {items.map((item) => (
           <SectionCard key={item.productSizeId}>
             <View style={styles.itemRow}>

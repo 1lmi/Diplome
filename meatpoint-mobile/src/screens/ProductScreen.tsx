@@ -134,10 +134,13 @@ export default function ProductScreen() {
     return (
       <>
         <ScrollView
+          alwaysBounceVertical={false}
+          bounces={false}
           contentContainerStyle={[
             styles.sheetScrollContent,
             { paddingBottom: Math.max(insets.bottom, spacing.lg) + 84 },
           ]}
+          overScrollMode="never"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.sheetTop}>

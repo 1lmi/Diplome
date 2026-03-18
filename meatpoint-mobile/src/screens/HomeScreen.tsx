@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,11 +14,13 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import type { ProductDisplay } from "@/src/api/types";
+import type { DeliveryMethod, ProductDisplay, UserAddress } from "@/src/api/types";
 import { mobileApi } from "@/src/api/mobile-api";
 import { CartBar } from "@/src/components/ui/CartBar";
 import { EmptyState } from "@/src/components/ui/EmptyState";
+import { MeatButton } from "@/src/components/ui/MeatButton";
 import { ProductCard } from "@/src/components/ui/ProductCard";
 import { Screen } from "@/src/components/ui/Screen";
 import { useMenuData } from "@/src/hooks/useMenuData";
@@ -25,7 +28,7 @@ import { buildMenuSections } from "@/src/lib/menu";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { getCartCount, getCartTotal, useCartStore } from "@/src/store/cart-store";
-import { colors, radii, spacing, typography } from "@/src/theme/tokens";
+import { colors, motion, radii, shadows, spacing, typography } from "@/src/theme/tokens";
 
 interface MenuSection {
   key: string;
@@ -47,10 +50,12 @@ function chunkProducts(products: ProductDisplay[], chunkSize = 2) {
 export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
   const cartItems = useCartStore((state) => state.items);
+  const checkoutAddress = useCartStore((state) => state.checkoutDraft.address);
   const deliveryMethod = useCartStore((state) => state.checkoutDraft.deliveryMethod);
   const updateCheckoutDraft = useCartStore((state) => state.updateCheckoutDraft);
   const addProduct = useCartStore((state) => state.addProduct);
   const { pushToast } = useToast();
+  const insets = useSafeAreaInsets();
   const { categoriesQuery, menuQuery } = useMenuData();
   const addressesQuery = useQuery({
     queryKey: ["addresses"],
@@ -59,8 +64,15 @@ export default function HomeScreen() {
   });
   const scrollRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<string, number>>({});
+  const pendingCategoryJump = useRef<{ categoryId: string; y: number } | null>(null);
+  const pendingCategoryJumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = useRef(new Animated.Value(30)).current;
 
   const [activeCategory, setActiveCategory] = useState<string>("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [tempMethod, setTempMethod] = useState<DeliveryMethod>(deliveryMethod);
+  const [tempAddress, setTempAddress] = useState("");
 
   const visibleSections = useMemo(
     () =>
@@ -85,14 +97,31 @@ export default function HomeScreen() {
     }
   }, [activeCategory, visibleSections]);
 
+  useEffect(
+    () => () => {
+      if (pendingCategoryJumpTimer.current) {
+        clearTimeout(pendingCategoryJumpTimer.current);
+      }
+    },
+    []
+  );
+
   const cartCount = useMemo(() => getCartCount(cartItems), [cartItems]);
   const cartTotal = useMemo(() => getCartTotal(cartItems), [cartItems]);
   const defaultAddress = addressesQuery.data?.find((item) => item.is_default) || null;
+  const currentDeliveryAddress = checkoutAddress.trim() || defaultAddress?.address || "";
+  const selectedSavedAddress = useMemo(
+    () => findAddressByValue(addressesQuery.data, currentDeliveryAddress),
+    [addressesQuery.data, currentDeliveryAddress]
+  );
   const addressTitle =
-    deliveryMethod === "delivery"
-      ? defaultAddress?.address || "Укажите адрес доставки"
-      : "Самовывоз из Meat Point";
-  const addressCopy = deliveryMethod === "delivery" ? "Доставка" : "Самовывоз";
+    deliveryMethod === "pickup"
+      ? "В пиццерии"
+      : selectedSavedAddress?.label?.trim() || (currentDeliveryAddress ? "Адрес доставки" : "Куда доставить");
+  const addressCopy =
+    deliveryMethod === "pickup"
+      ? "Самовывоз"
+      : selectedSavedAddress?.address || currentDeliveryAddress || "Выберите адрес и способ";
 
   const menuLoadError =
     categoriesQuery.error instanceof Error
@@ -111,12 +140,39 @@ export default function HomeScreen() {
     const offset = sectionOffsets.current[categoryId];
     if (typeof offset !== "number") return;
 
-    scrollRef.current?.scrollTo({ y: Math.max(offset - 8, 0), animated: true });
+    const targetY = Math.max(offset - spacing.sm, 0);
+    pendingCategoryJump.current = { categoryId, y: targetY };
+    if (pendingCategoryJumpTimer.current) {
+      clearTimeout(pendingCategoryJumpTimer.current);
+    }
+    pendingCategoryJumpTimer.current = setTimeout(() => {
+      pendingCategoryJump.current = null;
+      pendingCategoryJumpTimer.current = null;
+    }, 500);
+
+    scrollRef.current?.scrollTo({
+      y: targetY,
+      animated: true,
+    });
     setActiveCategory(categoryId);
   };
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = event.nativeEvent.contentOffset.y + 12;
+    const { contentOffset } = event.nativeEvent;
+    const pendingJump = pendingCategoryJump.current;
+    if (pendingJump) {
+      if (Math.abs(contentOffset.y - pendingJump.y) <= 24) {
+        pendingCategoryJump.current = null;
+        if (pendingCategoryJumpTimer.current) {
+          clearTimeout(pendingCategoryJumpTimer.current);
+          pendingCategoryJumpTimer.current = null;
+        }
+      } else {
+        return;
+      }
+    }
+
+    const y = contentOffset.y + spacing.sm;
     let nextCategory = visibleSections[0]?.categoryId || "";
 
     for (const section of visibleSections) {
@@ -151,88 +207,274 @@ export default function HomeScreen() {
     });
   };
 
+  const openPicker = () => {
+    setTempMethod(deliveryMethod);
+    setTempAddress(currentDeliveryAddress);
+    setPickerOpen(true);
+    overlayOpacity.setValue(0);
+    sheetTranslateY.setValue(30);
+
+    requestAnimationFrame(() => {
+      Animated.parallel([
+        Animated.timing(overlayOpacity, {
+          toValue: 1,
+          duration: motion.fast,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: 0,
+          duration: motion.normal,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  };
+
+  const closePicker = (callback?: () => void) => {
+    Animated.parallel([
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: motion.fast,
+        useNativeDriver: true,
+      }),
+      Animated.timing(sheetTranslateY, {
+        toValue: 30,
+        duration: motion.normal,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setPickerOpen(false);
+      callback?.();
+    });
+  };
+
+  const handleSelectMethod = (nextMethod: DeliveryMethod) => {
+    setTempMethod(nextMethod);
+    if (nextMethod === "delivery" && !tempAddress && defaultAddress?.address) {
+      setTempAddress(defaultAddress.address);
+    }
+  };
+
+  const handleApplyPicker = () => {
+    updateCheckoutDraft({
+      deliveryMethod: tempMethod,
+      address: tempMethod === "pickup" ? "" : tempAddress,
+    });
+    closePicker();
+  };
+
+  const openNewAddress = () => closePicker(() => router.push("/address/new"));
+
+  const renderDeliverySheetBody = () => {
+    if (tempMethod === "pickup") {
+      return (
+        <View style={styles.sheetBlock}>
+          <Text style={styles.sheetSectionTitle}>Получение заказа</Text>
+          <View style={styles.pickupCard}>
+            <View style={styles.pickupIcon}>
+              <Feather color={colors.accent} name="shopping-bag" size={18} />
+            </View>
+            <View style={styles.pickupCopy}>
+              <Text style={styles.pickupTitle}>В пиццерии Meat Point</Text>
+              <Text style={styles.pickupText}>Заказ приготовим к самовывозу без адреса доставки.</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    const addresses = addressesQuery.data || [];
+    const hasSavedAddress = addresses.length > 0;
+    const hasCustomAddress =
+      Boolean(tempAddress.trim()) && !findAddressByValue(addresses, tempAddress.trim());
+
+    return (
+      <View style={styles.sheetBlock}>
+        <View style={styles.sheetSectionHead}>
+          <Text style={styles.sheetSectionTitle}>Мои адреса</Text>
+          {user ? (
+            <Pressable onPress={openNewAddress} style={styles.inlineLinkButton}>
+              <Feather color={colors.accent} name="plus" size={14} />
+              <Text style={styles.inlineLinkText}>Новый адрес</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {addressesQuery.isLoading ? (
+          <Text style={styles.sheetHint}>Загружаем сохранённые адреса.</Text>
+        ) : hasSavedAddress ? (
+          addresses.map((address) => {
+            const active = isSameAddress(tempAddress, address.address);
+            return (
+              <Pressable
+                key={address.id}
+                onPress={() => setTempAddress(address.address)}
+                style={[styles.addressOption, active ? styles.addressOptionActive : null]}
+              >
+                <View style={styles.addressBulletWrap}>
+                  <View
+                    style={[
+                      styles.addressBullet,
+                      active ? styles.addressBulletActive : null,
+                    ]}
+                  />
+                </View>
+                <View style={styles.addressOptionCopy}>
+                  <View style={styles.addressOptionHead}>
+                    <Text style={styles.addressOptionTitle}>{address.label || "Адрес"}</Text>
+                    {address.is_default ? (
+                      <Text style={styles.addressOptionBadge}>Основной</Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.addressOptionText}>{address.address}</Text>
+                </View>
+                <Pressable
+                  hitSlop={8}
+                  onPress={() =>
+                    closePicker(() =>
+                      router.push({
+                        pathname: "/address/[id]",
+                        params: { id: String(address.id) },
+                      })
+                    )
+                  }
+                  style={styles.editAddressButton}
+                >
+                  <Feather color={colors.muted} name="edit-2" size={15} />
+                </Pressable>
+              </Pressable>
+            );
+          })
+        ) : hasCustomAddress ? (
+          <View style={[styles.addressOption, styles.addressOptionActive]}>
+            <View style={styles.addressBulletWrap}>
+              <View style={[styles.addressBullet, styles.addressBulletActive]} />
+            </View>
+            <View style={styles.addressOptionCopy}>
+              <Text style={styles.addressOptionTitle}>Текущий адрес</Text>
+              <Text style={styles.addressOptionText}>{tempAddress.trim()}</Text>
+            </View>
+          </View>
+        ) : user ? (
+          <View style={styles.sheetEmptyCard}>
+            <Text style={styles.sheetHint}>Сохранённых адресов пока нет. Добавьте первый адрес и используйте его в доставке.</Text>
+            <MeatButton onPress={openNewAddress} variant="secondary">
+              Добавить адрес
+            </MeatButton>
+          </View>
+        ) : (
+          <View style={styles.sheetEmptyCard}>
+            <Text style={styles.sheetHint}>Для доставки можно войти и сохранить адреса в профиле. Пока можно продолжить и указать адрес позже на checkout.</Text>
+            <MeatButton onPress={() => closePicker(() => router.push("/auth/sign-in"))} variant="secondary">
+              Войти
+            </MeatButton>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.root}>
       <Screen padded={false} scroll={false}>
-        <ScrollView
-          ref={scrollRef}
+        <View style={styles.screenBody}>
+          <View style={styles.fixedHeaderShell}>
+            <View style={styles.topContent}>
+              <View style={styles.headerRow}>
+                <Pressable
+                  onPress={openPicker}
+                  style={({ pressed }) => [
+                    styles.locationButton,
+                    pressed ? styles.locationButtonPressed : null,
+                  ]}
+                >
+                  <View style={styles.locationIconWrap}>
+                    <Feather
+                      color={colors.accent}
+                      name={deliveryMethod === "delivery" ? "navigation" : "shopping-bag"}
+                      size={16}
+                    />
+                  </View>
+                  <View style={styles.locationCopy}>
+                    <Text numberOfLines={1} style={styles.locationTitle}>
+                      {addressTitle}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.locationMeta}>
+                      {addressCopy}
+                    </Text>
+                  </View>
+                  <Feather color={colors.text} name="chevron-down" size={18} />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => router.push("/profile")}
+                  style={({ pressed }) => [styles.avatar, pressed ? styles.avatarPressed : null]}
+                >
+                  <Feather color={colors.text} name="user" size={22} />
+                  {cartCount > 0 ? (
+                    <View style={styles.avatarBadge}>
+                      <Text style={styles.avatarBadgeText}>{cartCount}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              </View>
+            </View>
+
+            {visibleSections.length ? (
+              <View style={styles.stickyCategories}>
+                <ScrollView
+                  alwaysBounceHorizontal={false}
+                  bounces={false}
+                  contentContainerStyle={styles.chipsContent}
+                  horizontal
+                  overScrollMode="never"
+                  showsHorizontalScrollIndicator={false}
+                >
+                  {visibleSections.map((section) => {
+                    const active = section.categoryId === activeCategory;
+                    return (
+                      <Pressable
+                        key={section.key}
+                        onPress={() => jumpToSection(section.categoryId)}
+                        style={[styles.categoryChip, active ? styles.categoryChipActive : null]}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryChipLabel,
+                            active ? styles.categoryChipLabelActive : null,
+                          ]}
+                        >
+                          {section.title}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+          </View>
+
+          <ScrollView
+            ref={scrollRef}
+            style={styles.catalogScroll}
           contentContainerStyle={[
             styles.listContent,
             cartCount > 0 ? styles.listContentWithCart : null,
           ]}
+          onScrollBeginDrag={() => {
+            pendingCategoryJump.current = null;
+            if (pendingCategoryJumpTimer.current) {
+              clearTimeout(pendingCategoryJumpTimer.current);
+              pendingCategoryJumpTimer.current = null;
+            }
+          }}
           keyboardShouldPersistTaps="handled"
           onScroll={handleScroll}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={false}
-          stickyHeaderIndices={visibleSections.length ? [1] : undefined}
-        >
-          <View style={styles.topContent}>
-            <View style={styles.headerRow}>
-              <View style={styles.headerCopy}>
-                <Text numberOfLines={1} style={styles.headerTitle}>
-                  {addressTitle}
-                </Text>
-                <Text style={styles.headerMeta}>{addressCopy}</Text>
-              </View>
-
-              <Pressable
-                onPress={() => router.push("/profile")}
-                style={({ pressed }) => [styles.avatar, pressed ? styles.avatarPressed : null]}
-              >
-                <Feather color={colors.text} name="user" size={22} />
-                {cartCount > 0 ? (
-                  <View style={styles.avatarBadge}>
-                    <Text style={styles.avatarBadgeText}>{cartCount}</Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            </View>
-
-            <View style={styles.modeTrack}>
-              <ModeSegment
-                active={deliveryMethod === "delivery"}
-                label="Доставка"
-                onPress={() => updateCheckoutDraft({ deliveryMethod: "delivery" })}
-              />
-              <ModeSegment
-                active={deliveryMethod === "pickup"}
-                label="Самовывоз"
-                onPress={() => updateCheckoutDraft({ deliveryMethod: "pickup" })}
-              />
-            </View>
-          </View>
-
-          {visibleSections.length ? (
-            <View style={styles.stickyCategories}>
-              <ScrollView
-                contentContainerStyle={styles.chipsContent}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              >
-                {visibleSections.map((section) => {
-                  const active = section.categoryId === activeCategory;
-                  return (
-                    <Pressable
-                      key={section.key}
-                      onPress={() => jumpToSection(section.categoryId)}
-                      style={[styles.categoryChip, active ? styles.categoryChipActive : null]}
-                    >
-                      <Text
-                        style={[
-                          styles.categoryChipLabel,
-                          active ? styles.categoryChipLabelActive : null,
-                        ]}
-                      >
-                        {section.title}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          ) : null}
-
-          {categoriesQuery.isLoading || menuQuery.isLoading ? (
+            removeClippedSubviews={false}
+            scrollEventThrottle={16}
+            showsVerticalScrollIndicator={false}
+          >
+            {categoriesQuery.isLoading || menuQuery.isLoading ? (
             <EmptyState
               description="Подгружаем категории и позиции меню."
               icon="loader"
@@ -280,33 +522,114 @@ export default function HomeScreen() {
               icon="search"
               title="Меню пустое"
             />
-          )}
-        </ScrollView>
+            )}
+          </ScrollView>
+        </View>
       </Screen>
 
       {cartCount > 0 ? (
         <CartBar count={cartCount} total={cartTotal} onPress={() => router.push("/cart")} />
       ) : null}
+
+      {pickerOpen ? (
+        <View pointerEvents="box-none" style={styles.sheetRoot}>
+          <Animated.View style={[styles.sheetBackdrop, { opacity: overlayOpacity }]}>
+            <Pressable onPress={() => closePicker()} style={StyleSheet.absoluteFillObject} />
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.sheetWrap,
+              {
+                paddingBottom: Math.max(insets.bottom, spacing.lg),
+                transform: [{ translateY: sheetTranslateY }],
+              },
+            ]}
+          >
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeaderRow}>
+              <Pressable onPress={() => closePicker()} style={styles.sheetCloseButton}>
+                <Feather color={colors.text} name="x" size={18} />
+              </Pressable>
+              <View style={styles.sheetMethodRow}>
+                <Pressable
+                  onPress={() => handleSelectMethod("delivery")}
+                  style={[
+                    styles.sheetMethodButton,
+                    tempMethod === "delivery" ? styles.sheetMethodButtonActive : null,
+                  ]}
+                >
+                  <Feather
+                    color={tempMethod === "delivery" ? colors.surface : colors.text}
+                    name="navigation"
+                    size={15}
+                  />
+                  <Text
+                    style={[
+                      styles.sheetMethodLabel,
+                      tempMethod === "delivery" ? styles.sheetMethodLabelActive : null,
+                    ]}
+                  >
+                    Доставка
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleSelectMethod("pickup")}
+                  style={[
+                    styles.sheetMethodButton,
+                    tempMethod === "pickup" ? styles.sheetMethodButtonActive : null,
+                  ]}
+                >
+                  <Feather
+                    color={tempMethod === "pickup" ? colors.surface : colors.text}
+                    name="shopping-bag"
+                    size={15}
+                  />
+                  <Text
+                    style={[
+                      styles.sheetMethodLabel,
+                      tempMethod === "pickup" ? styles.sheetMethodLabelActive : null,
+                    ]}
+                  >
+                    В пиццерии
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <ScrollView
+              alwaysBounceVertical={false}
+              bounces={false}
+              contentContainerStyle={styles.sheetScrollContent}
+              keyboardShouldPersistTaps="handled"
+              overScrollMode="never"
+              showsVerticalScrollIndicator={false}
+            >
+              {renderDeliverySheetBody()}
+            </ScrollView>
+
+            <View style={styles.sheetFooter}>
+              <MeatButton fullWidth onPress={handleApplyPicker} size="cta">
+                {tempMethod === "pickup" ? "Заберу сам" : tempAddress.trim() ? "Доставить сюда" : "Продолжить"}
+              </MeatButton>
+            </View>
+          </Animated.View>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function ModeSegment({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress(): void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.modeSegment, active ? styles.modeSegmentActive : null]}>
-      <Text style={[styles.modeSegmentLabel, active ? styles.modeSegmentLabelActive : null]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
+function normalizeAddressValue(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function isSameAddress(left: string, right: string) {
+  return Boolean(left.trim()) && normalizeAddressValue(left) === normalizeAddressValue(right);
+}
+
+function findAddressByValue(addresses: UserAddress[] | undefined, value: string) {
+  if (!addresses?.length || !value.trim()) return null;
+  return addresses.find((address) => isSameAddress(address.address, value)) || null;
 }
 
 const styles = StyleSheet.create({
@@ -314,11 +637,163 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  screenBody: {
+    flex: 1,
+  },
+  fixedHeaderShell: {
+    backgroundColor: colors.bg,
+    paddingHorizontal: spacing.lg,
+  },
+  catalogScroll: {
+    flex: 1,
+  },
+  sheetRoot: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "flex-end",
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.scrim,
+  },
+  sheetWrap: {
+    minHeight: "54%",
+    maxHeight: "84%",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+    ...shadows.card,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 4,
+    borderRadius: radii.pill,
+    backgroundColor: "rgba(111, 99, 88, 0.24)",
+    marginTop: spacing.sm,
+  },
+  sheetHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  sheetCloseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
+  },
+  sheetMethodRow: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radii.xl,
+    backgroundColor: colors.surfaceMuted,
+    padding: 4,
+    flexDirection: "row",
+    gap: spacing.xs,
+  },
+  sheetMethodButton: {
+    flex: 1,
+    borderRadius: radii.xl,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  sheetMethodButtonActive: {
+    backgroundColor: colors.accent,
+  },
+  sheetMethodLabel: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
+  },
+  sheetMethodLabelActive: {
+    color: colors.surface,
+  },
+  sheetScrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    gap: spacing.lg,
+  },
+  sheetBlock: {
+    gap: spacing.md,
+  },
+  sheetSectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  sheetSectionTitle: {
+    color: colors.text,
+    fontSize: typography.titleSm,
+    fontWeight: typography.semibold,
+  },
+  sheetHint: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+    lineHeight: 20,
+  },
+  inlineLinkButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    minHeight: 34,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+  },
+  inlineLinkText: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
+  },
+  pickupCard: {
+    borderRadius: radii.xl,
+    backgroundColor: colors.bgSoft,
+    padding: spacing.lg,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+  },
+  pickupIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  pickupCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  pickupTitle: {
+    color: colors.text,
+    fontSize: typography.body,
+    fontWeight: typography.medium,
+  },
+  pickupText: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+    lineHeight: 20,
+  },
+  sheetEmptyCard: {
+    borderRadius: radii.xl,
+    backgroundColor: colors.bgSoft,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
   stickyCategories: {
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
+    paddingTop: 0,
+    paddingBottom: spacing.xs,
     backgroundColor: colors.bg,
   },
   chipsContent: {
@@ -346,39 +821,59 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxxl,
-    gap: spacing.xl,
+    gap: spacing.sm,
   },
   listContentWithCart: {
     paddingBottom: 116,
   },
   topContent: {
-    gap: spacing.md,
+    backgroundColor: colors.bg,
     paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
   },
   headerRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
   },
-  headerCopy: {
+  locationButton: {
     flex: 1,
-    gap: 2,
-    paddingTop: spacing.xs,
+    minHeight: 48,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
-  headerTitle: {
+  locationButtonPressed: {
+    opacity: 0.9,
+  },
+  locationIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  locationTitle: {
     color: colors.text,
-    fontSize: typography.body,
-    lineHeight: 20,
+    fontSize: typography.bodySm,
+    lineHeight: 18,
     fontWeight: typography.medium,
   },
-  headerMeta: {
+  locationMeta: {
     color: colors.muted,
     fontSize: typography.caption,
   },
   avatar: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
     alignItems: "center",
@@ -392,9 +887,9 @@ const styles = StyleSheet.create({
   avatarBadge: {
     position: "absolute",
     bottom: -2,
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: spacing.sm,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
     borderRadius: radii.pill,
     backgroundColor: colors.accent,
     alignItems: "center",
@@ -402,33 +897,69 @@ const styles = StyleSheet.create({
   },
   avatarBadgeText: {
     color: colors.surface,
+    fontSize: 11,
+    fontWeight: typography.medium,
+  },
+  addressOption: {
+    borderRadius: radii.xl,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surfaceStrong,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  addressOptionActive: {
+    backgroundColor: colors.accentSoft,
+  },
+  addressBulletWrap: {
+    paddingTop: 6,
+  },
+  addressBullet: {
+    width: 12,
+    height: 12,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+  },
+  addressBulletActive: {
+    backgroundColor: colors.accent,
+  },
+  addressOptionCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  addressOptionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+  },
+  addressOptionTitle: {
+    color: colors.text,
+    fontSize: typography.body,
+    fontWeight: typography.medium,
+  },
+  addressOptionBadge: {
+    color: colors.accent,
     fontSize: typography.caption,
     fontWeight: typography.medium,
   },
-  modeTrack: {
-    minHeight: 48,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-    padding: 4,
-    flexDirection: "row",
-    gap: spacing.xs,
-  },
-  modeSegment: {
-    flex: 1,
-    borderRadius: radii.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modeSegmentActive: {
-    backgroundColor: colors.accent,
-  },
-  modeSegmentLabel: {
+  addressOptionText: {
     color: colors.muted,
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    lineHeight: 20,
   },
-  modeSegmentLabelActive: {
-    color: colors.surface,
+  editAddressButton: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  sheetFooter: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   section: {
     gap: spacing.xs,
