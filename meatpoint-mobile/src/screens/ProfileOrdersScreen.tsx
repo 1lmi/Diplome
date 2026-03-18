@@ -24,9 +24,9 @@ export default function ProfileOrdersScreen() {
   if (!user) {
     return (
       <Screen>
-        <PageHeader showBack subtitle="История доступна после входа" title="Все заказы" />
+        <PageHeader showBack subtitle="История доступна только после входа" title="Все заказы" />
         <EmptyState
-          description="Войдите в аккаунт, чтобы видеть оформленные заказы и статусы."
+          description="Войдите в аккаунт, чтобы увидеть оформленные заказы и их статусы."
           icon="user"
           title="Вы ещё не вошли"
         />
@@ -36,7 +36,7 @@ export default function ProfileOrdersScreen() {
 
   return (
     <Screen>
-      <PageHeader showBack subtitle="Ваши актуальные и завершённые заказы" title="Все заказы" />
+      <PageHeader showBack subtitle="Актуальные и завершённые заказы" title="Все заказы" />
 
       {ordersQuery.isLoading ? (
         <EmptyState
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   orderTitle: {
     color: colors.text,
     fontSize: typography.body,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   orderMeta: {
     color: colors.muted,
@@ -122,6 +122,6 @@ const styles = StyleSheet.create({
   orderAmount: {
     color: colors.text,
     fontSize: typography.body,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
 });

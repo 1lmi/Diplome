@@ -4,18 +4,26 @@ import { StyleSheet, View } from "react-native";
 
 import { colors, radii, spacing, shadows } from "@/src/theme/tokens";
 
-export function SectionCard({ children }: { children: ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+export function SectionCard({
+  children,
+  compact = false,
+}: {
+  children: ReactNode;
+  compact?: boolean;
+}) {
+  return <View style={[styles.card, compact ? styles.compact : null]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: "rgba(234, 223, 211, 0.52)",
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radii.xl,
     padding: spacing.lg,
     gap: spacing.md,
     ...shadows.soft,
+  },
+  compact: {
+    padding: spacing.md,
+    gap: spacing.sm,
   },
 });

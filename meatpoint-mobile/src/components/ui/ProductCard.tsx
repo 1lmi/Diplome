@@ -4,8 +4,8 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { ProductDisplay } from "@/src/api/types";
-import { formatPrice, getDisplayImage, sizeCaption } from "@/src/lib/format";
-import { colors, radii, shadows, spacing, typography } from "@/src/theme/tokens";
+import { formatPrice, getDisplayImage } from "@/src/lib/format";
+import { colors, radii, spacing, typography } from "@/src/theme/tokens";
 
 export function ProductCard({
   product,
@@ -16,15 +16,8 @@ export function ProductCard({
   onPress(): void;
   onAdd?(): void;
 }) {
-  const previewVariant = product.variants[0];
-  const previewSize = sizeCaption(
-    previewVariant?.size_label || previewVariant?.size_name,
-    previewVariant?.size_amount,
-    previewVariant?.size_unit
-  );
-
   return (
-    <Pressable style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]} onPress={onPress}>
+    <Pressable style={({ pressed }) => [styles.card, pressed ? styles.cardPressed : null]} onPress={onPress}>
       <View style={styles.imageWrap}>
         <Image
           contentFit="contain"
@@ -37,14 +30,11 @@ export function ProductCard({
         <Text numberOfLines={2} style={styles.name}>
           {product.name}
         </Text>
-        <Text style={styles.meta}>{previewSize || "Стандартная порция"}</Text>
       </View>
 
       <View style={styles.control}>
         <Text style={styles.price}>
-          {product.variants.length > 1
-            ? `от ${formatPrice(product.minPrice)}`
-            : formatPrice(product.minPrice)}
+          {product.variants.length > 1 ? `от ${formatPrice(product.minPrice)}` : formatPrice(product.minPrice)}
         </Text>
         <Pressable
           hitSlop={8}
@@ -54,7 +44,7 @@ export function ProductCard({
           }}
           style={({ pressed }) => [styles.addButton, pressed ? styles.addButtonPressed : null]}
         >
-          <Feather color={colors.text} name="plus" size={18} />
+          <Feather color={colors.text} name="plus" size={16} />
         </Pressable>
       </View>
     </Pressable>
@@ -64,50 +54,40 @@ export function ProductCard({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    borderRadius: radii.xl,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-    gap: spacing.md,
+    gap: spacing.xs,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
   },
-  pressed: {
-    opacity: 0.94,
-    transform: [{ scale: 0.986 }],
+  cardPressed: {
+    opacity: 0.96,
   },
   imageWrap: {
-    height: 176,
+    height: 152,
     borderRadius: radii.xl,
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
-    ...shadows.soft,
   },
   image: {
-    width: "92%",
-    height: "92%",
+    width: "90%",
+    height: "90%",
   },
   body: {
-    gap: 4,
     paddingHorizontal: spacing.xs,
-    minHeight: 60,
+    minHeight: 34,
   },
   name: {
     color: colors.text,
     fontSize: typography.body,
-    lineHeight: 21,
+    lineHeight: 20,
     fontWeight: typography.medium,
   },
-  meta: {
-    color: colors.muted,
-    fontSize: typography.caption,
-  },
   control: {
-    minHeight: 44,
+    minHeight: 38,
     borderRadius: radii.pill,
     backgroundColor: colors.surfaceMuted,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.sm,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -115,19 +95,18 @@ const styles = StyleSheet.create({
   },
   price: {
     color: colors.text,
-    fontSize: typography.body,
-    fontWeight: typography.medium,
+    fontSize: typography.bodySm,
+    fontWeight: typography.semibold,
   },
   addButton: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceStrong,
     alignItems: "center",
     justifyContent: "center",
   },
   addButtonPressed: {
     opacity: 0.88,
-    transform: [{ scale: 0.96 }],
   },
 });

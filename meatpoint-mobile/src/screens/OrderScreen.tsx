@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import React, { useMemo } from "react";
-import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
 
 import { mobileApi } from "@/src/api/mobile-api";
@@ -11,11 +11,7 @@ import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
 import { SectionCard } from "@/src/components/ui/SectionCard";
 import { StatusPill } from "@/src/components/ui/StatusPill";
-import {
-  formatDateTime,
-  formatPrice,
-  getDisplayImage,
-} from "@/src/lib/format";
+import { formatDateTime, formatPrice, getDisplayImage } from "@/src/lib/format";
 import { buildOrderProgress, getActiveHistoryEntry } from "@/src/lib/order-progress";
 import { useAuthStore } from "@/src/store/auth-store";
 import { useTrackingStore } from "@/src/store/tracking-store";
@@ -54,8 +50,12 @@ export default function OrderScreen() {
   if (orderQuery.isLoading) {
     return (
       <Screen>
-        <PageHeader showBack subtitle="Подгружаем детали" title={`Заказ №${orderId || "—"}`} />
-        <EmptyState description="Секунду, собираем статус и состав заказа." icon="loader" title="Загружаем" />
+        <PageHeader showBack subtitle="Подгружаем детали заказа" title={`Заказ №${orderId || "—"}`} />
+        <EmptyState
+          description="Секунду, собираем статус и состав заказа."
+          icon="loader"
+          title="Загружаем"
+        />
       </Screen>
     );
   }
@@ -81,7 +81,12 @@ export default function OrderScreen() {
         showBack
         subtitle={formatDateTime(order.created_at)}
         title={`Заказ №${order.id}`}
-        right={<StatusPill label={order.status_name} tone={order.status === "canceled" ? "danger" : "accent"} />}
+        right={
+          <StatusPill
+            label={order.status_name}
+            tone={order.status === "canceled" ? "danger" : "accent"}
+          />
+        }
       />
 
       <SectionCard>
@@ -93,7 +98,9 @@ export default function OrderScreen() {
             {formatDateTime(activeHistory?.changed_at || order.created_at)}
           </Text>
           <Text style={styles.statusText}>
-            {activeHistory?.comment || order.comment || "Мы обновим этот экран, как только статус изменится."}
+            {activeHistory?.comment ||
+              order.comment ||
+              "Мы обновим этот экран, как только статус изменится."}
           </Text>
         </View>
       </SectionCard>
@@ -160,10 +167,8 @@ const styles = StyleSheet.create({
     fontWeight: typography.semibold,
   },
   statusCard: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceTint,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -186,14 +191,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
   },
   lineImage: {
     width: 56,
     height: 56,
     borderRadius: radii.md,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.surfaceMuted,
   },
   lineCopy: {
     flex: 1,
@@ -202,7 +205,7 @@ const styles = StyleSheet.create({
   lineTitle: {
     color: colors.text,
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   lineMeta: {
     color: colors.muted,
@@ -239,8 +242,6 @@ const styles = StyleSheet.create({
   detailRow: {
     gap: 4,
     paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
   },
   detailLabel: {
     color: colors.muted,

@@ -7,26 +7,22 @@ import { colors, radii, spacing, typography } from "@/src/theme/tokens";
 const toneStyle = {
   completed: {
     dotBg: colors.accent,
-    dotBorder: colors.accent,
-    line: "rgba(230, 122, 46, 0.35)",
+    line: "rgba(230, 122, 46, 0.28)",
     text: colors.text,
   },
   current: {
     dotBg: colors.accent,
-    dotBorder: colors.accent,
-    line: colors.border,
+    line: colors.line,
     text: colors.text,
   },
   future: {
     dotBg: colors.surfaceStrong,
-    dotBorder: colors.border,
-    line: colors.border,
+    line: colors.line,
     text: colors.muted,
   },
   danger: {
     dotBg: colors.danger,
-    dotBorder: colors.danger,
-    line: colors.border,
+    line: colors.line,
     text: colors.danger,
   },
 } as const;
@@ -40,12 +36,7 @@ export function OrderProgress({ steps }: { steps: OrderProgressStep[] }) {
           <View key={step.key} style={styles.step}>
             <View style={styles.track}>
               {index > 0 ? <View style={[styles.line, { backgroundColor: tone.line }]} /> : null}
-              <View
-                style={[
-                  styles.dot,
-                  { backgroundColor: tone.dotBg, borderColor: tone.dotBorder },
-                ]}
-              />
+              <View style={[styles.dot, { backgroundColor: tone.dotBg }]} />
             </View>
             <View style={styles.copy}>
               <Text style={[styles.label, { color: tone.text }]}>{step.label}</Text>
@@ -73,28 +64,27 @@ const styles = StyleSheet.create({
   },
   line: {
     position: "absolute",
-    top: -14,
+    top: -16,
     width: 2,
-    height: 14,
+    height: 16,
   },
   dot: {
     width: 10,
     height: 10,
     borderRadius: radii.pill,
-    borderWidth: 2,
-    marginTop: 1,
+    marginTop: 2,
   },
   copy: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   label: {
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   caption: {
     color: colors.muted,
     fontSize: typography.caption,
-    lineHeight: 17,
+    lineHeight: 18,
   },
 });

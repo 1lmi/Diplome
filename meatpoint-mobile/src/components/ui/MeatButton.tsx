@@ -1,8 +1,7 @@
-import { ActivityIndicator } from "react-native";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, radii, spacing, typography } from "@/src/theme/tokens";
+import { colors, radii, shadows, spacing, typography } from "@/src/theme/tokens";
 
 type Variant = "primary" | "secondary" | "ghost";
 type Size = "default" | "cta";
@@ -24,6 +23,15 @@ export function MeatButton({
   loading?: boolean;
   fullWidth?: boolean;
 }) {
+  const label =
+    typeof children === "string" ? (
+      <Text style={[styles.label, labelStyles[variant], size === "cta" ? styles.labelCta : null]}>
+        {children}
+      </Text>
+    ) : (
+      children
+    );
+
   return (
     <Pressable
       disabled={disabled || loading}
@@ -32,9 +40,10 @@ export function MeatButton({
         styles.base,
         variantStyles[variant],
         size === "cta" ? styles.cta : styles.default,
-        fullWidth && styles.fullWidth,
+        fullWidth ? styles.fullWidth : null,
         pressed && !disabled && !loading ? styles.pressed : null,
         disabled ? styles.disabled : null,
+        variant === "primary" ? shadows.soft : null,
       ]}
     >
       {loading ? (
@@ -43,26 +52,10 @@ export function MeatButton({
             color={variant === "primary" ? colors.surfaceStrong : colors.accent}
             size="small"
           />
-          <Text
-            style={[
-              styles.label,
-              variant === "primary" ? styles.labelPrimary : styles.labelSecondary,
-            ]}
-          >
-            Загружаем
-          </Text>
+          <Text style={[styles.label, labelStyles[variant]]}>Загрузка…</Text>
         </View>
-      ) : typeof children === "string" ? (
-        <Text
-          style={[
-            styles.label,
-            variant === "primary" ? styles.labelPrimary : styles.labelSecondary,
-          ]}
-        >
-          {children}
-        </Text>
       ) : (
-        children
+        label
       )}
     </Pressable>
   );
@@ -70,38 +63,35 @@ export function MeatButton({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: radii.lg,
+    borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   default: {
-    minHeight: 40,
+    minHeight: 42,
     paddingHorizontal: spacing.lg,
   },
   cta: {
-    minHeight: 50,
+    minHeight: 52,
     paddingHorizontal: spacing.xl,
   },
   fullWidth: {
     width: "100%",
   },
   pressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.985 }],
+    opacity: 0.95,
+    transform: [{ scale: 0.988 }],
   },
   disabled: {
     opacity: 0.56,
   },
   label: {
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
-  labelPrimary: {
-    color: colors.surfaceStrong,
-  },
-  labelSecondary: {
-    color: colors.accent,
+  labelCta: {
+    fontSize: typography.body,
   },
   loading: {
     flexDirection: "row",
@@ -116,11 +106,23 @@ const variantStyles = StyleSheet.create({
     borderColor: colors.accent,
   },
   secondary: {
-    backgroundColor: colors.surface,
-    borderColor: "rgba(234, 223, 211, 0.78)",
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.line,
   },
   ghost: {
     backgroundColor: "transparent",
     borderColor: "transparent",
+  },
+});
+
+const labelStyles = StyleSheet.create({
+  primary: {
+    color: colors.surfaceStrong,
+  },
+  secondary: {
+    color: colors.text,
+  },
+  ghost: {
+    color: colors.accent,
   },
 });

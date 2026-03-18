@@ -53,8 +53,7 @@ export default function ProfileScreen() {
     await queryClient.removeQueries({ queryKey: ["addresses"] });
     pushToast({
       tone: "info",
-      title: "Сессия завершена",
-      description: "Вы вышли из аккаунта.",
+      title: "Вы вышли из аккаунта",
     });
     router.replace("/profile");
   };
@@ -98,17 +97,16 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <Screen>
-        <PageHeader
-          showBack
-          subtitle="Вход, guest tracking и личные данные"
-          title="Профиль"
-        />
+        <PageHeader showBack subtitle="Вход, guest tracking и история заказов" title="Профиль" />
+
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>Оформляйте быстрее</Text>
+          <Text style={styles.heroCopy}>
+            Войдите, чтобы сохранить адреса и видеть все свои заказы в одном месте.
+          </Text>
+        </View>
 
         <SectionCard>
-          <Text style={styles.sectionTitle}>Войдите в аккаунт</Text>
-          <Text style={styles.copy}>
-            Сохраните адреса, быстро оформляйте доставку и храните историю заказов в одном месте.
-          </Text>
           <View style={styles.actionRow}>
             <MeatButton fullWidth onPress={() => router.push("/auth/sign-in")} variant="secondary">
               Войти
@@ -150,9 +148,7 @@ export default function ProfileScreen() {
 
         {recentTracking.length ? (
           <SectionCard>
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>Последние отслеживания</Text>
-            </View>
+            <Text style={styles.sectionTitle}>Последние отслеживания</Text>
             {recentTracking.map((item) => (
               <View key={item.orderId} style={styles.trackRow}>
                 <Pressable onPress={() => handleTrack(item.orderId, item.phone)} style={styles.trackInfo}>
@@ -172,7 +168,7 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
-      <PageHeader showBack subtitle="Аккаунт, адреса и история заказов" title="Профиль" />
+      <PageHeader showBack subtitle="Аккаунт, адреса и заказы" title="Профиль" />
 
       <SectionCard>
         <View style={styles.accountRow}>
@@ -183,14 +179,14 @@ export default function ProfileScreen() {
             <Text style={styles.accountName}>{user.full_name || user.first_name}</Text>
             <Text style={styles.accountLogin}>{user.login}</Text>
           </View>
-          <MeatButton onPress={() => router.push("/profile/edit")} variant="secondary">
-            Изменить
-          </MeatButton>
         </View>
         <View style={styles.metaRow}>
           {user.birth_date ? <StatusPill label={user.birth_date} tone="muted" /> : null}
           {user.gender ? <StatusPill label={user.gender} tone="muted" /> : null}
         </View>
+        <MeatButton onPress={() => router.push("/profile/edit")} variant="secondary">
+          Изменить профиль
+        </MeatButton>
       </SectionCard>
 
       <SectionCard>
@@ -212,9 +208,7 @@ export default function ProfileScreen() {
               }
               style={styles.addressRow}
             >
-              <View style={styles.addressBulletWrap}>
-                <View style={[styles.addressBullet, address.is_default ? styles.addressBulletActive : null]} />
-              </View>
+              <View style={[styles.addressMarker, address.is_default ? styles.addressMarkerActive : null]} />
               <View style={styles.addressCopyWrap}>
                 <View style={styles.addressLabelRow}>
                   <Text style={styles.rowTitle}>{address.label || "Адрес"}</Text>
@@ -231,7 +225,7 @@ export default function ProfileScreen() {
 
       <SectionCard>
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Заказы</Text>
+          <Text style={styles.sectionTitle}>Последние заказы</Text>
           <Pressable onPress={() => router.push("/profile/orders")}>
             <Text style={styles.link}>Все</Text>
           </Pressable>
@@ -259,15 +253,11 @@ export default function ProfileScreen() {
             </Pressable>
           ))
         ) : (
-          <Text style={styles.copy}>Как только оформите первый заказ, он появится здесь.</Text>
+          <Text style={styles.copy}>Как только появится первый заказ, история покажется здесь.</Text>
         )}
       </SectionCard>
 
-      <SectionCard>
-        <Text style={styles.sectionTitle}>Аккаунт</Text>
-        <Text style={styles.copy}>
-          Для смены личных данных или адресов используйте экран редактирования и адресную книгу выше.
-        </Text>
+      <SectionCard compact>
         <MeatButton fullWidth onPress={handleLogout} variant="secondary">
           Выйти
         </MeatButton>
@@ -277,24 +267,44 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  hero: {
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroTitle: {
+    color: colors.text,
+    fontSize: typography.title,
+    fontWeight: typography.semibold,
+  },
+  heroCopy: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+    lineHeight: 20,
+    maxWidth: 320,
+  },
+  actionRow: {
+    gap: spacing.sm,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+  },
   sectionHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
   },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: typography.body,
-    fontWeight: typography.medium,
-  },
   copy: {
     color: colors.muted,
     fontSize: typography.bodySm,
     lineHeight: 20,
   },
-  actionRow: {
-    gap: spacing.sm,
+  link: {
+    color: colors.accent,
+    fontSize: typography.bodySm,
+    fontWeight: typography.semibold,
   },
   accountRow: {
     flexDirection: "row",
@@ -302,8 +312,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   avatar: {
-    width: 46,
-    height: 46,
+    width: 54,
+    height: 54,
     borderRadius: radii.pill,
     backgroundColor: colors.accentSoft,
     alignItems: "center",
@@ -311,7 +321,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     color: colors.accent,
-    fontSize: typography.bodySm,
+    fontSize: typography.titleSm,
     fontWeight: typography.semibold,
   },
   accountCopy: {
@@ -321,38 +331,30 @@ const styles = StyleSheet.create({
   accountName: {
     color: colors.text,
     fontSize: typography.body,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   accountLogin: {
     color: colors.muted,
-    fontSize: typography.caption,
+    fontSize: typography.bodySm,
   },
   metaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
   },
-  link: {
-    color: colors.accent,
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
-  },
   addressRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: spacing.sm,
-    paddingVertical: spacing.xs,
+    gap: spacing.md,
   },
-  addressBulletWrap: {
-    paddingTop: 6,
-  },
-  addressBullet: {
-    width: 10,
-    height: 10,
+  addressMarker: {
+    width: 12,
+    height: 12,
     borderRadius: radii.pill,
+    marginTop: 4,
     backgroundColor: colors.surfaceMuted,
   },
-  addressBulletActive: {
+  addressMarkerActive: {
     backgroundColor: colors.accent,
   },
   addressCopyWrap: {
@@ -367,29 +369,26 @@ const styles = StyleSheet.create({
   rowTitle: {
     color: colors.text,
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   rowText: {
     color: colors.muted,
-    fontSize: typography.caption,
-    lineHeight: 18,
+    fontSize: typography.bodySm,
+    lineHeight: 19,
   },
   orderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
-    paddingVertical: spacing.xs,
   },
   trackRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: spacing.md,
-    paddingVertical: spacing.xs,
   },
   trackInfo: {
     flex: 1,
-    gap: 4,
+    gap: 3,
   },
 });

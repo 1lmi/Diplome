@@ -20,34 +20,29 @@ export function StatusPill({
 const styles = StyleSheet.create({
   base: {
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    minHeight: 26,
+    paddingHorizontal: spacing.md,
+    minHeight: 28,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
   },
   label: {
     fontSize: typography.caption,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
 });
 
 const toneStyles = StyleSheet.create({
   accent: {
     backgroundColor: colors.accentSoft,
-    borderColor: "rgba(230, 122, 46, 0.14)",
   },
   success: {
     backgroundColor: "rgba(31, 157, 104, 0.12)",
-    borderColor: "rgba(31, 157, 104, 0.22)",
   },
   danger: {
     backgroundColor: "rgba(210, 74, 67, 0.1)",
-    borderColor: "rgba(210, 74, 67, 0.2)",
   },
   muted: {
     backgroundColor: colors.surfaceMuted,
-    borderColor: "rgba(234, 223, 211, 0.72)",
   },
 });
 

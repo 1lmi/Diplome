@@ -15,12 +15,12 @@ export function QuantityStepper({
 }) {
   return (
     <View style={styles.wrap}>
-      <Pressable style={styles.button} onPress={onDecrement}>
-        <Feather color={colors.text} name="minus" size={16} />
+      <Pressable style={({ pressed }) => [styles.button, pressed ? styles.buttonPressed : null]} onPress={onDecrement}>
+        <Feather color={colors.text} name="minus" size={15} />
       </Pressable>
       <Text style={styles.value}>{quantity}</Text>
-      <Pressable style={styles.button} onPress={onIncrement}>
-        <Feather color={colors.text} name="plus" size={16} />
+      <Pressable style={({ pressed }) => [styles.button, pressed ? styles.buttonPressed : null]} onPress={onIncrement}>
+        <Feather color={colors.text} name="plus" size={15} />
       </Pressable>
     </View>
   );
@@ -31,24 +31,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: "rgba(234, 223, 211, 0.72)",
-    backgroundColor: colors.surface,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
     paddingHorizontal: spacing.sm,
-    height: 34,
+    height: 38,
   },
   button: {
     width: 24,
     height: 24,
+    borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.surfaceStrong,
+  },
+  buttonPressed: {
+    opacity: 0.88,
   },
   value: {
     minWidth: 18,
     textAlign: "center",
     color: colors.text,
     fontSize: typography.caption,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
 });

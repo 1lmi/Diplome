@@ -45,8 +45,8 @@ export default function SignInScreen() {
       await queryClient.invalidateQueries();
       pushToast({
         tone: "success",
-        title: "Вход выполнен",
-        description: "Профиль и адреса уже готовы.",
+        title: "Вы вошли в профиль",
+        description: "Адреса и история заказов уже доступны.",
       });
       if (router.canGoBack()) {
         router.back();
@@ -66,10 +66,20 @@ export default function SignInScreen() {
 
   return (
     <Screen keyboard>
-      <PageHeader showBack subtitle="Войдите, чтобы хранить адреса и историю" title="Вход" />
+      <PageHeader
+        showBack
+        subtitle="Войдите, чтобы сохранить адреса и видеть свои заказы"
+        title="Вход"
+      />
+
+      <View style={styles.hero}>
+        <Text style={styles.heroTitle}>Добро пожаловать</Text>
+        <Text style={styles.heroCopy}>
+          Один аккаунт для заказов, адресов и быстрого повторного оформления.
+        </Text>
+      </View>
 
       <SectionCard>
-        <Text style={styles.title}>Добро пожаловать</Text>
         <TextField
           autoCapitalize="none"
           error={errors.login}
@@ -98,7 +108,7 @@ export default function SignInScreen() {
       </SectionCard>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Нет аккаунта?</Text>
+        <Text style={styles.footerText}>Ещё нет аккаунта?</Text>
         <MeatButton onPress={() => router.replace("/auth/sign-up")} variant="ghost">
           Создать
         </MeatButton>
@@ -108,13 +118,23 @@ export default function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
+  hero: {
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroTitle: {
     color: colors.text,
-    fontSize: typography.titleSm,
+    fontSize: typography.title,
     fontWeight: typography.semibold,
   },
+  heroCopy: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+    lineHeight: 20,
+    maxWidth: 320,
+  },
   footer: {
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

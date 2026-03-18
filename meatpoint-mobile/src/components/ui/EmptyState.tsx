@@ -26,17 +26,15 @@ export function EmptyState({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: "rgba(234, 223, 211, 0.52)",
-    backgroundColor: colors.surface,
-    padding: spacing.xl,
     alignItems: "center",
-    gap: spacing.sm,
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xxxl,
+    gap: spacing.md,
   },
   icon: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
     backgroundColor: colors.accentSoft,
     alignItems: "center",
@@ -44,13 +42,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: typography.body,
-    fontWeight: typography.medium,
+    fontSize: typography.titleSm,
+    fontWeight: typography.semibold,
+    textAlign: "center",
   },
   description: {
     color: colors.muted,
     fontSize: typography.bodySm,
     textAlign: "center",
     lineHeight: 20,
+    maxWidth: 320,
   },
 });

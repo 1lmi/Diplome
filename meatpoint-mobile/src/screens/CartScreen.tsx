@@ -34,7 +34,7 @@ export default function CartScreen() {
   if (!items.length) {
     return (
       <Screen>
-        <PageHeader showBack subtitle="Добавьте позиции из меню" title="Корзина" />
+        <PageHeader showBack subtitle="Добавьте пару позиций из меню" title="Корзина" />
         <EmptyState
           description="Как только выберете блюда, они появятся здесь вместе с итоговой суммой."
           icon="shopping-bag"
@@ -63,7 +63,7 @@ export default function CartScreen() {
         showsVerticalScrollIndicator={false}
       >
         {items.map((item) => (
-          <SectionCard key={item.productSizeId}>
+          <SectionCard key={item.productSizeId} compact>
             <View style={styles.itemRow}>
               <Image
                 contentFit="cover"
@@ -80,7 +80,10 @@ export default function CartScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <Pressable onPress={() => changeQuantity(item.productSizeId, 0)} style={styles.removeButton}>
+                  <Pressable
+                    onPress={() => changeQuantity(item.productSizeId, 0)}
+                    style={styles.removeButton}
+                  >
                     <Feather color={colors.muted} name="x" size={16} />
                   </Pressable>
                 </View>
@@ -106,7 +109,10 @@ export default function CartScreen() {
                 <Pressable
                   key={product.id}
                   onPress={() => addProduct(product.variants[0])}
-                  style={({ pressed }) => [styles.upsellCard, pressed ? styles.upsellCardPressed : null]}
+                  style={({ pressed }) => [
+                    styles.upsellCard,
+                    pressed ? styles.upsellCardPressed : null,
+                  ]}
                 >
                   <Text numberOfLines={2} style={styles.upsellName}>
                     {product.name}
@@ -124,7 +130,7 @@ export default function CartScreen() {
             <Text style={styles.summaryValue}>{formatPrice(totalPrice)}</Text>
           </View>
           <MeatButton fullWidth size="cta" onPress={() => router.push("/checkout")}>
-            Продолжить
+            Оформить заказ
           </MeatButton>
         </SectionCard>
       </ScrollView>
@@ -162,7 +168,7 @@ const styles = StyleSheet.create({
   itemName: {
     color: colors.text,
     fontSize: typography.body,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   itemMeta: {
     color: colors.muted,
@@ -183,12 +189,12 @@ const styles = StyleSheet.create({
   itemPrice: {
     color: colors.text,
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   sectionTitle: {
     color: colors.text,
     fontSize: typography.body,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   upsellGrid: {
     flexDirection: "row",
@@ -199,7 +205,7 @@ const styles = StyleSheet.create({
     minWidth: "47%",
     flexGrow: 1,
     borderRadius: radii.lg,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceTint,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -215,7 +221,7 @@ const styles = StyleSheet.create({
   upsellPrice: {
     color: colors.accent,
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   summaryRow: {
     flexDirection: "row",
@@ -229,6 +235,6 @@ const styles = StyleSheet.create({
   summaryValue: {
     color: colors.text,
     fontSize: typography.titleSm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
 });

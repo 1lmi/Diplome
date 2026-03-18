@@ -21,14 +21,14 @@ export function Screen({
       alwaysBounceVertical={false}
       bounces={false}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[styles.content, padded && styles.padded]}
+      contentContainerStyle={[styles.content, padded ? styles.padded : null]}
       overScrollMode="never"
       showsVerticalScrollIndicator={false}
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.content, padded && styles.padded]}>{children}</View>
+    <View style={[styles.content, padded ? styles.padded : null]}>{children}</View>
   );
 
   const body = keyboard ? (
@@ -59,6 +59,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
+    paddingTop: spacing.sm,
   },
   padded: {
     paddingHorizontal: spacing.lg,

@@ -38,7 +38,7 @@ export default function SignUpScreen() {
     if (!firstName.trim()) nextErrors.firstName = "Укажите имя.";
     if (!login.trim()) nextErrors.login = "Укажите логин.";
     if (!PASSWORD_POLICY_RE.test(password)) {
-      nextErrors.password = "Минимум 8 символов, 1 заглавная буква и 1 цифра.";
+      nextErrors.password = "Минимум 8 символов, одна заглавная буква и одна цифра.";
     }
     if (password !== confirmPassword) {
       nextErrors.confirmPassword = "Пароли не совпадают.";
@@ -68,7 +68,7 @@ export default function SignUpScreen() {
       pushToast({
         tone: "success",
         title: "Аккаунт создан",
-        description: "Теперь можно сохранять адреса и заказы.",
+        description: "Теперь можно сохранять адреса и отслеживать заказы.",
       });
       router.replace("/profile");
     } catch (error: any) {
@@ -84,10 +84,20 @@ export default function SignUpScreen() {
 
   return (
     <Screen keyboard>
-      <PageHeader showBack subtitle="Создайте аккаунт для быстрых заказов" title="Регистрация" />
+      <PageHeader
+        showBack
+        subtitle="Новый аккаунт для быстрых заказов и сохранённых адресов"
+        title="Регистрация"
+      />
+
+      <View style={styles.hero}>
+        <Text style={styles.heroTitle}>Новый аккаунт</Text>
+        <Text style={styles.heroCopy}>
+          Заполните только главное. Остальные данные всегда можно отредактировать позже.
+        </Text>
+      </View>
 
       <SectionCard>
-        <Text style={styles.title}>Новый аккаунт</Text>
         <TextField
           error={errors.firstName}
           label="Имя"
@@ -116,12 +126,13 @@ export default function SignUpScreen() {
           value={login}
         />
         <TextField
-          helper="Формат YYYY-MM-DD"
+          helper="Формат: YYYY-MM-DD"
           label="Дата рождения"
           onChangeText={setBirthDate}
           placeholder="2000-12-31"
           value={birthDate}
         />
+
         <View style={styles.group}>
           <Text style={styles.groupLabel}>Пол</Text>
           <SegmentedControl
@@ -135,9 +146,10 @@ export default function SignUpScreen() {
             scrollable
           />
         </View>
+
         <TextField
           error={errors.password}
-          helper="Минимум 8 символов, 1 заглавная буква и 1 цифра."
+          helper="Минимум 8 символов, одна заглавная буква и одна цифра."
           label="Пароль"
           onChangeText={(value) => {
             setErrors((current) => ({ ...current, password: "" }));
@@ -167,10 +179,20 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
+  hero: {
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroTitle: {
     color: colors.text,
-    fontSize: typography.titleSm,
+    fontSize: typography.title,
     fontWeight: typography.semibold,
+  },
+  heroCopy: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+    lineHeight: 20,
+    maxWidth: 320,
   },
   group: {
     gap: spacing.sm,

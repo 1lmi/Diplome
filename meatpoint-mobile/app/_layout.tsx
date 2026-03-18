@@ -6,6 +6,7 @@ import "react-native-reanimated";
 
 import { AppProviders } from "@/src/providers/AppProviders";
 import { useAuthStore } from "@/src/store/auth-store";
+import { colors } from "@/src/theme/tokens";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -27,9 +28,15 @@ function RootNavigator() {
 
   return (
     <>
-      <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "simple_push",
+          contentStyle: { backgroundColor: colors.bg },
+        }}
+      >
         <Stack.Screen name="index" />
-        <Stack.Screen name="cart" />
+        <Stack.Screen name="cart" options={{ animation: "slide_from_bottom" }} />
         <Stack.Screen
           name="product/[id]"
           options={{
@@ -37,15 +44,15 @@ function RootNavigator() {
             animation: "fade",
           }}
         />
-        <Stack.Screen name="checkout" />
-        <Stack.Screen name="order/[id]" />
-        <Stack.Screen name="auth/sign-in" />
-        <Stack.Screen name="auth/sign-up" />
-        <Stack.Screen name="profile/index" />
-        <Stack.Screen name="profile/orders" />
-        <Stack.Screen name="profile/edit" />
-        <Stack.Screen name="address/new" />
-        <Stack.Screen name="address/[id]" />
+        <Stack.Screen name="checkout" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="order/[id]" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="auth/sign-in" options={{ animation: "slide_from_bottom" }} />
+        <Stack.Screen name="auth/sign-up" options={{ animation: "slide_from_bottom" }} />
+        <Stack.Screen name="profile/index" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="profile/orders" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="profile/edit" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="address/new" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="address/[id]" options={{ animation: "slide_from_right" }} />
       </Stack>
       <StatusBar style="dark" />
     </>

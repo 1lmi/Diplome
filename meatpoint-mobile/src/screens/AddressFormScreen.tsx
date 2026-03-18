@@ -121,8 +121,8 @@ export function AddressFormScreen({ addressId }: { addressId?: number | null }) 
     <Screen keyboard>
       <PageHeader
         showBack
-        subtitle={editingAddress ? "Обновите данные адреса" : "Добавьте новый адрес"}
-        title={editingAddress ? "Редактирование адреса" : "Новый адрес"}
+        subtitle={editingAddress ? "Обновите сохранённый адрес" : "Добавьте новый адрес для доставки"}
+        title={editingAddress ? "Редактировать адрес" : "Новый адрес"}
       />
 
       <SectionCard>
@@ -170,10 +170,8 @@ export function AddressFormScreen({ addressId }: { addressId?: number | null }) 
 
 const styles = StyleSheet.create({
   toggle: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
+    borderRadius: radii.xl,
+    backgroundColor: colors.surfaceTint,
     padding: spacing.md,
     flexDirection: "row",
     alignItems: "center",
@@ -181,7 +179,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   toggleActive: {
-    borderColor: colors.accent,
     backgroundColor: colors.accentSoft,
   },
   toggleCopy: {
@@ -191,7 +188,7 @@ const styles = StyleSheet.create({
   toggleTitle: {
     color: colors.text,
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   toggleText: {
     color: colors.muted,
@@ -199,15 +196,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   toggleDot: {
-    width: 16,
-    height: 16,
+    width: 18,
+    height: 18,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.surfaceStrong,
   },
   toggleDotActive: {
     backgroundColor: colors.accent,
-    borderColor: colors.accent,
   },
 });

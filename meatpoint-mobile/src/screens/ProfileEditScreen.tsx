@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { mobileApi } from "@/src/api/mobile-api";
 import { MeatButton } from "@/src/components/ui/MeatButton";
@@ -66,28 +66,31 @@ export default function ProfileEditScreen() {
 
   return (
     <Screen keyboard>
-      <PageHeader showBack subtitle="Обновите свои данные" title="Личные данные" />
+      <PageHeader showBack subtitle="Личные данные и отображение профиля" title="Редактировать профиль" />
 
       <SectionCard>
         <TextField label="Логин" value={user.login} editable={false} />
         <TextField label="Имя" onChangeText={setFirstName} value={firstName} />
         <TextField label="Фамилия" onChangeText={setLastName} value={lastName} />
         <TextField
-          helper="Формат YYYY-MM-DD"
+          helper="Формат: YYYY-MM-DD"
           label="Дата рождения"
           onChangeText={setBirthDate}
           value={birthDate}
         />
-        <SegmentedControl
-          options={[
-            { label: "Не указан", value: "none" },
-            { label: "Мужской", value: "male" },
-            { label: "Женский", value: "female" },
-          ]}
-          value={gender}
-          onChange={setGender}
-          scrollable
-        />
+        <View style={styles.group}>
+          <Text style={styles.groupLabel}>Пол</Text>
+          <SegmentedControl
+            options={[
+              { label: "Не указан", value: "none" },
+              { label: "Мужской", value: "male" },
+              { label: "Женский", value: "female" },
+            ]}
+            value={gender}
+            onChange={setGender}
+            scrollable
+          />
+        </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <MeatButton fullWidth loading={loading} onPress={handleSave} size="cta">
           Сохранить
@@ -98,6 +101,14 @@ export default function ProfileEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  group: {
+    gap: 8,
+  },
+  groupLabel: {
+    color: colors.muted,
+    fontSize: typography.caption,
+    fontWeight: typography.medium,
+  },
   error: {
     color: colors.danger,
     fontSize: typography.caption,

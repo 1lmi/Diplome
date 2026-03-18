@@ -94,7 +94,7 @@ export default function CheckoutScreen() {
       nextErrors.customerName = "Укажите имя получателя.";
     }
     if (!normalizePhone(checkoutDraft.customerPhone)) {
-      nextErrors.customerPhone = "Укажите номер телефона для заказа.";
+      nextErrors.customerPhone = "Укажите телефон для заказа.";
     }
     if (needsAddress && !checkoutDraft.address.trim()) {
       nextErrors.address = "Укажите адрес доставки.";
@@ -209,7 +209,7 @@ export default function CheckoutScreen() {
           <View style={styles.headerWrap}>
             <PageHeader
               showBack
-              subtitle="Проверьте данные перед отправкой"
+              subtitle="Проверьте данные перед отправкой заказа"
               title="Оформление"
             />
           </View>
@@ -217,7 +217,7 @@ export default function CheckoutScreen() {
           {!user ? (
             <View style={styles.sectionWrap}>
               <SectionCard>
-                <Text style={styles.sectionTitle}>Оформляете как гость</Text>
+                <Text style={styles.sectionTitle}>Вы оформляете как гость</Text>
                 <Text style={styles.helperCopy}>
                   Можно продолжить без аккаунта или войти, чтобы использовать сохранённые адреса и историю заказов.
                 </Text>
@@ -271,6 +271,7 @@ export default function CheckoutScreen() {
                   { label: "Доставка", value: "delivery" },
                   { label: "Самовывоз", value: "pickup" },
                 ]}
+                tone="accent"
                 value={checkoutDraft.deliveryMethod}
                 onChange={(value) => {
                   updateCheckoutDraft({ deliveryMethod: value });
@@ -355,9 +356,7 @@ export default function CheckoutScreen() {
               <TextField
                 helper={`${checkoutDraft.comment.length}/300`}
                 multiline
-                onChangeText={(value) =>
-                  updateCheckoutDraft({ comment: value.slice(0, 300) })
-                }
+                onChangeText={(value) => updateCheckoutDraft({ comment: value.slice(0, 300) })}
                 placeholder="Важная информация для кухни или курьера"
                 value={checkoutDraft.comment}
               />
@@ -399,7 +398,7 @@ export default function CheckoutScreen() {
                 </View>
               ) : (
                 <Text style={styles.helperCopy}>
-                  Оплата картой при получении. Онлайн-эквайринг в приложении пока не нужен.
+                  Оплата картой при получении. Онлайн-эквайринг в приложении пока не используется.
                 </Text>
               )}
 
@@ -429,7 +428,7 @@ export default function CheckoutScreen() {
           <View style={styles.sectionWrap}>
             <SectionCard>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Позиции</Text>
+                <Text style={styles.summaryLabel}>Позиций</Text>
                 <Text style={styles.summaryValue}>{items.length}</Text>
               </View>
               <View style={styles.summaryRow}>
@@ -497,10 +496,8 @@ const styles = StyleSheet.create({
     fontWeight: typography.medium,
   },
   addressOption: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceTint,
     padding: spacing.md,
     flexDirection: "row",
     alignItems: "center",
@@ -508,7 +505,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   addressOptionActive: {
-    borderColor: colors.accent,
     backgroundColor: colors.accentSoft,
   },
   addressOptionCopy: {
@@ -518,7 +514,7 @@ const styles = StyleSheet.create({
   addressOptionTitle: {
     color: colors.text,
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   addressOptionText: {
     color: colors.muted,
@@ -526,16 +522,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   dotBadge: {
-    width: 10,
-    height: 10,
+    width: 12,
+    height: 12,
     borderRadius: radii.pill,
     backgroundColor: colors.accent,
   },
   switchRow: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
+    borderRadius: radii.xl,
+    backgroundColor: colors.surfaceTint,
     padding: spacing.md,
     flexDirection: "row",
     alignItems: "center",
@@ -543,7 +537,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   switchRowActive: {
-    borderColor: colors.accent,
     backgroundColor: colors.accentSoft,
   },
   switchCopy: {
@@ -553,7 +546,7 @@ const styles = StyleSheet.create({
   switchTitle: {
     color: colors.text,
     fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
   },
   switchText: {
     color: colors.muted,
@@ -561,16 +554,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   switchBullet: {
-    width: 16,
-    height: 16,
+    width: 18,
+    height: 18,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.surfaceStrong,
   },
   switchBulletActive: {
     backgroundColor: colors.accent,
-    borderColor: colors.accent,
   },
   summaryRow: {
     flexDirection: "row",

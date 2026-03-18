@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+﻿import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
@@ -50,6 +50,7 @@ function chunkProducts(products: ProductDisplay[], chunkSize = 2) {
 export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
   const cartItems = useCartStore((state) => state.items);
+  const lastAddedAt = useCartStore((state) => state.lastAddedAt);
   const checkoutAddress = useCartStore((state) => state.checkoutDraft.address);
   const deliveryMethod = useCartStore((state) => state.checkoutDraft.deliveryMethod);
   const updateCheckoutDraft = useCartStore((state) => state.updateCheckoutDraft);
@@ -63,13 +64,22 @@ export default function HomeScreen() {
     enabled: Boolean(user),
   });
   const scrollRef = useRef<ScrollView>(null);
+  const chipsRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<string, number>>({});
+  const chipOffsets = useRef<Record<string, { x: number; width: number }>>({});
+  const chipsViewportWidth = useRef(0);
+  const lastScrollY = useRef(0);
   const pendingCategoryJump = useRef<{ categoryId: string; y: number } | null>(null);
   const pendingCategoryJumpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const categoryIndicatorX = useRef(new Animated.Value(0)).current;
+  const categoryIndicatorWidth = useRef(new Animated.Value(0)).current;
+  const categoryIndicatorOpacity = useRef(new Animated.Value(0)).current;
+  const categoryIndicatorReady = useRef(false);
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(30)).current;
 
   const [activeCategory, setActiveCategory] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tempMethod, setTempMethod] = useState<DeliveryMethod>(deliveryMethod);
   const [tempAddress, setTempAddress] = useState("");
@@ -88,6 +98,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!visibleSections.length) {
       setActiveCategory("");
+      setSelectedCategory("");
       return;
     }
 
@@ -95,7 +106,12 @@ export default function HomeScreen() {
     if (!activeCategory || !hasCurrent) {
       setActiveCategory(visibleSections[0].categoryId);
     }
-  }, [activeCategory, visibleSections]);
+
+    const hasSelected = visibleSections.some((section) => section.categoryId === selectedCategory);
+    if (!selectedCategory || !hasSelected) {
+      setSelectedCategory(visibleSections[0].categoryId);
+    }
+  }, [activeCategory, selectedCategory, visibleSections]);
 
   useEffect(
     () => () => {
@@ -116,7 +132,7 @@ export default function HomeScreen() {
   );
   const addressTitle =
     deliveryMethod === "pickup"
-      ? "В пиццерии"
+      ? "В заведении"
       : selectedSavedAddress?.label?.trim() || (currentDeliveryAddress ? "Адрес доставки" : "Куда доставить");
   const addressCopy =
     deliveryMethod === "pickup"
@@ -136,42 +152,125 @@ export default function HomeScreen() {
       sectionOffsets.current[categoryId] = event.nativeEvent.layout.y;
     };
 
+  const registerChipOffset =
+    (categoryId: string) =>
+    (event: LayoutChangeEvent) => {
+      chipOffsets.current[categoryId] = {
+        x: event.nativeEvent.layout.x,
+        width: event.nativeEvent.layout.width,
+      };
+
+      if (categoryId === selectedCategory) {
+        const chip = chipOffsets.current[categoryId];
+        if (!chip) return;
+
+        if (!categoryIndicatorReady.current) {
+          categoryIndicatorX.setValue(chip.x);
+          categoryIndicatorWidth.setValue(chip.width);
+          categoryIndicatorOpacity.setValue(1);
+          categoryIndicatorReady.current = true;
+          return;
+        }
+
+        categoryIndicatorX.setValue(chip.x);
+        categoryIndicatorWidth.setValue(chip.width);
+      }
+    };
+
+  const setChipsViewportWidth = (event: LayoutChangeEvent) => {
+    chipsViewportWidth.current = event.nativeEvent.layout.width;
+  };
+
+  const clearPendingCategoryJump = () => {
+    pendingCategoryJump.current = null;
+    if (pendingCategoryJumpTimer.current) {
+      clearTimeout(pendingCategoryJumpTimer.current);
+      pendingCategoryJumpTimer.current = null;
+    }
+  };
+
+  const schedulePendingCategoryJumpClear = (attempt = 0) => {
+    if (pendingCategoryJumpTimer.current) {
+      clearTimeout(pendingCategoryJumpTimer.current);
+    }
+
+    pendingCategoryJumpTimer.current = setTimeout(() => {
+      const pendingJump = pendingCategoryJump.current;
+      if (!pendingJump) {
+        pendingCategoryJumpTimer.current = null;
+        return;
+      }
+
+      const reachedTarget = Math.abs(lastScrollY.current - pendingJump.y) <= 24;
+      if (reachedTarget || attempt >= 6) {
+        clearPendingCategoryJump();
+        return;
+      }
+
+      schedulePendingCategoryJumpClear(attempt + 1);
+    }, attempt === 0 ? 520 : 140);
+  };
+
+  const scrollCategoryIntoView = (categoryId: string, animated = false) => {
+    const chip = chipOffsets.current[categoryId];
+    const viewportWidth = chipsViewportWidth.current;
+    if (!chip || !viewportWidth) return;
+
+    const targetX = Math.max(chip.x + chip.width / 2 - viewportWidth / 2, 0);
+    chipsRef.current?.scrollTo({ x: targetX, animated });
+  };
+
+  const moveCategoryIndicator = (categoryId: string, animated = true) => {
+    const chip = chipOffsets.current[categoryId];
+    if (!chip) return;
+
+    if (!categoryIndicatorReady.current || !animated) {
+      categoryIndicatorX.setValue(chip.x);
+      categoryIndicatorWidth.setValue(chip.width);
+      categoryIndicatorOpacity.setValue(1);
+      categoryIndicatorReady.current = true;
+      return;
+    }
+
+    Animated.parallel([
+      Animated.timing(categoryIndicatorX, {
+        toValue: chip.x,
+        duration: motion.normal,
+        useNativeDriver: false,
+      }),
+      Animated.timing(categoryIndicatorWidth, {
+        toValue: chip.width,
+        duration: motion.normal,
+        useNativeDriver: false,
+      }),
+      Animated.timing(categoryIndicatorOpacity, {
+        toValue: 1,
+        duration: motion.fast,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  };
+
   const jumpToSection = (categoryId: string) => {
     const offset = sectionOffsets.current[categoryId];
     if (typeof offset !== "number") return;
 
     const targetY = Math.max(offset - spacing.sm, 0);
     pendingCategoryJump.current = { categoryId, y: targetY };
-    if (pendingCategoryJumpTimer.current) {
-      clearTimeout(pendingCategoryJumpTimer.current);
-    }
-    pendingCategoryJumpTimer.current = setTimeout(() => {
-      pendingCategoryJump.current = null;
-      pendingCategoryJumpTimer.current = null;
-    }, 500);
+    schedulePendingCategoryJumpClear();
 
+    setSelectedCategory(categoryId);
     scrollRef.current?.scrollTo({
       y: targetY,
       animated: true,
     });
     setActiveCategory(categoryId);
+    void Haptics.selectionAsync().catch(() => undefined);
   };
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset } = event.nativeEvent;
-    const pendingJump = pendingCategoryJump.current;
-    if (pendingJump) {
-      if (Math.abs(contentOffset.y - pendingJump.y) <= 24) {
-        pendingCategoryJump.current = null;
-        if (pendingCategoryJumpTimer.current) {
-          clearTimeout(pendingCategoryJumpTimer.current);
-          pendingCategoryJumpTimer.current = null;
-        }
-      } else {
-        return;
-      }
-    }
-
+    lastScrollY.current = contentOffset.y;
     const y = contentOffset.y + spacing.sm;
     let nextCategory = visibleSections[0]?.categoryId || "";
 
@@ -182,8 +281,27 @@ export default function HomeScreen() {
       }
     }
 
+    const pendingJump = pendingCategoryJump.current;
+    if (pendingJump) {
+      if (
+        Math.abs(contentOffset.y - pendingJump.y) <= 24 ||
+        nextCategory === pendingJump.categoryId
+      ) {
+        clearPendingCategoryJump();
+      } else {
+        if (selectedCategory !== pendingJump.categoryId) {
+          setSelectedCategory(pendingJump.categoryId);
+        }
+        return;
+      }
+    }
+
     if (nextCategory && nextCategory !== activeCategory) {
       setActiveCategory(nextCategory);
+    }
+
+    if (nextCategory && nextCategory !== selectedCategory) {
+      setSelectedCategory(nextCategory);
     }
   };
 
@@ -206,6 +324,12 @@ export default function HomeScreen() {
       description: `${product.name} теперь в заказе.`,
     });
   };
+
+  useEffect(() => {
+    if (!selectedCategory) return;
+    moveCategoryIndicator(selectedCategory);
+    scrollCategoryIntoView(selectedCategory, true);
+  }, [selectedCategory]);
 
   const openPicker = () => {
     setTempMethod(deliveryMethod);
@@ -275,7 +399,7 @@ export default function HomeScreen() {
               <Feather color={colors.accent} name="shopping-bag" size={18} />
             </View>
             <View style={styles.pickupCopy}>
-              <Text style={styles.pickupTitle}>В пиццерии Meat Point</Text>
+              <Text style={styles.pickupTitle}>В заведении</Text>
               <Text style={styles.pickupText}>Заказ приготовим к самовывозу без адреса доставки.</Text>
             </View>
           </View>
@@ -411,11 +535,6 @@ export default function HomeScreen() {
                   style={({ pressed }) => [styles.avatar, pressed ? styles.avatarPressed : null]}
                 >
                   <Feather color={colors.text} name="user" size={22} />
-                  {cartCount > 0 ? (
-                    <View style={styles.avatarBadge}>
-                      <Text style={styles.avatarBadgeText}>{cartCount}</Text>
-                    </View>
-                  ) : null}
                 </Pressable>
               </View>
             </View>
@@ -423,20 +542,37 @@ export default function HomeScreen() {
             {visibleSections.length ? (
               <View style={styles.stickyCategories}>
                 <ScrollView
+                  ref={chipsRef}
                   alwaysBounceHorizontal={false}
                   bounces={false}
                   contentContainerStyle={styles.chipsContent}
                   horizontal
+                  onLayout={setChipsViewportWidth}
                   overScrollMode="never"
                   showsHorizontalScrollIndicator={false}
                 >
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.categoryChipIndicator,
+                      {
+                        opacity: categoryIndicatorOpacity,
+                        transform: [{ translateX: categoryIndicatorX }],
+                        width: categoryIndicatorWidth,
+                      },
+                    ]}
+                  />
                   {visibleSections.map((section) => {
-                    const active = section.categoryId === activeCategory;
+                    const active = section.categoryId === selectedCategory;
                     return (
                       <Pressable
                         key={section.key}
+                        onLayout={registerChipOffset(section.categoryId)}
                         onPress={() => jumpToSection(section.categoryId)}
-                        style={[styles.categoryChip, active ? styles.categoryChipActive : null]}
+                        style={({ pressed }) => [
+                          styles.categoryChip,
+                          pressed ? styles.categoryChipPressed : null,
+                        ]}
                       >
                         <Text
                           style={[
@@ -462,11 +598,7 @@ export default function HomeScreen() {
             cartCount > 0 ? styles.listContentWithCart : null,
           ]}
           onScrollBeginDrag={() => {
-            pendingCategoryJump.current = null;
-            if (pendingCategoryJumpTimer.current) {
-              clearTimeout(pendingCategoryJumpTimer.current);
-              pendingCategoryJumpTimer.current = null;
-            }
+            clearPendingCategoryJump();
           }}
           keyboardShouldPersistTaps="handled"
           onScroll={handleScroll}
@@ -528,7 +660,12 @@ export default function HomeScreen() {
       </Screen>
 
       {cartCount > 0 ? (
-        <CartBar count={cartCount} total={cartTotal} onPress={() => router.push("/cart")} />
+        <CartBar
+          count={cartCount}
+          total={cartTotal}
+          pulseKey={lastAddedAt}
+          onPress={() => router.push("/cart")}
+        />
       ) : null}
 
       {pickerOpen ? (
@@ -797,18 +934,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   chipsContent: {
+    position: "relative",
     gap: spacing.xs,
     paddingRight: spacing.md,
+  },
+  categoryChipIndicator: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentSoft,
   },
   categoryChip: {
     minHeight: 36,
     borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: "transparent",
     justifyContent: "center",
+    zIndex: 1,
   },
-  categoryChipActive: {
-    backgroundColor: colors.accentSoft,
+  categoryChipPressed: {
+    opacity: 0.86,
   },
   categoryChipLabel: {
     color: colors.text,
@@ -828,7 +975,6 @@ const styles = StyleSheet.create({
   },
   topContent: {
     backgroundColor: colors.bg,
-    paddingTop: spacing.xs,
     paddingBottom: spacing.sm,
   },
   headerRow: {
@@ -982,3 +1128,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+

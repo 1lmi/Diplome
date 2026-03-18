@@ -1,11 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   TextInput,
   TextInputProps,
   View,
+  ViewStyle,
 } from "react-native";
 
 import { colors, radii, spacing, typography } from "@/src/theme/tokens";
@@ -23,8 +25,10 @@ export function TextField({
   error?: string;
   helper?: string;
   trailing?: React.ReactNode;
-  containerStyle?: object;
+  containerStyle?: StyleProp<ViewStyle>;
 }) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={[styles.wrap, containerStyle]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
@@ -32,6 +36,7 @@ export function TextField({
         style={[
           styles.field,
           multiline ? styles.fieldMultiline : null,
+          focused ? styles.fieldFocused : null,
           error ? styles.fieldError : null,
         ]}
       >
@@ -39,6 +44,14 @@ export function TextField({
           placeholderTextColor={colors.muted}
           style={[styles.input, multiline ? styles.inputMultiline : null]}
           multiline={multiline}
+          onBlur={(event) => {
+            setFocused(false);
+            props.onBlur?.(event);
+          }}
+          onFocus={(event) => {
+            setFocused(true);
+            props.onFocus?.(event);
+          }}
           textAlignVertical={multiline ? "top" : "center"}
           {...props}
         />
@@ -63,32 +76,36 @@ const styles = StyleSheet.create({
     fontWeight: typography.medium,
   },
   field: {
-    minHeight: 44,
-    borderRadius: radii.md,
+    minHeight: 48,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: "rgba(234, 223, 211, 0.78)",
-    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    backgroundColor: colors.surfaceStrong,
     paddingHorizontal: spacing.md,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
   },
   fieldMultiline: {
-    minHeight: 120,
+    minHeight: 128,
     alignItems: "flex-start",
     paddingVertical: spacing.md,
   },
+  fieldFocused: {
+    borderColor: "rgba(230, 122, 46, 0.48)",
+    backgroundColor: colors.surface,
+  },
   fieldError: {
-    borderColor: colors.danger,
+    borderColor: "rgba(210, 74, 67, 0.4)",
   },
   input: {
     flex: 1,
     color: colors.text,
-    fontSize: typography.bodySm,
+    fontSize: typography.body,
     paddingVertical: 0,
   },
   inputMultiline: {
-    minHeight: 96,
+    minHeight: 98,
   },
   trailing: {
     alignSelf: "center",
@@ -96,9 +113,11 @@ const styles = StyleSheet.create({
   helper: {
     color: colors.muted,
     fontSize: typography.caption,
+    lineHeight: 17,
   },
   error: {
     color: colors.danger,
     fontSize: typography.caption,
+    lineHeight: 17,
   },
 });

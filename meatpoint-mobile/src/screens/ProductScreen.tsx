@@ -4,57 +4,151 @@ import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import type { MenuItem } from "@/src/api/types";
 import { EmptyState } from "@/src/components/ui/EmptyState";
 import { MeatButton } from "@/src/components/ui/MeatButton";
-import { SegmentedControl } from "@/src/components/ui/SegmentedControl";
 import { useMenuData } from "@/src/hooks/useMenuData";
-import { formatPrice, getDisplayImage } from "@/src/lib/format";
+import { formatPrice, getDisplayImage, sizeCaption } from "@/src/lib/format";
 import { findProduct } from "@/src/lib/menu";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useCartStore } from "@/src/store/cart-store";
-import { colors, radii, spacing, typography } from "@/src/theme/tokens";
+import { colors, motion, radii, spacing, typography } from "@/src/theme/tokens";
+
+function buildVariantLabel(variant: MenuItem, index: number) {
+  return variant.size_name?.trim() || variant.size_label?.trim() || `Вариант ${index + 1}`;
+}
+
+function SizeSlider({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ label: string; value: string }>;
+  value: string;
+  onChange(value: string): void;
+}) {
+  const thumbX = useRef(new Animated.Value(0)).current;
+  const thumbWidth = useRef(new Animated.Value(0)).current;
+  const thumbOpacity = useRef(new Animated.Value(0)).current;
+  const measurements = useRef<Record<string, { x: number; width: number }>>({});
+  const ready = useRef(false);
+
+  const moveThumb = (nextValue: string, animated = true) => {
+    const next = measurements.current[nextValue];
+    if (!next) return;
+
+    if (!ready.current || !animated) {
+      thumbX.setValue(next.x);
+      thumbWidth.setValue(next.width);
+      thumbOpacity.setValue(1);
+      ready.current = true;
+      return;
+    }
+
+    Animated.parallel([
+      Animated.timing(thumbX, {
+        toValue: next.x,
+        duration: motion.normal,
+        useNativeDriver: false,
+      }),
+      Animated.timing(thumbWidth, {
+        toValue: next.width,
+        duration: motion.normal,
+        useNativeDriver: false,
+      }),
+      Animated.timing(thumbOpacity, {
+        toValue: 1,
+        duration: motion.fast,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  };
+
+  const handleLayout =
+    (optionValue: string) =>
+    (event: LayoutChangeEvent) => {
+      measurements.current[optionValue] = {
+        x: event.nativeEvent.layout.x,
+        width: event.nativeEvent.layout.width,
+      };
+
+      if (optionValue === value) {
+        moveThumb(optionValue, false);
+      }
+    };
+
+  useEffect(() => {
+    moveThumb(value);
+  }, [value]);
+
+  return (
+    <View style={styles.sizeSlider}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.sizeSliderThumb,
+          {
+            opacity: thumbOpacity,
+            transform: [{ translateX: thumbX }],
+            width: thumbWidth,
+          },
+        ]}
+      />
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            onLayout={handleLayout(option.value)}
+            onPress={() => onChange(option.value)}
+            style={styles.sizeSliderOption}
+          >
+            <Text style={[styles.sizeSliderLabel, active ? styles.sizeSliderLabelActive : null]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { menuQuery, categoriesQuery } = useMenuData();
+  const { menuQuery } = useMenuData();
   const addProduct = useCartStore((state) => state.addProduct);
   const { pushToast } = useToast();
   const insets = useSafeAreaInsets();
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(44)).current;
-  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const closingRef = useRef(false);
+  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
 
   const product = useMemo(
     () => findProduct(menuQuery.data || [], Number(id)),
     [id, menuQuery.data]
-  );
-  const categoryName = useMemo(
-    () =>
-      categoriesQuery.data?.find((item) => item.id === product?.category_id)?.name || "Позиция",
-    [categoriesQuery.data, product?.category_id]
   );
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(overlayOpacity, {
         toValue: 1,
-        duration: 180,
+        duration: motion.normal,
         useNativeDriver: true,
       }),
       Animated.timing(sheetTranslateY, {
         toValue: 0,
-        duration: 220,
+        duration: motion.slow,
         useNativeDriver: true,
       }),
     ]).start();
@@ -68,6 +162,23 @@ export default function ProductScreen() {
 
   const selectedVariant =
     product?.variants.find((variant) => variant.id === selectedVariantId) || product?.variants[0];
+  const selectedVariantWeight = sizeCaption(
+    undefined,
+    selectedVariant?.size_amount,
+    selectedVariant?.size_unit
+  );
+  const nutritionItems = useMemo(
+    () =>
+      selectedVariant
+        ? [
+            { label: "Ккал", value: selectedVariant.calories },
+            { label: "Белки", value: selectedVariant.protein },
+            { label: "Жиры", value: selectedVariant.fat },
+            { label: "Углеводы", value: selectedVariant.carbs },
+          ].filter((item) => item.value !== null && item.value !== undefined)
+        : [],
+    [selectedVariant]
+  );
 
   const handleClose = () => {
     if (closingRef.current) return;
@@ -110,11 +221,7 @@ export default function ProductScreen() {
     if (menuQuery.isLoading) {
       return (
         <View style={styles.emptyWrap}>
-          <EmptyState
-            description="Собираем карточку товара."
-            icon="loader"
-            title="Загружаем"
-          />
+          <EmptyState description="Собираем карточку товара." icon="loader" title="Загружаем" />
         </View>
       );
     }
@@ -138,7 +245,7 @@ export default function ProductScreen() {
           bounces={false}
           contentContainerStyle={[
             styles.sheetScrollContent,
-            { paddingBottom: Math.max(insets.bottom, spacing.lg) + 84 },
+            { paddingBottom: Math.max(insets.bottom, spacing.lg) + 112 },
           ]}
           overScrollMode="never"
           showsVerticalScrollIndicator={false}
@@ -146,9 +253,11 @@ export default function ProductScreen() {
           <View style={styles.sheetTop}>
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
-              <View style={styles.sheetHeaderCopy}>
-                <Text style={styles.categoryName}>{categoryName}</Text>
+              <View style={styles.titleBlock}>
                 <Text style={styles.productName}>{product.name}</Text>
+                {selectedVariantWeight ? (
+                  <Text style={styles.portionCopy}>{selectedVariantWeight}</Text>
+                ) : null}
               </View>
               <Pressable onPress={handleClose} style={styles.closeButton}>
                 <Feather color={colors.text} name="x" size={18} />
@@ -168,45 +277,31 @@ export default function ProductScreen() {
 
           {product.variants.length > 1 ? (
             <View style={styles.block}>
-              <Text style={styles.blockTitle}>Размер</Text>
-              <SegmentedControl
-                options={product.variants.map((variant) => ({
-                  label:
-                    variant.size_label ||
-                    variant.size_name ||
-                    `${variant.size_amount || ""}${variant.size_unit ? ` ${variant.size_unit}` : ""}`.trim() ||
-                    `${variant.price} ₽`,
+              <Text style={styles.blockTitle}>Выбор размера</Text>
+              <SizeSlider
+                options={product.variants.map((variant, index) => ({
+                  label: buildVariantLabel(variant, index),
                   value: String(variant.id),
                 }))}
                 value={String(selectedVariant.id)}
                 onChange={(value) => setSelectedVariantId(Number(value))}
-                scrollable
               />
             </View>
           ) : null}
 
-          <View style={styles.block}>
-            <View style={styles.infoRow}>
-              <Text style={styles.blockTitle}>КБЖУ</Text>
-              <Pressable
-                onPress={() =>
-                  Alert.alert(
-                    "КБЖУ",
-                    "Калории, белки, жиры и углеводы показаны для выбранного варианта и нужны только как справочная информация."
-                  )
-                }
-                style={styles.infoButton}
-              >
-                <Feather color={colors.muted} name="info" size={14} />
-              </Pressable>
+          {nutritionItems.length ? (
+            <View style={styles.nutritionSection}>
+              <Text style={styles.nutritionTitle}>Энергетическая ценность</Text>
+              <View style={styles.nutritionGrid}>
+                {nutritionItems.map((item) => (
+                  <View key={item.label} style={styles.nutritionCard}>
+                    <Text style={styles.nutritionValue}>{item.value}</Text>
+                    <Text style={styles.nutritionName}>{item.label}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-            <View style={styles.nutritionInline}>
-              <NutritionText label="Ккал" value={selectedVariant.calories} />
-              <NutritionText label="Б" value={selectedVariant.protein} />
-              <NutritionText label="Ж" value={selectedVariant.fat} />
-              <NutritionText label="У" value={selectedVariant.carbs} />
-            </View>
-          </View>
+          ) : null}
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
@@ -223,26 +318,10 @@ export default function ProductScreen() {
       <Animated.View style={[styles.backdrop, { opacity: overlayOpacity }]}>
         <Pressable onPress={handleClose} style={StyleSheet.absoluteFillObject} />
       </Animated.View>
-      <Animated.View
-        style={[
-          styles.sheet,
-          {
-            transform: [{ translateY: sheetTranslateY }],
-          },
-        ]}
-      >
+      <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
         {renderBody()}
       </Animated.View>
     </View>
-  );
-}
-
-function NutritionText({ label, value }: { label: string; value?: number | null }) {
-  return (
-    <Text style={styles.nutritionText}>
-      <Text style={styles.nutritionLabel}>{label}</Text>
-      {` ${value ?? "—"}`}
-    </Text>
   );
 }
 
@@ -284,18 +363,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.md,
   },
-  sheetHeaderCopy: {
+  titleBlock: {
     flex: 1,
     gap: 4,
-  },
-  categoryName: {
-    color: colors.muted,
-    fontSize: typography.caption,
   },
   productName: {
     color: colors.text,
     fontSize: typography.titleSm,
     fontWeight: typography.medium,
+  },
+  portionCopy: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
   },
   closeButton: {
     width: 32,
@@ -329,33 +408,78 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySm,
     fontWeight: typography.medium,
   },
-  infoRow: {
+  sizeSlider: {
+    position: "relative",
     flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  infoButton: {
-    width: 24,
-    height: 24,
+    alignItems: "stretch",
+    gap: 2,
+    padding: 3,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: "rgba(111, 99, 88, 0.26)",
+    overflow: "hidden",
+  },
+  sizeSliderThumb: {
+    position: "absolute",
+    top: 3,
+    bottom: 3,
+    left: 0,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceStrong,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  sizeSliderOption: {
+    flex: 1,
+    minHeight: 40,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+    zIndex: 1,
   },
-  nutritionInline: {
+  sizeSliderLabel: {
+    color: colors.surfaceStrong,
+    fontSize: typography.bodySm,
+    fontWeight: typography.semibold,
+  },
+  sizeSliderLabelActive: {
+    color: colors.text,
+  },
+  nutritionSection: {
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  nutritionTitle: {
+    color: colors.muted,
+    fontSize: typography.caption,
+    fontWeight: typography.medium,
+  },
+  nutritionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
   },
-  nutritionText: {
+  nutritionCard: {
+    minWidth: 72,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surfaceTint,
+    gap: 2,
+  },
+  nutritionValue: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.semibold,
+  },
+  nutritionName: {
     color: colors.muted,
     fontSize: typography.caption,
-    lineHeight: 18,
-  },
-  nutritionLabel: {
-    color: colors.text,
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
   },
   footer: {
     position: "absolute",
@@ -364,6 +488,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
+    paddingBottom: spacing.md,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: "rgba(234, 223, 211, 0.58)",
