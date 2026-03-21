@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { formatPhoneInput } from "../phone";
 import type { Order, User, UserAddress } from "../types";
 
 interface Props {
@@ -16,7 +17,6 @@ interface Props {
 
 interface ProfileFormState {
   firstName: string;
-  lastName: string;
   birthDate: string;
   gender: string;
 }
@@ -71,10 +71,12 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 const createProfileForm = (user: User): ProfileFormState => ({
   firstName: user.first_name || "",
-  lastName: user.last_name || "",
   birthDate: user.birth_date || "",
   gender: user.gender || "",
 });
+
+const formatProfilePhone = (value?: string | null) =>
+  value ? formatPhoneInput(value) || value : "Не указано";
 
 const createAddressForm = (
   address?: UserAddress | null,
@@ -125,19 +127,14 @@ const ProfilePage: React.FC<Props> = ({
 
   const profileRows = [
     {
-      label: "Логин / телефон",
-      value: user.login || "Не указано",
+      label: "Номер телефона",
+      value: formatProfilePhone(user.login),
       muted: false,
     },
     {
       label: "Имя",
       value: user.first_name || "Не указано",
       muted: !user.first_name,
-    },
-    {
-      label: "Фамилия",
-      value: user.last_name || "Не указано",
-      muted: !user.last_name,
     },
     {
       label: "Дата рождения",
@@ -181,7 +178,7 @@ const ProfilePage: React.FC<Props> = ({
     try {
       await api.updateProfile({
         first_name: profileForm.firstName.trim() || null,
-        last_name: profileForm.lastName.trim() || null,
+        last_name: null,
         birth_date: profileForm.birthDate || null,
         gender: profileForm.gender || null,
       });
@@ -319,8 +316,8 @@ const ProfilePage: React.FC<Props> = ({
             ) : (
               <div className="profile-form">
                 <label className="profile-form__field">
-                  <span className="profile-form__label">Логин / телефон</span>
-                  <input className="input" value={user.login || ""} disabled />
+                  <span className="profile-form__label">Номер телефона</span>
+                  <input className="input" value={formatPhoneInput(user.login || "") || ""} disabled />
                 </label>
                 <label className="profile-form__field">
                   <span className="profile-form__label">Имя</span>
@@ -329,16 +326,6 @@ const ProfilePage: React.FC<Props> = ({
                     value={profileForm.firstName}
                     onChange={(event) =>
                       setProfileForm((prev) => ({ ...prev, firstName: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="profile-form__field">
-                  <span className="profile-form__label">Фамилия</span>
-                  <input
-                    className="input"
-                    value={profileForm.lastName}
-                    onChange={(event) =>
-                      setProfileForm((prev) => ({ ...prev, lastName: event.target.value }))
                     }
                   />
                 </label>

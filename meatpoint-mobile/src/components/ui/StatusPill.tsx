@@ -20,14 +20,14 @@ export function StatusPill({
 const styles = StyleSheet.create({
   base: {
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    minHeight: 28,
+    paddingHorizontal: spacing.sm,
+    minHeight: 26,
     alignItems: "center",
     justifyContent: "center",
   },
   label: {
     fontSize: typography.caption,
-    fontWeight: typography.semibold,
+    fontWeight: typography.medium,
   },
 });
 

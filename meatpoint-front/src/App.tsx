@@ -19,6 +19,11 @@ import CartPage from "./components/cart/CartPage";
 import CheckoutFlowHeader from "./components/cart/CheckoutFlowHeader";
 import CheckoutPage from "./components/cart/CheckoutPage";
 import CheckoutSuccessPage from "./components/cart/CheckoutSuccessPage";
+import {
+  formatPhoneInput,
+  isCompletePhoneInput,
+  normalizePhoneLogin,
+} from "./phone";
 import type {
   Category,
   MenuItem,
@@ -55,8 +60,8 @@ const AppContent: React.FC = () => {
     password: "",
   });
 
-  const passwordStrong = useMemo(
-    () => /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(authForm.password),
+  const passwordValid = useMemo(
+    () => authForm.password.trim().length >= 6,
     [authForm.password]
   );
 
@@ -292,11 +297,16 @@ const AppContent: React.FC = () => {
   };
 
   const handleAuthSubmit = async () => {
-    const loginValue = authForm.login.trim();
+    const phoneValue = authForm.login.trim();
     const passwordValue = authForm.password;
 
-    if (!loginValue || !passwordValue) {
-      setAuthError("Введите логин и пароль.");
+    if (!phoneValue || !passwordValue) {
+      setAuthError("Введите номер телефона и пароль.");
+      return;
+    }
+
+    if (!isCompletePhoneInput(phoneValue)) {
+      setAuthError("Укажите номер телефона в формате +7 (xxx) xxx-xx-xx.");
       return;
     }
 
@@ -306,15 +316,14 @@ const AppContent: React.FC = () => {
         setAuthError("Введите имя.");
         return;
       }
-      if (!passwordStrong) {
-        setAuthError(
-          "Пароль должен быть не короче 8 символов и содержать заглавную букву и цифру."
-        );
+      if (!passwordValid) {
+        setAuthError("Пароль должен быть не короче 6 символов.");
         return;
       }
     }
 
     setAuthError(null);
+    const loginValue = normalizePhoneLogin(phoneValue);
 
     try {
       if (authForm.mode === "login") {
@@ -605,10 +614,14 @@ const AppContent: React.FC = () => {
 
               <input
                 className="input"
-                placeholder="Логин"
+                inputMode="tel"
+                placeholder="+7 (999) 123-45-67"
                 value={authForm.login}
                 onChange={(event) =>
-                  setAuthForm((prev) => ({ ...prev, login: event.target.value }))
+                  setAuthForm((prev) => ({
+                    ...prev,
+                    login: formatPhoneInput(event.target.value),
+                  }))
                 }
               />
 
@@ -623,7 +636,7 @@ const AppContent: React.FC = () => {
               />
 
               <div className="muted" style={{ fontSize: "12px" }}>
-                Пароль: минимум 8 символов, одна заглавная буква и одна цифра.
+                Номер телефона нужен для входа. Пароль: минимум 6 символов.
               </div>
               <p className="auth-box__helper">
                 Используйте актуальные данные: это поможет быстрее находить и отслеживать ваши

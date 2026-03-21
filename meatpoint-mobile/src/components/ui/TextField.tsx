@@ -76,24 +76,24 @@ const styles = StyleSheet.create({
     fontWeight: typography.medium,
   },
   field: {
-    minHeight: 48,
+    minHeight: 46,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surfaceTint,
     paddingHorizontal: spacing.md,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
   },
   fieldMultiline: {
-    minHeight: 128,
+    minHeight: 116,
     alignItems: "flex-start",
     paddingVertical: spacing.md,
   },
   fieldFocused: {
-    borderColor: "rgba(230, 122, 46, 0.48)",
-    backgroundColor: colors.surface,
+    borderColor: "rgba(230, 122, 46, 0.38)",
+    backgroundColor: colors.surfaceStrong,
   },
   fieldError: {
     borderColor: "rgba(210, 74, 67, 0.4)",
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   inputMultiline: {
-    minHeight: 98,
+    minHeight: 88,
   },
   trailing: {
     alignSelf: "center",

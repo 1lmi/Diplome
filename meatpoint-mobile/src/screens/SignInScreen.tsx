@@ -7,8 +7,13 @@ import { mobileApi } from "@/src/api/mobile-api";
 import { MeatButton } from "@/src/components/ui/MeatButton";
 import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
-import { SectionCard } from "@/src/components/ui/SectionCard";
+import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 import { TextField } from "@/src/components/ui/TextField";
+import {
+  formatPhoneInput,
+  isCompletePhoneInput,
+  normalizePhoneValue,
+} from "@/src/lib/phone";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { useCartStore } from "@/src/store/cart-store";
@@ -19,15 +24,19 @@ export default function SignInScreen() {
   const updateCheckoutDraft = useCartStore((state) => state.updateCheckoutDraft);
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
-  const [login, setLogin] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     const nextErrors: Record<string, string> = {};
-    if (!login.trim()) nextErrors.login = "Укажите логин.";
-    if (!password) nextErrors.password = "Введите пароль.";
+    if (!isCompletePhoneInput(phone)) {
+      nextErrors.phone = "Укажите номер телефона в формате +7 (xxx) xxx-xx-xx.";
+    }
+    if (!password) {
+      nextErrors.password = "Введите пароль.";
+    }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -36,11 +45,12 @@ export default function SignInScreen() {
 
     try {
       setLoading(true);
-      const auth = await mobileApi.login(login.trim(), password);
+      const auth = await mobileApi.login(normalizePhoneValue(phone), password);
       await completeAuth(auth);
       updateCheckoutDraft({
         guestMode: false,
         customerName: auth.user.full_name || auth.user.first_name,
+        customerPhone: auth.user.login,
       });
       await queryClient.invalidateQueries();
       pushToast({
@@ -57,7 +67,7 @@ export default function SignInScreen() {
       pushToast({
         tone: "error",
         title: "Не удалось войти",
-        description: error?.message || "Проверьте логин и пароль.",
+        description: error?.message || "Проверьте номер телефона и пароль.",
       });
     } finally {
       setLoading(false);
@@ -72,24 +82,24 @@ export default function SignInScreen() {
         title="Вход"
       />
 
-      <View style={styles.hero}>
-        <Text style={styles.heroTitle}>Добро пожаловать</Text>
-        <Text style={styles.heroCopy}>
+      <View style={styles.intro}>
+        <Text style={styles.introTitle}>Добро пожаловать</Text>
+        <Text style={styles.introCopy}>
           Один аккаунт для заказов, адресов и быстрого повторного оформления.
         </Text>
       </View>
 
-      <SectionCard>
+      <SurfacePanel>
         <TextField
-          autoCapitalize="none"
-          error={errors.login}
-          label="Логин"
+          error={errors.phone}
+          keyboardType="phone-pad"
+          label="Номер телефона"
           onChangeText={(value) => {
-            setErrors((current) => ({ ...current, login: "" }));
-            setLogin(value);
+            setErrors((current) => ({ ...current, phone: "" }));
+            setPhone(formatPhoneInput(value));
           }}
-          placeholder="Введите логин"
-          value={login}
+          placeholder="+7 (999) 123-45-67"
+          value={phone}
         />
         <TextField
           error={errors.password}
@@ -105,7 +115,7 @@ export default function SignInScreen() {
         <MeatButton fullWidth loading={loading} onPress={handleSubmit} size="cta">
           Войти
         </MeatButton>
-      </SectionCard>
+      </SurfacePanel>
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Ещё нет аккаунта?</Text>
@@ -118,16 +128,16 @@ export default function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: {
+  intro: {
     marginBottom: spacing.lg,
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
-  heroTitle: {
+  introTitle: {
     color: colors.text,
-    fontSize: typography.title,
+    fontSize: typography.titleSm,
     fontWeight: typography.semibold,
   },
-  heroCopy: {
+  introCopy: {
     color: colors.muted,
     fontSize: typography.bodySm,
     lineHeight: 20,
@@ -138,7 +148,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   footerText: {
     color: colors.muted,

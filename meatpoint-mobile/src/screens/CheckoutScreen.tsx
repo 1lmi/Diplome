@@ -1,29 +1,58 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  LayoutChangeEvent,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { mobileApi } from "@/src/api/mobile-api";
 import { EmptyState } from "@/src/components/ui/EmptyState";
+import { ListRow } from "@/src/components/ui/ListRow";
 import { MeatButton } from "@/src/components/ui/MeatButton";
 import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
-import { SectionCard } from "@/src/components/ui/SectionCard";
 import { SegmentedControl } from "@/src/components/ui/SegmentedControl";
+import { StatusPill } from "@/src/components/ui/StatusPill";
+import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 import { TextField } from "@/src/components/ui/TextField";
+import { mobileApi } from "@/src/api/mobile-api";
 import { formatPrice, normalizePhone } from "@/src/lib/format";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { getCartTotal, useCartStore } from "@/src/store/cart-store";
 import { useTrackingStore } from "@/src/store/tracking-store";
 import { colors, radii, spacing, typography } from "@/src/theme/tokens";
+
+function SectionBadge({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: "accent" | "neutral" | "soft";
+}) {
+  return (
+    <View
+      style={[
+        styles.sectionBadge,
+        tone === "accent"
+          ? styles.sectionBadgeAccent
+          : tone === "soft"
+            ? styles.sectionBadgeSoft
+            : styles.sectionBadgeNeutral,
+      ]}
+    >
+      <Text
+        style={[
+          styles.sectionBadgeText,
+          tone === "accent"
+            ? styles.sectionBadgeTextAccent
+            : tone === "soft"
+              ? styles.sectionBadgeTextSoft
+              : styles.sectionBadgeTextNeutral,
+        ]}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 export default function CheckoutScreen() {
   const user = useAuthStore((state) => state.user);
@@ -35,69 +64,24 @@ export default function CheckoutScreen() {
   const saveTracking = useTrackingStore((state) => state.save);
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
-  const scrollRef = useRef<ScrollView>(null);
-  const fieldPositions = useRef<Record<string, number>>({});
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-
-  const addressesQuery = useQuery({
-    queryKey: ["addresses"],
-    queryFn: mobileApi.getMyAddresses,
-    enabled: Boolean(user),
-  });
+  const [cashChangeError, setCashChangeError] = useState("");
 
   const totalPrice = useMemo(() => getCartTotal(items), [items]);
-  const defaultAddress = addressesQuery.data?.find((item) => item.is_default) || null;
   const needsAddress = checkoutDraft.deliveryMethod === "delivery";
 
-  useEffect(() => {
-    if (!user && !checkoutDraft.guestMode) {
-      updateCheckoutDraft({ guestMode: true });
-    }
-  }, [checkoutDraft.guestMode, updateCheckoutDraft, user]);
+  const handleSubmit = async () => {
+    if (submitting || !user) return;
 
-  useEffect(() => {
-    if (!user) return;
-
-    const patch: Partial<typeof checkoutDraft> = {};
-    if (checkoutDraft.guestMode) patch.guestMode = false;
-    if (!checkoutDraft.customerName.trim() && user.full_name) {
-      patch.customerName = user.full_name;
-    }
-    if (Object.keys(patch).length > 0) {
-      updateCheckoutDraft(patch);
-    }
-  }, [checkoutDraft.customerName, checkoutDraft.guestMode, updateCheckoutDraft, user]);
-
-  useEffect(() => {
-    if (!user || checkoutDraft.deliveryMethod !== "delivery") return;
-    if (checkoutDraft.address.trim() || !defaultAddress) return;
-    updateCheckoutDraft({ address: defaultAddress.address });
-  }, [checkoutDraft.address, checkoutDraft.deliveryMethod, defaultAddress, updateCheckoutDraft, user]);
-
-  const registerField = (name: string) => (event: LayoutChangeEvent) => {
-    fieldPositions.current[name] = event.nativeEvent.layout.y;
-  };
-
-  const scrollToField = (field: string) => {
-    const top = fieldPositions.current[field];
-    if (typeof top === "number") {
-      scrollRef.current?.scrollTo({ y: Math.max(top - 20, 0), animated: true });
-    }
-  };
-
-  const validate = () => {
-    const nextErrors: Record<string, string> = {};
-
-    if (!checkoutDraft.customerName.trim()) {
-      nextErrors.customerName = "Укажите имя получателя.";
-    }
-    if (!normalizePhone(checkoutDraft.customerPhone)) {
-      nextErrors.customerPhone = "Укажите телефон для заказа.";
-    }
     if (needsAddress && !checkoutDraft.address.trim()) {
-      nextErrors.address = "Укажите адрес доставки.";
+      pushToast({
+        tone: "error",
+        title: "Не выбран адрес доставки",
+        description: "Выберите адрес в каталоге перед оформлением заказа.",
+      });
+      router.replace("/");
+      return;
     }
 
     if (
@@ -105,35 +89,23 @@ export default function CheckoutScreen() {
       checkoutDraft.cashChangeFrom.trim() &&
       Number(checkoutDraft.cashChangeFrom) < totalPrice
     ) {
-      nextErrors.cashChangeFrom = "Сумма для сдачи должна быть не меньше суммы заказа.";
-    }
-
-    return nextErrors;
-  };
-
-  const handleSubmit = async () => {
-    if (submitting) return;
-
-    const nextErrors = validate();
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
-      const firstField = Object.keys(nextErrors)[0];
-      scrollToField(firstField);
+      setCashChangeError("Сумма для сдачи должна быть не меньше суммы заказа.");
       pushToast({
         tone: "error",
-        title: "Форма заполнена не полностью",
-        description: "Проверьте обязательные поля перед оформлением заказа.",
+        title: "Проверьте оплату",
+        description: "Сумма для сдачи меньше итоговой стоимости заказа.",
       });
       return;
     }
 
     try {
       setSubmitting(true);
-      const normalizedPhone = normalizePhone(checkoutDraft.customerPhone);
+      const fallbackPhone = normalizePhone(user.login) || user.login.trim() || `user-${user.id}`;
+
       const order = await mobileApi.createOrder({
         customer: {
-          name: checkoutDraft.customerName.trim() || null,
-          phone: normalizedPhone,
+          name: user.full_name?.trim() || user.first_name?.trim() || null,
+          phone: fallbackPhone,
           address: needsAddress ? checkoutDraft.address.trim() || null : null,
         },
         delivery_method: checkoutDraft.deliveryMethod,
@@ -152,7 +124,7 @@ export default function CheckoutScreen() {
       });
 
       if (!user) {
-        saveTracking(order.id, normalizedPhone);
+        saveTracking(order.id, fallbackPhone);
       }
 
       clearCart();
@@ -163,9 +135,10 @@ export default function CheckoutScreen() {
         title: "Заказ оформлен",
         description: `Номер заказа: ${order.id}`,
       });
+
       router.replace({
         pathname: "/order/[id]",
-        params: { id: String(order.id), phone: normalizedPhone },
+        params: { id: String(order.id), phone: fallbackPhone },
       });
     } catch (error: any) {
       pushToast({
@@ -181,15 +154,54 @@ export default function CheckoutScreen() {
   if (!items.length) {
     return (
       <Screen>
-        <PageHeader showBack subtitle="Корзина пуста" title="Оформление" />
+        <PageHeader
+          showBack
+          subtitle="Сначала добавьте что-нибудь из меню"
+          title="Оформление"
+        />
         <EmptyState
-          description="Сначала добавьте хотя бы одну позицию в корзину."
+          description="Когда в корзине появятся позиции, здесь можно будет оплатить заказ."
           icon="shopping-bag"
-          title="Нечего оформлять"
+          title="Корзина пока пустая"
         />
         <MeatButton fullWidth onPress={() => router.replace("/cart")} variant="secondary">
           Вернуться в корзину
         </MeatButton>
+      </Screen>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Screen>
+        <PageHeader
+          showBack
+          subtitle="Оформление доступно только после входа"
+          title="Оформление"
+        />
+
+        <View style={styles.sectionWrap}>
+          <SectionBadge label="Аккаунт" tone="accent" />
+          <SurfacePanel style={styles.accentPanel} tone="tint">
+            <Text style={styles.panelTitle}>Войдите, чтобы продолжить</Text>
+            <Text style={styles.copy}>
+              Адрес и способ получения выбираются в каталоге, а оформление заказа доступно только
+              авторизованному пользователю.
+            </Text>
+            <View style={styles.actionRow}>
+              <MeatButton
+                fullWidth
+                onPress={() => router.push("/auth/sign-in")}
+                variant="secondary"
+              >
+                Войти
+              </MeatButton>
+              <MeatButton fullWidth onPress={() => router.push("/auth/sign-up")}>
+                Создать аккаунт
+              </MeatButton>
+            </View>
+          </SurfacePanel>
+        </View>
       </Screen>
     );
   }
@@ -200,7 +212,6 @@ export default function CheckoutScreen() {
         <ScrollView
           alwaysBounceVertical={false}
           bounces={false}
-          ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           overScrollMode="never"
@@ -209,236 +220,110 @@ export default function CheckoutScreen() {
           <View style={styles.headerWrap}>
             <PageHeader
               showBack
-              subtitle="Проверьте данные перед отправкой заказа"
+              subtitle="Адрес и способ получения уже выбраны в каталоге"
               title="Оформление"
             />
           </View>
 
-          {!user ? (
-            <View style={styles.sectionWrap}>
-              <SectionCard>
-                <Text style={styles.sectionTitle}>Вы оформляете как гость</Text>
-                <Text style={styles.helperCopy}>
-                  Можно продолжить без аккаунта или войти, чтобы использовать сохранённые адреса и историю заказов.
-                </Text>
-                <View style={styles.authRow}>
-                  <MeatButton onPress={() => router.push("/auth/sign-in")} variant="secondary">
-                    Войти
-                  </MeatButton>
-                  <MeatButton onPress={() => updateCheckoutDraft({ guestMode: true })}>
-                    Продолжить
-                  </MeatButton>
-                </View>
-              </SectionCard>
-            </View>
-          ) : null}
-
-          <View onLayout={registerField("customerName")} style={styles.sectionWrap}>
-            <SectionCard>
-              <Text style={styles.sectionTitle}>Контакты</Text>
-              <TextField
-                error={errors.customerName}
-                label="Имя"
-                onChangeText={(value) => {
-                  setErrors((current) => ({ ...current, customerName: "" }));
-                  updateCheckoutDraft({ customerName: value });
-                }}
-                placeholder="Как к вам обращаться"
-                value={checkoutDraft.customerName}
-              />
-              <View onLayout={registerField("customerPhone")}>
-                <TextField
-                  error={errors.customerPhone}
-                  helper="Нужен только для связи по заказу."
-                  keyboardType="phone-pad"
-                  label="Телефон для заказа"
-                  onChangeText={(value) => {
-                    setErrors((current) => ({ ...current, customerPhone: "" }));
-                    updateCheckoutDraft({ customerPhone: value });
-                  }}
-                  placeholder="+7 999 123-45-67"
-                  value={checkoutDraft.customerPhone}
-                />
-              </View>
-            </SectionCard>
-          </View>
-
           <View style={styles.sectionWrap}>
-            <SectionCard>
-              <Text style={styles.sectionTitle}>Получение</Text>
-              <SegmentedControl
-                options={[
-                  { label: "Доставка", value: "delivery" },
-                  { label: "Самовывоз", value: "pickup" },
-                ]}
-                tone="accent"
-                value={checkoutDraft.deliveryMethod}
-                onChange={(value) => {
-                  updateCheckoutDraft({ deliveryMethod: value });
-                  setErrors((current) => ({ ...current, address: "" }));
-                }}
-              />
-
-              {needsAddress ? (
-                <>
-                  {user ? (
-                    <View style={styles.addressesWrap}>
-                      <View style={styles.addressesHead}>
-                        <Text style={styles.helperLabel}>Сохранённые адреса</Text>
-                        <Pressable onPress={() => router.push("/address/new")}>
-                          <Text style={styles.link}>Новый адрес</Text>
-                        </Pressable>
-                      </View>
-                      {addressesQuery.data?.length ? (
-                        addressesQuery.data.map((address) => {
-                          const active = checkoutDraft.address.trim() === address.address.trim();
-                          return (
-                            <Pressable
-                              key={address.id}
-                              onPress={() => {
-                                setErrors((current) => ({ ...current, address: "" }));
-                                updateCheckoutDraft({ address: address.address });
-                              }}
-                              style={[
-                                styles.addressOption,
-                                active ? styles.addressOptionActive : null,
-                              ]}
-                            >
-                              <View style={styles.addressOptionCopy}>
-                                <Text style={styles.addressOptionTitle}>
-                                  {address.label || "Адрес"}
-                                </Text>
-                                <Text style={styles.addressOptionText}>{address.address}</Text>
-                              </View>
-                              {address.is_default ? <View style={styles.dotBadge} /> : null}
-                            </Pressable>
-                          );
-                        })
-                      ) : (
-                        <Text style={styles.helperCopy}>
-                          Сохранённых адресов пока нет. Можно ввести адрес вручную.
-                        </Text>
-                      )}
-                    </View>
-                  ) : null}
-
-                  <View onLayout={registerField("address")}>
-                    <TextField
-                      error={errors.address}
-                      label="Адрес доставки"
-                      onChangeText={(value) => {
-                        setErrors((current) => ({ ...current, address: "" }));
-                        updateCheckoutDraft({ address: value });
-                      }}
-                      placeholder="Улица, дом, квартира"
-                      value={checkoutDraft.address}
-                    />
-                  </View>
-                </>
-              ) : (
-                <Text style={styles.helperCopy}>
-                  Для самовывоза адрес не нужен. Детали заказа будут доступны сразу после оформления.
-                </Text>
-              )}
-
-              <TextField
-                label={needsAddress ? "Когда доставить" : "Когда подготовить"}
-                onChangeText={(value) => updateCheckoutDraft({ deliveryTime: value })}
-                placeholder="Например, к 19:30"
-                value={checkoutDraft.deliveryTime}
-              />
-            </SectionCard>
-          </View>
-
-          <View style={styles.sectionWrap}>
-            <SectionCard>
-              <Text style={styles.sectionTitle}>Комментарий</Text>
-              <TextField
-                helper={`${checkoutDraft.comment.length}/300`}
-                multiline
-                onChangeText={(value) => updateCheckoutDraft({ comment: value.slice(0, 300) })}
-                placeholder="Важная информация для кухни или курьера"
-                value={checkoutDraft.comment}
-              />
-            </SectionCard>
-          </View>
-
-          <View style={styles.sectionWrap}>
-            <SectionCard>
-              <Text style={styles.sectionTitle}>Оплата</Text>
+            <SectionBadge label="Оплата" tone="soft" />
+            <SurfacePanel style={styles.softPanel} tone="soft">
+              <Text style={styles.panelTitle}>Как оплатить заказ</Text>
               <SegmentedControl
                 options={[
                   { label: "Наличными", value: "cash" },
                   { label: "Картой", value: "card" },
                 ]}
+                tone="accent"
                 value={checkoutDraft.paymentMethod}
-                onChange={(value) =>
+                onChange={(value) => {
+                  setCashChangeError("");
                   updateCheckoutDraft({
                     paymentMethod: value,
                     cashChangeFrom: value === "cash" ? checkoutDraft.cashChangeFrom : "",
-                  })
-                }
+                  });
+                }}
               />
 
               {checkoutDraft.paymentMethod === "cash" ? (
-                <View onLayout={registerField("cashChangeFrom")}>
-                  <TextField
-                    error={errors.cashChangeFrom}
-                    keyboardType="numeric"
-                    label="Подготовить сдачу с"
-                    onChangeText={(value) => {
-                      setErrors((current) => ({ ...current, cashChangeFrom: "" }));
-                      updateCheckoutDraft({
-                        cashChangeFrom: value.replace(/[^\d]/g, ""),
-                      });
-                    }}
-                    placeholder="Например, 2000"
-                    value={checkoutDraft.cashChangeFrom}
-                  />
-                </View>
+                <TextField
+                  error={cashChangeError}
+                  keyboardType="numeric"
+                  label="Подготовить сдачу с"
+                  onChangeText={(value) => {
+                    setCashChangeError("");
+                    updateCheckoutDraft({
+                      cashChangeFrom: value.replace(/[^\d]/g, ""),
+                    });
+                  }}
+                  placeholder="Например, 2000"
+                  value={checkoutDraft.cashChangeFrom}
+                />
               ) : (
-                <Text style={styles.helperCopy}>
-                  Оплата картой при получении. Онлайн-эквайринг в приложении пока не используется.
-                </Text>
+                <SurfacePanel compact style={styles.notePanel}>
+                  <Text style={styles.noteText}>
+                    Карта при получении. Онлайн-оплата в приложении пока не используется.
+                  </Text>
+                </SurfacePanel>
               )}
 
               <Pressable
-                onPress={() => updateCheckoutDraft({ doNotCall: !checkoutDraft.doNotCall })}
-                style={[
-                  styles.switchRow,
-                  checkoutDraft.doNotCall ? styles.switchRowActive : null,
+                onPress={() =>
+                  updateCheckoutDraft({
+                    doNotCall: !checkoutDraft.doNotCall,
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.toggleRow,
+                  checkoutDraft.doNotCall ? styles.toggleRowActive : null,
+                  pressed ? styles.toggleRowPressed : null,
                 ]}
               >
-                <View style={styles.switchCopy}>
-                  <Text style={styles.switchTitle}>Не перезванивать</Text>
-                  <Text style={styles.switchText}>
+                <View style={styles.toggleCopy}>
+                  <Text style={styles.toggleTitle}>Не перезванивать</Text>
+                  <Text style={styles.toggleText}>
                     Свяжемся только если потребуется уточнение по заказу.
                   </Text>
                 </View>
                 <View
                   style={[
-                    styles.switchBullet,
-                    checkoutDraft.doNotCall ? styles.switchBulletActive : null,
+                    styles.toggleKnob,
+                    checkoutDraft.doNotCall ? styles.toggleKnobActive : null,
                   ]}
                 />
               </Pressable>
-            </SectionCard>
+            </SurfacePanel>
           </View>
 
           <View style={styles.sectionWrap}>
-            <SectionCard>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Позиций</Text>
-                <Text style={styles.summaryValue}>{items.length}</Text>
+            <SectionBadge label="Итог" tone="accent" />
+            <SurfacePanel style={styles.summaryPanel} tone="tint">
+              <View style={styles.panelHead}>
+                <View style={styles.panelTitleWrap}>
+                  <Text style={styles.panelTitle}>Проверка перед оплатой</Text>
+                  <Text style={styles.copy}>Осталось только подтвердить способ оплаты.</Text>
+                </View>
+                <StatusPill label={`${items.length} поз.`} tone="muted" />
               </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Итого</Text>
-                <Text style={styles.summaryAmount}>{formatPrice(totalPrice)}</Text>
+
+              <View style={styles.summaryRows}>
+                <ListRow
+                  subtitle={checkoutDraft.deliveryMethod === "delivery" ? "Доставка" : "Самовывоз"}
+                  title={`Позиции в корзине: ${items.length}`}
+                  tone="surface"
+                  trailing={<Text style={styles.summaryValue}>{formatPrice(totalPrice)}</Text>}
+                />
               </View>
+
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Итого</Text>
+                <Text style={styles.totalValue}>{formatPrice(totalPrice)}</Text>
+              </View>
+
               <MeatButton fullWidth loading={submitting} onPress={handleSubmit} size="cta">
                 Оформить заказ
               </MeatButton>
-            </SectionCard>
+            </SurfacePanel>
           </View>
         </ScrollView>
       </View>
@@ -456,127 +341,152 @@ const styles = StyleSheet.create({
   },
   headerWrap: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
   },
   sectionWrap: {
     paddingHorizontal: spacing.lg,
-    marginTop: spacing.md,
+    marginTop: spacing.xl,
+    gap: spacing.md,
   },
-  sectionTitle: {
+  sectionBadge: {
+    alignSelf: "flex-start",
+    minHeight: 24,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    justifyContent: "center",
+  },
+  sectionBadgeAccent: {
+    backgroundColor: colors.accentSoft,
+  },
+  sectionBadgeNeutral: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  sectionBadgeSoft: {
+    backgroundColor: colors.bgSoft,
+  },
+  sectionBadgeText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  sectionBadgeTextAccent: {
+    color: colors.accent,
+  },
+  sectionBadgeTextNeutral: {
+    color: colors.text,
+  },
+  sectionBadgeTextSoft: {
+    color: colors.muted,
+  },
+  accentPanel: {
+    borderWidth: 1,
+    borderColor: "rgba(230, 122, 46, 0.18)",
+  },
+  softPanel: {
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  summaryPanel: {
+    borderWidth: 1,
+    borderColor: "rgba(230, 122, 46, 0.18)",
+  },
+  panelHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  panelTitleWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  panelTitle: {
     color: colors.text,
     fontSize: typography.body,
     fontWeight: typography.semibold,
   },
-  helperCopy: {
+  copy: {
     color: colors.muted,
     fontSize: typography.bodySm,
     lineHeight: 20,
   },
-  authRow: {
-    flexDirection: "row",
+  actionRow: {
     gap: spacing.sm,
   },
-  helperLabel: {
-    color: colors.muted,
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
-  },
-  addressesWrap: {
-    gap: spacing.sm,
-  },
-  addressesHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  link: {
-    color: colors.accent,
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
-  },
-  addressOption: {
+  notePanel: {
+    paddingVertical: spacing.sm,
     borderRadius: radii.lg,
-    backgroundColor: colors.surfaceTint,
-    padding: spacing.md,
+    backgroundColor: colors.surfaceStrong,
+  },
+  noteText: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+    lineHeight: 20,
+  },
+  toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
-  },
-  addressOptionActive: {
-    backgroundColor: colors.accentSoft,
-  },
-  addressOptionCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  addressOptionTitle: {
-    color: colors.text,
-    fontSize: typography.bodySm,
-    fontWeight: typography.semibold,
-  },
-  addressOptionText: {
-    color: colors.muted,
-    fontSize: typography.caption,
-    lineHeight: 18,
-  },
-  dotBadge: {
-    width: 12,
-    height: 12,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-  },
-  switchRow: {
     borderRadius: radii.xl,
-    backgroundColor: colors.surfaceTint,
-    padding: spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surfaceStrong,
   },
-  switchRowActive: {
+  toggleRowActive: {
     backgroundColor: colors.accentSoft,
   },
-  switchCopy: {
-    flex: 1,
-    gap: 4,
+  toggleRowPressed: {
+    opacity: 0.94,
   },
-  switchTitle: {
+  toggleCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  toggleTitle: {
     color: colors.text,
     fontSize: typography.bodySm,
     fontWeight: typography.semibold,
   },
-  switchText: {
+  toggleText: {
     color: colors.muted,
     fontSize: typography.caption,
     lineHeight: 18,
   },
-  switchBullet: {
+  toggleKnob: {
     width: 18,
     height: 18,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  switchBulletActive: {
+  toggleKnobActive: {
     backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
-  summaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  summaryLabel: {
-    color: colors.muted,
-    fontSize: typography.bodySm,
+  summaryRows: {
+    gap: spacing.xs,
   },
   summaryValue: {
     color: colors.text,
-    fontSize: typography.body,
+    fontSize: typography.bodySm,
     fontWeight: typography.semibold,
   },
-  summaryAmount: {
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: spacing.xs,
+  },
+  totalLabel: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
+  },
+  totalValue: {
     color: colors.text,
     fontSize: typography.titleSm,
     fontWeight: typography.semibold,

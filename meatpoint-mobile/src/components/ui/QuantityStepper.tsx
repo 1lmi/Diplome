@@ -32,9 +32,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceTint,
     paddingHorizontal: spacing.sm,
-    height: 38,
+    height: 36,
   },
   button: {
     width: 24,

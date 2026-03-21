@@ -7,15 +7,17 @@ import { mobileApi } from "@/src/api/mobile-api";
 import { MeatButton } from "@/src/components/ui/MeatButton";
 import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
-import { SectionCard } from "@/src/components/ui/SectionCard";
-import { SegmentedControl } from "@/src/components/ui/SegmentedControl";
+import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 import { TextField } from "@/src/components/ui/TextField";
+import {
+  formatPhoneInput,
+  isCompletePhoneInput,
+  normalizePhoneValue,
+} from "@/src/lib/phone";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { useCartStore } from "@/src/store/cart-store";
 import { colors, spacing, typography } from "@/src/theme/tokens";
-
-const PASSWORD_POLICY_RE = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 export default function SignUpScreen() {
   const completeAuth = useAuthStore((state) => state.completeAuth);
@@ -24,24 +26,21 @@ export default function SignUpScreen() {
   const { pushToast } = useToast();
 
   const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [login, setLogin] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [gender, setGender] = useState("none");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     const nextErrors: Record<string, string> = {};
-    if (!firstName.trim()) nextErrors.firstName = "Укажите имя.";
-    if (!login.trim()) nextErrors.login = "Укажите логин.";
-    if (!PASSWORD_POLICY_RE.test(password)) {
-      nextErrors.password = "Минимум 8 символов, одна заглавная буква и одна цифра.";
+    if (!firstName.trim()) {
+      nextErrors.firstName = "Укажите имя.";
     }
-    if (password !== confirmPassword) {
-      nextErrors.confirmPassword = "Пароли не совпадают.";
+    if (!isCompletePhoneInput(phone)) {
+      nextErrors.phone = "Укажите номер телефона в формате +7 (xxx) xxx-xx-xx.";
+    }
+    if (password.trim().length < 6) {
+      nextErrors.password = "Пароль должен быть не короче 6 символов.";
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -53,16 +52,14 @@ export default function SignUpScreen() {
       setLoading(true);
       const auth = await mobileApi.register(
         firstName.trim(),
-        login.trim(),
-        password,
-        lastName.trim() || undefined,
-        birthDate.trim() || undefined,
-        gender === "none" ? undefined : gender
+        normalizePhoneValue(phone),
+        password
       );
       await completeAuth(auth);
       updateCheckoutDraft({
         guestMode: false,
         customerName: auth.user.full_name || auth.user.first_name,
+        customerPhone: auth.user.login,
       });
       await queryClient.invalidateQueries();
       pushToast({
@@ -90,14 +87,15 @@ export default function SignUpScreen() {
         title="Регистрация"
       />
 
-      <View style={styles.hero}>
-        <Text style={styles.heroTitle}>Новый аккаунт</Text>
-        <Text style={styles.heroCopy}>
-          Заполните только главное. Остальные данные всегда можно отредактировать позже.
+      <View style={styles.intro}>
+        <Text style={styles.introTitle}>Новый аккаунт</Text>
+        <Text style={styles.introCopy}>
+          Укажите имя, номер телефона и пароль. Этого достаточно, чтобы войти и
+          сохранить адреса.
         </Text>
       </View>
 
-      <SectionCard>
+      <SurfacePanel>
         <TextField
           error={errors.firstName}
           label="Имя"
@@ -109,47 +107,19 @@ export default function SignUpScreen() {
           value={firstName}
         />
         <TextField
-          label="Фамилия"
-          onChangeText={setLastName}
-          placeholder="Фамилия"
-          value={lastName}
-        />
-        <TextField
-          autoCapitalize="none"
-          error={errors.login}
-          label="Логин"
+          error={errors.phone}
+          keyboardType="phone-pad"
+          label="Номер телефона"
           onChangeText={(value) => {
-            setErrors((current) => ({ ...current, login: "" }));
-            setLogin(value);
+            setErrors((current) => ({ ...current, phone: "" }));
+            setPhone(formatPhoneInput(value));
           }}
-          placeholder="Придумайте логин"
-          value={login}
+          placeholder="+7 (999) 123-45-67"
+          value={phone}
         />
-        <TextField
-          helper="Формат: YYYY-MM-DD"
-          label="Дата рождения"
-          onChangeText={setBirthDate}
-          placeholder="2000-12-31"
-          value={birthDate}
-        />
-
-        <View style={styles.group}>
-          <Text style={styles.groupLabel}>Пол</Text>
-          <SegmentedControl
-            options={[
-              { label: "Не указан", value: "none" },
-              { label: "Мужской", value: "male" },
-              { label: "Женский", value: "female" },
-            ]}
-            value={gender}
-            onChange={setGender}
-            scrollable
-          />
-        </View>
-
         <TextField
           error={errors.password}
-          helper="Минимум 8 символов, одна заглавная буква и одна цифра."
+          helper="Минимум 6 символов."
           label="Пароль"
           onChangeText={(value) => {
             setErrors((current) => ({ ...current, password: "" }));
@@ -159,47 +129,28 @@ export default function SignUpScreen() {
           secureTextEntry
           value={password}
         />
-        <TextField
-          error={errors.confirmPassword}
-          label="Повторите пароль"
-          onChangeText={(value) => {
-            setErrors((current) => ({ ...current, confirmPassword: "" }));
-            setConfirmPassword(value);
-          }}
-          placeholder="Повторите пароль"
-          secureTextEntry
-          value={confirmPassword}
-        />
         <MeatButton fullWidth loading={loading} onPress={handleSubmit} size="cta">
           Создать аккаунт
         </MeatButton>
-      </SectionCard>
+      </SurfacePanel>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: {
+  intro: {
     marginBottom: spacing.lg,
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
-  heroTitle: {
+  introTitle: {
     color: colors.text,
-    fontSize: typography.title,
+    fontSize: typography.titleSm,
     fontWeight: typography.semibold,
   },
-  heroCopy: {
+  introCopy: {
     color: colors.muted,
     fontSize: typography.bodySm,
     lineHeight: 20,
     maxWidth: 320,
-  },
-  group: {
-    gap: spacing.sm,
-  },
-  groupLabel: {
-    color: colors.muted,
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
   },
 });

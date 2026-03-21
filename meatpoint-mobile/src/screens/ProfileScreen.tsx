@@ -4,18 +4,53 @@ import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { mobileApi } from "@/src/api/mobile-api";
-import { EmptyState } from "@/src/components/ui/EmptyState";
+import { ListRow } from "@/src/components/ui/ListRow";
 import { MeatButton } from "@/src/components/ui/MeatButton";
 import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
-import { SectionCard } from "@/src/components/ui/SectionCard";
 import { StatusPill } from "@/src/components/ui/StatusPill";
+import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 import { TextField } from "@/src/components/ui/TextField";
 import { formatDateTime, normalizePhone } from "@/src/lib/format";
+import { formatPhoneInput } from "@/src/lib/phone";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { useTrackingStore } from "@/src/store/tracking-store";
 import { colors, radii, spacing, typography } from "@/src/theme/tokens";
+
+function SectionBadge({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: "accent" | "neutral" | "soft";
+}) {
+  return (
+    <View
+      style={[
+        styles.sectionBadge,
+        tone === "accent"
+          ? styles.sectionBadgeAccent
+          : tone === "soft"
+            ? styles.sectionBadgeSoft
+            : styles.sectionBadgeNeutral,
+      ]}
+    >
+      <Text
+        style={[
+          styles.sectionBadgeText,
+          tone === "accent"
+            ? styles.sectionBadgeTextAccent
+            : tone === "soft"
+              ? styles.sectionBadgeTextSoft
+              : styles.sectionBadgeTextNeutral,
+        ]}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
@@ -87,7 +122,7 @@ export default function ProfileScreen() {
       pushToast({
         tone: "error",
         title: "Не удалось найти заказ",
-        description: error?.message || "Проверьте номер и телефон.",
+        description: error?.message || "Проверьте номер заказа и телефон.",
       });
     } finally {
       setTracking(false);
@@ -97,70 +132,88 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <Screen>
-        <PageHeader showBack subtitle="Вход, guest tracking и история заказов" title="Профиль" />
+        <PageHeader
+          showBack
+          subtitle="Вход, отслеживание и история заказов"
+          title="Профиль"
+        />
 
-        <View style={styles.hero}>
-          <Text style={styles.heroTitle}>Оформляйте быстрее</Text>
-          <Text style={styles.heroCopy}>
-            Войдите, чтобы сохранить адреса и видеть все свои заказы в одном месте.
-          </Text>
+        <View style={styles.sectionBlock}>
+          <SectionBadge label="Аккаунт" tone="accent" />
+          <SurfacePanel style={styles.accountPanel} tone="tint">
+            <View style={styles.intro}>
+              <Text style={styles.introTitle}>Оформляйте быстрее</Text>
+              <Text style={styles.introCopy}>
+                Войдите в аккаунт, чтобы сохранить адреса и видеть все свои заказы в одном
+                месте.
+              </Text>
+            </View>
+            <View style={styles.actionRow}>
+              <MeatButton fullWidth onPress={() => router.push("/auth/sign-in")} variant="secondary">
+                Войти
+              </MeatButton>
+              <MeatButton fullWidth onPress={() => router.push("/auth/sign-up")}>
+                Создать аккаунт
+              </MeatButton>
+            </View>
+          </SurfacePanel>
         </View>
 
-        <SectionCard>
-          <View style={styles.actionRow}>
-            <MeatButton fullWidth onPress={() => router.push("/auth/sign-in")} variant="secondary">
-              Войти
+        <View style={styles.sectionBlock}>
+          <SectionBadge label="Отслеживание" />
+          <SurfacePanel style={styles.sectionPanel}>
+            <Text style={styles.sectionTitle}>Найти заказ по номеру и телефону</Text>
+            <TextField
+              error={errors.orderId}
+              keyboardType="numeric"
+              label="Номер заказа"
+              onChangeText={(value) => {
+                setErrors((current) => ({ ...current, orderId: "" }));
+                setOrderId(value.replace(/[^\d]/g, ""));
+              }}
+              placeholder="Например, 128"
+              value={orderId}
+            />
+            <TextField
+              error={errors.phone}
+              keyboardType="phone-pad"
+              label="Телефон"
+              onChangeText={(value) => {
+                setErrors((current) => ({ ...current, phone: "" }));
+                setPhone(formatPhoneInput(value));
+              }}
+              placeholder="+7 (999) 123-45-67"
+              value={phone}
+            />
+            <MeatButton fullWidth loading={tracking} onPress={() => handleTrack()}>
+              Открыть заказ
             </MeatButton>
-            <MeatButton fullWidth onPress={() => router.push("/auth/sign-up")}>
-              Создать аккаунт
-            </MeatButton>
-          </View>
-        </SectionCard>
-
-        <SectionCard>
-          <Text style={styles.sectionTitle}>Отследить заказ</Text>
-          <TextField
-            error={errors.orderId}
-            keyboardType="numeric"
-            label="Номер заказа"
-            onChangeText={(value) => {
-              setErrors((current) => ({ ...current, orderId: "" }));
-              setOrderId(value.replace(/[^\d]/g, ""));
-            }}
-            placeholder="Например, 128"
-            value={orderId}
-          />
-          <TextField
-            error={errors.phone}
-            keyboardType="phone-pad"
-            label="Телефон"
-            onChangeText={(value) => {
-              setErrors((current) => ({ ...current, phone: "" }));
-              setPhone(value);
-            }}
-            placeholder="+7 999 123-45-67"
-            value={phone}
-          />
-          <MeatButton fullWidth loading={tracking} onPress={() => handleTrack()}>
-            Открыть заказ
-          </MeatButton>
-        </SectionCard>
+          </SurfacePanel>
+        </View>
 
         {recentTracking.length ? (
-          <SectionCard>
-            <Text style={styles.sectionTitle}>Последние отслеживания</Text>
-            {recentTracking.map((item) => (
-              <View key={item.orderId} style={styles.trackRow}>
-                <Pressable onPress={() => handleTrack(item.orderId, item.phone)} style={styles.trackInfo}>
-                  <Text style={styles.rowTitle}>Заказ №{item.orderId}</Text>
-                  <Text style={styles.rowText}>{item.phone}</Text>
-                </Pressable>
-                <Pressable onPress={() => removeTracking(item.orderId)}>
-                  <Text style={styles.link}>Удалить</Text>
-                </Pressable>
+          <View style={styles.sectionBlock}>
+            <SectionBadge label="Недавние" tone="soft" />
+            <SurfacePanel style={styles.softPanel} tone="soft">
+              <Text style={styles.sectionTitle}>Последние отслеживания</Text>
+              <View style={styles.listStack}>
+                {recentTracking.map((item) => (
+                  <ListRow
+                    key={item.orderId}
+                    onPress={() => handleTrack(item.orderId, item.phone)}
+                    subtitle={formatPhoneInput(item.phone) || item.phone}
+                    title={`Заказ №${item.orderId}`}
+                    tone="surface"
+                    trailing={
+                      <Pressable onPress={() => removeTracking(item.orderId)}>
+                        <Text style={styles.link}>Удалить</Text>
+                      </Pressable>
+                    }
+                  />
+                ))}
               </View>
-            ))}
-          </SectionCard>
+            </SurfacePanel>
+          </View>
         ) : null}
       </Screen>
     );
@@ -170,113 +223,176 @@ export default function ProfileScreen() {
     <Screen>
       <PageHeader showBack subtitle="Аккаунт, адреса и заказы" title="Профиль" />
 
-      <SectionCard>
-        <View style={styles.accountRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user.first_name.slice(0, 1).toUpperCase()}</Text>
+      <View style={styles.sectionBlock}>
+        <SectionBadge label="Аккаунт" tone="accent" />
+        <SurfacePanel style={styles.accountPanel} tone="tint">
+          <View style={styles.accountRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{user.first_name.slice(0, 1).toUpperCase()}</Text>
+            </View>
+            <View style={styles.accountCopy}>
+              <Text style={styles.accountName}>{user.first_name || user.full_name}</Text>
+              <Text style={styles.accountLogin}>{formatPhoneInput(user.login) || user.login}</Text>
+            </View>
           </View>
-          <View style={styles.accountCopy}>
-            <Text style={styles.accountName}>{user.full_name || user.first_name}</Text>
-            <Text style={styles.accountLogin}>{user.login}</Text>
+          <View style={styles.metaRow}>
+            {user.birth_date ? <StatusPill label={user.birth_date} tone="muted" /> : null}
           </View>
-        </View>
-        <View style={styles.metaRow}>
-          {user.birth_date ? <StatusPill label={user.birth_date} tone="muted" /> : null}
-          {user.gender ? <StatusPill label={user.gender} tone="muted" /> : null}
-        </View>
-        <MeatButton onPress={() => router.push("/profile/edit")} variant="secondary">
-          Изменить профиль
-        </MeatButton>
-      </SectionCard>
+          <MeatButton onPress={() => router.push("/profile/edit")} variant="secondary">
+            Изменить профиль
+          </MeatButton>
+        </SurfacePanel>
+      </View>
 
-      <SectionCard>
+      <View style={styles.sectionBlock}>
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Адреса</Text>
+          <SectionBadge label="Адреса" />
           <Pressable onPress={() => router.push("/address/new")}>
             <Text style={styles.link}>Новый адрес</Text>
           </Pressable>
         </View>
-        {addressesQuery.data?.length ? (
-          addressesQuery.data.slice(0, 3).map((address) => (
-            <Pressable
-              key={address.id}
-              onPress={() =>
-                router.push({
-                  pathname: "/address/[id]",
-                  params: { id: String(address.id) },
-                })
-              }
-              style={styles.addressRow}
-            >
-              <View style={[styles.addressMarker, address.is_default ? styles.addressMarkerActive : null]} />
-              <View style={styles.addressCopyWrap}>
-                <View style={styles.addressLabelRow}>
-                  <Text style={styles.rowTitle}>{address.label || "Адрес"}</Text>
-                  {address.is_default ? <StatusPill label="Основной" tone="accent" /> : null}
-                </View>
-                <Text style={styles.rowText}>{address.address}</Text>
-              </View>
-            </Pressable>
-          ))
-        ) : (
-          <Text style={styles.copy}>Сохранённых адресов пока нет.</Text>
-        )}
-      </SectionCard>
+        <SurfacePanel style={styles.sectionPanel}>
+          {addressesQuery.data?.length ? (
+            <View style={styles.listStack}>
+              {addressesQuery.data.slice(0, 3).map((address) => (
+                <ListRow
+                  key={address.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/address/[id]",
+                      params: { id: String(address.id) },
+                    })
+                  }
+                  subtitle={address.address}
+                  title={address.label || "Адрес"}
+                  tone="surface"
+                  trailing={
+                    address.is_default ? (
+                      <StatusPill label="Основной" tone="accent" />
+                    ) : undefined
+                  }
+                />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.copy}>Сохранённых адресов пока нет.</Text>
+          )}
+        </SurfacePanel>
+      </View>
 
-      <SectionCard>
+      <View style={styles.sectionBlock}>
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Последние заказы</Text>
+          <SectionBadge label="Заказы" tone="soft" />
           <Pressable onPress={() => router.push("/profile/orders")}>
             <Text style={styles.link}>Все</Text>
           </Pressable>
         </View>
-        {ordersQuery.data?.length ? (
-          ordersQuery.data.slice(0, 3).map((order) => (
-            <Pressable
-              key={order.id}
-              onPress={() =>
-                router.push({
-                  pathname: "/order/[id]",
-                  params: { id: String(order.id) },
-                })
-              }
-              style={styles.orderRow}
-            >
-              <View style={styles.addressCopyWrap}>
-                <Text style={styles.rowTitle}>Заказ №{order.id}</Text>
-                <Text style={styles.rowText}>{formatDateTime(order.created_at)}</Text>
-              </View>
-              <StatusPill
-                label={order.status_name}
-                tone={order.status === "canceled" ? "danger" : "accent"}
-              />
-            </Pressable>
-          ))
-        ) : (
-          <Text style={styles.copy}>Как только появится первый заказ, история покажется здесь.</Text>
-        )}
-      </SectionCard>
+        <SurfacePanel style={styles.softPanel} tone="soft">
+          {ordersQuery.data?.length ? (
+            <View style={styles.listStack}>
+              {ordersQuery.data.slice(0, 3).map((order) => (
+                <ListRow
+                  key={order.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/order/[id]",
+                      params: { id: String(order.id) },
+                    })
+                  }
+                  subtitle={formatDateTime(order.created_at)}
+                  title={`Заказ №${order.id}`}
+                  tone="surface"
+                  trailing={
+                    <StatusPill
+                      label={order.status_name}
+                      tone={order.status === "canceled" ? "danger" : "accent"}
+                    />
+                  }
+                />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.copy}>
+              Как только появится первый заказ, история покажется здесь.
+            </Text>
+          )}
+        </SurfacePanel>
+      </View>
 
-      <SectionCard compact>
-        <MeatButton fullWidth onPress={handleLogout} variant="secondary">
-          Выйти
-        </MeatButton>
-      </SectionCard>
+      <View style={styles.logoutWrap}>
+        <Pressable hitSlop={12} onPress={handleLogout}>
+          <Text style={styles.logoutText}>Выйти</Text>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
+  sectionBlock: {
+    marginTop: spacing.xl,
+    gap: spacing.md,
   },
-  heroTitle: {
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  sectionBadge: {
+    alignSelf: "flex-start",
+    minHeight: 24,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    justifyContent: "center",
+  },
+  sectionBadgeAccent: {
+    backgroundColor: colors.accentSoft,
+  },
+  sectionBadgeNeutral: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  sectionBadgeSoft: {
+    backgroundColor: colors.bgSoft,
+  },
+  sectionBadgeText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  sectionBadgeTextAccent: {
+    color: colors.accent,
+  },
+  sectionBadgeTextNeutral: {
     color: colors.text,
-    fontSize: typography.title,
+  },
+  sectionBadgeTextSoft: {
+    color: colors.muted,
+  },
+  sectionPanel: {
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  accountPanel: {
+    borderWidth: 1,
+    borderColor: "rgba(230, 122, 46, 0.18)",
+  },
+  softPanel: {
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  intro: {
+    gap: spacing.xs,
+  },
+  introTitle: {
+    color: colors.text,
+    fontSize: typography.titleSm,
     fontWeight: typography.semibold,
   },
-  heroCopy: {
+  introCopy: {
     color: colors.muted,
     fontSize: typography.bodySm,
     lineHeight: 20,
@@ -290,12 +406,6 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: typography.semibold,
   },
-  sectionHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
   copy: {
     color: colors.muted,
     fontSize: typography.bodySm,
@@ -306,6 +416,9 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySm,
     fontWeight: typography.semibold,
   },
+  listStack: {
+    gap: spacing.xs,
+  },
   accountRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -315,18 +428,18 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: radii.pill,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.surfaceStrong,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
     color: colors.accent,
-    fontSize: typography.titleSm,
+    fontSize: typography.body,
     fontWeight: typography.semibold,
   },
   accountCopy: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   accountName: {
     color: colors.text,
@@ -335,60 +448,22 @@ const styles = StyleSheet.create({
   },
   accountLogin: {
     color: colors.muted,
-    fontSize: typography.bodySm,
+    fontSize: typography.caption,
   },
   metaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
-  addressRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-  },
-  addressMarker: {
-    width: 12,
-    height: 12,
-    borderRadius: radii.pill,
-    marginTop: 4,
-    backgroundColor: colors.surfaceMuted,
-  },
-  addressMarkerActive: {
-    backgroundColor: colors.accent,
-  },
-  addressCopyWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  addressLabelRow: {
-    flexDirection: "row",
+  logoutWrap: {
+    marginTop: "auto",
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.md,
     alignItems: "center",
-    gap: spacing.sm,
   },
-  rowTitle: {
-    color: colors.text,
-    fontSize: typography.bodySm,
-    fontWeight: typography.semibold,
-  },
-  rowText: {
+  logoutText: {
     color: colors.muted,
     fontSize: typography.bodySm,
-    lineHeight: 19,
-  },
-  orderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  trackRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  trackInfo: {
-    flex: 1,
-    gap: 3,
+    fontWeight: typography.medium,
   },
 });

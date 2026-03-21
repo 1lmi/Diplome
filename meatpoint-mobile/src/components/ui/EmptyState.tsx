@@ -33,8 +33,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   icon: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: radii.pill,
     backgroundColor: colors.accentSoft,
     alignItems: "center",

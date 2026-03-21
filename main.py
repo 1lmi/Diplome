@@ -56,23 +56,39 @@ def verify_password(password: str, stored: str) -> bool:
     return secrets.compare_digest(recalculated, hash_hex)
 
 
-PASSWORD_POLICY_RE = re.compile(r"^(?=.*[A-Z])(?=.*\d).{8,}$")
-
-
-def validate_password_strength(password: str) -> None:
-    if not PASSWORD_POLICY_RE.match(password):
-        raise HTTPException(
-            status_code=400,
-            detail="Пароль должен содержать минимум 8 символов, 1 заглавную букву и 1 цифру.",
-        )
-
-
 def build_image_url(image_path: str, request: Optional[Request] = None) -> str:
     filename = image_path or DEFAULT_IMAGE_NAME
     if request is None:
         return f"/static/{filename}"
     base = str(request.base_url).rstrip("/")
     return f"{base}/static/{filename}"
+
+
+ADMIN_PHONE = "+79374702232"
+CANONICAL_PHONE_RE = re.compile(r"^\+7\d{10}$")
+
+
+def validate_password_strength(password: str) -> None:
+    if len(password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Пароль должен содержать минимум 6 символов.",
+        )
+
+
+def normalize_phone_login(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) == 11 and digits.startswith("8"):
+        digits = f"7{digits[1:]}"
+    if len(digits) == 10:
+        digits = f"7{digits}"
+    normalized = f"+{digits}" if digits else ""
+    if not CANONICAL_PHONE_RE.match(normalized):
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите номер телефона в формате +7 (xxx) xxx-xx-xx.",
+        )
+    return normalized
 
 # --- migration helpers -------------------------------------------------------
 
@@ -442,17 +458,22 @@ def apply_migrations() -> None:
     ensure_sort_order(conn, "categories")
     ensure_sort_order(conn, "products")
 
-    admin_exists = conn.execute(
-        "SELECT 1 FROM users WHERE is_admin = 1 LIMIT 1"
+    admin_row = conn.execute(
+        "SELECT id FROM users WHERE is_admin = 1 ORDER BY id LIMIT 1"
     ).fetchone()
-    if admin_exists is None:
+    if admin_row is None:
         password_hash = hash_password("admin1234")
         conn.execute(
             """
             INSERT INTO users(name, first_name, last_name, login, phone, password_hash, is_admin)
             VALUES (?, ?, ?, ?, ?, ?, 1)
             """,
-            ("Admin", "Admin", "User", "admin", "admin", password_hash),
+            ("Admin", "Admin", "User", ADMIN_PHONE, ADMIN_PHONE, password_hash),
+        )
+    else:
+        conn.execute(
+            "UPDATE users SET login = ?, phone = ? WHERE id = ?",
+            (ADMIN_PHONE, ADMIN_PHONE, admin_row["id"]),
         )
 
     default_settings = {
@@ -646,7 +667,7 @@ class RegisterBody(BaseModel):
     first_name: str = Field(min_length=1)
     last_name: Optional[str] = None
     login: str = Field(min_length=1)
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=6)
     birth_date: Optional[str] = None
     gender: Optional[str] = None
 
@@ -904,6 +925,36 @@ def ensure_size(
     ).fetchone()
     if existing:
         return existing["id"]
+
+    if trimmed_name is not None:
+        existing_by_name = db.execute(
+            """
+            SELECT id, amount, unit
+            FROM sizes
+            WHERE name = ?
+            LIMIT 1
+            """,
+            (trimmed_name,),
+        ).fetchone()
+        if existing_by_name:
+            if (
+                existing_by_name["amount"] != normalized_amount
+                or existing_by_name["unit"] != normalized_unit
+            ):
+                db.execute(
+                    """
+                    UPDATE sizes
+                    SET amount = ?, unit = ?, gram_weight = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        normalized_amount,
+                        normalized_unit,
+                        normalized_amount,
+                        existing_by_name["id"],
+                    ),
+                )
+            return existing_by_name["id"]
 
     cur = db.execute(
         """
@@ -1213,8 +1264,8 @@ def create_order(
         raise HTTPException(status_code=500, detail="Статус new не найден")
     status_id = status_row["id"]
 
-    customer_phone = order.customer.phone.strip()
-    if not customer_phone:
+    customer_phone = normalize_phone_login(order.customer.phone)
+    if False:  # normalize_phone_login already validates phone
         raise HTTPException(status_code=400, detail="РўРµР»РµС„РѕРЅ РѕР±СЏР·Р°С‚РµР»РµРЅ")
     customer_name = (order.customer.name or "").strip() or None
     customer_address = (order.customer.address or "").strip() or None
@@ -1353,7 +1404,7 @@ def get_order(
     raw, out = fetch_order(db, order_id, request=request)
     if current_user and (current_user["is_admin"] or raw["user_id"] == current_user["id"]):
         return out
-    if phone and raw["customer_phone"] and phone.strip() == raw["customer_phone"]:
+    if phone and raw["customer_phone"] and normalize_phone_login(phone) == raw["customer_phone"]:
         return out
     if not current_user:
         raise HTTPException(status_code=403, detail="Нужен номер телефона заказа")
@@ -1368,7 +1419,7 @@ def track_order(
     db: sqlite3.Connection = Depends(get_db),
 ):
     raw, out = fetch_order(db, order_id, request=request)
-    if raw["customer_phone"] and raw["customer_phone"] == phone.strip():
+    if raw["customer_phone"] and raw["customer_phone"] == normalize_phone_login(phone):
         return out
     raise HTTPException(status_code=403, detail="Телефон не совпадает с заказом")
 
@@ -1625,11 +1676,9 @@ def register(
     last_name = (body.last_name or "").strip()
     birth_date = (body.birth_date or "").strip() or None
     gender = (body.gender or "").strip() or None
-    login_value = body.login.strip()
+    login_value = normalize_phone_login(body.login)
     if not first_name:
         raise HTTPException(status_code=400, detail="Имя обязательно.")
-    if not login_value:
-        raise HTTPException(status_code=400, detail="Логин обязателен.")
     validate_password_strength(body.password)
 
     existing = db.execute(
@@ -1637,7 +1686,7 @@ def register(
         (login_value, login_value),
     ).fetchone()
     if existing:
-        raise HTTPException(status_code=400, detail="Такой логин уже занят.")
+        raise HTTPException(status_code=400, detail="Такой номер телефона уже занят.")
 
     pwd_hash = hash_password(body.password)
     full_name = f"{first_name} {last_name}".strip() if last_name else first_name
@@ -1655,15 +1704,15 @@ def register(
 
 @app.post("/auth/login", response_model=AuthResponse)
 def login(body: LoginBody, db: sqlite3.Connection = Depends(get_db)):
-    login_value = body.login.strip()
-    if not login_value or not body.password:
-        raise HTTPException(status_code=400, detail="Логин и пароль обязательны.")
+    if not body.login.strip() or not body.password:
+        raise HTTPException(status_code=400, detail="Номер телефона и пароль обязательны.")
+    login_value = normalize_phone_login(body.login)
     user = db.execute(
         "SELECT * FROM users WHERE login = ? OR phone = ? LIMIT 1",
         (login_value, login_value),
     ).fetchone()
     if user is None or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль.")
+        raise HTTPException(status_code=401, detail="Неверный номер телефона или пароль.")
     return issue_token(db, user)
 
 @app.get("/auth/me", response_model=UserOut)

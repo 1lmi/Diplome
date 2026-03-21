@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import React from "react";
-import { StyleSheet, View } from "react-native";
 
-import { colors, radii, spacing, shadows } from "@/src/theme/tokens";
+import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 
 export function SectionCard({
   children,
@@ -11,19 +10,5 @@ export function SectionCard({
   children: ReactNode;
   compact?: boolean;
 }) {
-  return <View style={[styles.card, compact ? styles.compact : null]}>{children}</View>;
+  return <SurfacePanel compact={compact}>{children}</SurfacePanel>;
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    gap: spacing.md,
-    ...shadows.soft,
-  },
-  compact: {
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-});

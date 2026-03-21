@@ -1,7 +1,7 @@
 import React from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, radii, shadows, spacing, typography } from "@/src/theme/tokens";
+import { colors, radii, spacing, typography } from "@/src/theme/tokens";
 
 type Variant = "primary" | "secondary" | "ghost";
 type Size = "default" | "cta";
@@ -43,7 +43,6 @@ export function MeatButton({
         fullWidth ? styles.fullWidth : null,
         pressed && !disabled && !loading ? styles.pressed : null,
         disabled ? styles.disabled : null,
-        variant === "primary" ? shadows.soft : null,
       ]}
     >
       {loading ? (
@@ -69,19 +68,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   default: {
-    minHeight: 42,
+    minHeight: 40,
     paddingHorizontal: spacing.lg,
   },
   cta: {
-    minHeight: 52,
+    minHeight: 50,
     paddingHorizontal: spacing.xl,
   },
   fullWidth: {
     width: "100%",
   },
   pressed: {
-    opacity: 0.95,
-    transform: [{ scale: 0.988 }],
+    opacity: 0.94,
+    transform: [{ scale: 0.994 }],
   },
   disabled: {
     opacity: 0.56,

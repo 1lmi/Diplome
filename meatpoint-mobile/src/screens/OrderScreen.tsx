@@ -9,8 +9,8 @@ import { EmptyState } from "@/src/components/ui/EmptyState";
 import { OrderProgress } from "@/src/components/ui/OrderProgress";
 import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
-import { SectionCard } from "@/src/components/ui/SectionCard";
 import { StatusPill } from "@/src/components/ui/StatusPill";
+import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 import { formatDateTime, formatPrice, getDisplayImage } from "@/src/lib/format";
 import { buildOrderProgress, getActiveHistoryEntry } from "@/src/lib/order-progress";
 import { useAuthStore } from "@/src/store/auth-store";
@@ -89,26 +89,24 @@ export default function OrderScreen() {
         }
       />
 
-      <SectionCard>
+      <SurfacePanel>
         <Text style={styles.sectionTitle}>Статус заказа</Text>
         <OrderProgress steps={progress} />
         <View style={styles.statusCard}>
           <Text style={styles.statusTitle}>{activeHistory?.status_name || order.status_name}</Text>
-          <Text style={styles.statusMeta}>
-            {formatDateTime(activeHistory?.changed_at || order.created_at)}
-          </Text>
+          <Text style={styles.statusMeta}>{formatDateTime(activeHistory?.changed_at || order.created_at)}</Text>
           <Text style={styles.statusText}>
             {activeHistory?.comment ||
               order.comment ||
               "Мы обновим этот экран, как только статус изменится."}
           </Text>
         </View>
-      </SectionCard>
+      </SurfacePanel>
 
-      <SectionCard>
+      <SurfacePanel>
         <Text style={styles.sectionTitle}>Состав заказа</Text>
-        {order.items.map((item) => (
-          <View key={`${item.product_size_id}-${item.product_name}`} style={styles.lineRow}>
+        {order.items.map((item, index) => (
+          <View key={`${item.product_size_id}-${item.product_name}`} style={[styles.lineRow, index > 0 ? styles.lineRowBorder : null]}>
             <Image
               contentFit="cover"
               source={{ uri: getDisplayImage(item.image_url) }}
@@ -128,9 +126,9 @@ export default function OrderScreen() {
           <Text style={styles.totalLabel}>Итого</Text>
           <Text style={styles.totalValue}>{formatPrice(order.total_price)}</Text>
         </View>
-      </SectionCard>
+      </SurfacePanel>
 
-      <SectionCard>
+      <SurfacePanel>
         <Text style={styles.sectionTitle}>Детали</Text>
         <DetailRow label="Получатель" value={order.customer_name || "—"} />
         <DetailRow label="Телефон" value={order.customer_phone || "—"} />
@@ -146,7 +144,7 @@ export default function OrderScreen() {
           value={order.payment_method === "card" ? "Картой при получении" : "Наличными"}
         />
         {order.delivery_time ? <DetailRow label="Когда" value={order.delivery_time} /> : null}
-      </SectionCard>
+      </SurfacePanel>
     </Screen>
   );
 }
@@ -170,7 +168,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     backgroundColor: colors.surfaceTint,
     padding: spacing.md,
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   statusTitle: {
     color: colors.text,
@@ -192,11 +190,15 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.sm,
   },
+  lineRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
   lineImage: {
     width: 56,
     height: 56,
     borderRadius: radii.md,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceTint,
   },
   lineCopy: {
     flex: 1,
@@ -241,7 +243,7 @@ const styles = StyleSheet.create({
   },
   detailRow: {
     gap: 4,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   detailLabel: {
     color: colors.muted,

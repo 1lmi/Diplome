@@ -7,7 +7,7 @@ import { mobileApi } from "@/src/api/mobile-api";
 import { MeatButton } from "@/src/components/ui/MeatButton";
 import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
-import { SectionCard } from "@/src/components/ui/SectionCard";
+import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 import { TextField } from "@/src/components/ui/TextField";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
@@ -24,10 +24,7 @@ export function AddressFormScreen({ addressId }: { addressId?: number | null }) 
   });
 
   const editingAddress = useMemo(
-    () =>
-      addressId
-        ? addressesQuery.data?.find((item) => item.id === addressId) || null
-        : null,
+    () => (addressId ? addressesQuery.data?.find((item) => item.id === addressId) || null : null),
     [addressId, addressesQuery.data]
   );
 
@@ -125,7 +122,7 @@ export function AddressFormScreen({ addressId }: { addressId?: number | null }) 
         title={editingAddress ? "Редактировать адрес" : "Новый адрес"}
       />
 
-      <SectionCard>
+      <SurfacePanel>
         <TextField
           helper="Например: Дом, Работа, Студия"
           label="Название"
@@ -163,7 +160,7 @@ export function AddressFormScreen({ addressId }: { addressId?: number | null }) 
             Удалить адрес
           </MeatButton>
         ) : null}
-      </SectionCard>
+      </SurfacePanel>
     </Screen>
   );
 }

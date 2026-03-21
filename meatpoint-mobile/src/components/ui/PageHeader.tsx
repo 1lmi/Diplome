@@ -21,7 +21,10 @@ export function PageHeader({
     <View style={styles.row}>
       <View style={styles.left}>
         {showBack ? (
-          <Pressable style={({ pressed }) => [styles.back, pressed ? styles.backPressed : null]} onPress={() => router.back()}>
+          <Pressable
+            style={({ pressed }) => [styles.back, pressed ? styles.backPressed : null]}
+            onPress={() => router.back()}
+          >
             <Feather color={colors.text} name="chevron-left" size={18} />
           </Pressable>
         ) : null}
@@ -50,8 +53,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   back: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
@@ -62,7 +65,7 @@ const styles = StyleSheet.create({
   },
   textBlock: {
     flex: 1,
-    gap: 3,
+    gap: 4,
   },
   title: {
     color: colors.text,

@@ -5,13 +5,15 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { mobileApi } from "@/src/api/mobile-api";
 import { EmptyState } from "@/src/components/ui/EmptyState";
+import { ListRow } from "@/src/components/ui/ListRow";
 import { MeatButton } from "@/src/components/ui/MeatButton";
 import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
-import { SectionCard } from "@/src/components/ui/SectionCard";
 import { StatusPill } from "@/src/components/ui/StatusPill";
+import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 import { TextField } from "@/src/components/ui/TextField";
 import { formatDateTime, formatPrice, normalizePhone } from "@/src/lib/format";
+import { formatPhoneInput } from "@/src/lib/phone";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { useTrackingStore } from "@/src/store/tracking-store";
@@ -81,7 +83,7 @@ export default function OrdersScreen() {
       <Screen keyboard>
         <PageHeader subtitle="Отслеживание гостевых заказов" title="Заказы" />
 
-        <SectionCard>
+        <SurfacePanel>
           <Text style={styles.sectionTitle}>Отследить заказ</Text>
           <TextField
             error={errors.orderId}
@@ -100,39 +102,41 @@ export default function OrdersScreen() {
             label="Телефон"
             onChangeText={(value) => {
               setErrors((current) => ({ ...current, phone: "" }));
-              setPhone(value);
+              setPhone(formatPhoneInput(value));
             }}
-            placeholder="+7 999 123-45-67"
+            placeholder="+7 (999) 123-45-67"
             value={phone}
           />
           <MeatButton fullWidth loading={tracking} onPress={() => handleTrack()}>
             Открыть заказ
           </MeatButton>
-        </SectionCard>
+        </SurfacePanel>
 
         {sortedTracked.length > 0 ? (
-          <SectionCard>
+          <SurfacePanel>
             <Text style={styles.sectionTitle}>Последние отслеживания</Text>
             {sortedTracked.map((item) => (
-              <View key={item.orderId} style={styles.trackRow}>
-                <Pressable onPress={() => handleTrack(item.orderId, item.phone)} style={styles.trackInfo}>
-                  <Text style={styles.trackTitle}>Заказ №{item.orderId}</Text>
-                  <Text style={styles.trackMeta}>{item.phone}</Text>
-                </Pressable>
-                <Pressable onPress={() => removeTracking(item.orderId)}>
-                  <Text style={styles.remove}>Удалить</Text>
-                </Pressable>
-              </View>
+              <ListRow
+                key={item.orderId}
+                onPress={() => handleTrack(item.orderId, item.phone)}
+                subtitle={formatPhoneInput(item.phone) || item.phone}
+                title={`Заказ №${item.orderId}`}
+                trailing={
+                  <Pressable onPress={() => removeTracking(item.orderId)}>
+                    <Text style={styles.link}>Удалить</Text>
+                  </Pressable>
+                }
+              />
             ))}
-          </SectionCard>
+          </SurfacePanel>
         ) : null}
 
-        <SectionCard>
+        <SurfacePanel tone="tint">
           <Text style={styles.sectionTitle}>Хотите историю заказов?</Text>
           <Text style={styles.copy}>
             Войдите в аккаунт, чтобы видеть заказы, адреса и данные профиля в одном месте.
           </Text>
-          <View style={styles.authActions}>
+          <View style={styles.actionRow}>
             <MeatButton fullWidth onPress={() => router.push("/auth/sign-in")} variant="secondary">
               Войти
             </MeatButton>
@@ -140,7 +144,7 @@ export default function OrdersScreen() {
               Регистрация
             </MeatButton>
           </View>
-        </SectionCard>
+        </SurfacePanel>
       </Screen>
     );
   }
@@ -156,32 +160,27 @@ export default function OrdersScreen() {
           title="Обновляем список"
         />
       ) : ordersQuery.data?.length ? (
-        <View style={styles.orderList}>
+        <View style={styles.list}>
           {ordersQuery.data.map((order) => (
-            <Pressable
-              key={order.id}
-              onPress={() =>
-                router.push({
-                  pathname: "/order/[id]",
-                  params: { id: String(order.id) },
-                })
-              }
-              style={styles.orderCard}
-            >
-              <View style={styles.orderHead}>
-                <View style={styles.orderHeadCopy}>
-                  <Text style={styles.orderTitle}>Заказ №{order.id}</Text>
-                  <Text style={styles.orderMeta}>{formatDateTime(order.created_at)}</Text>
-                </View>
-                <StatusPill label={order.status_name} />
-              </View>
+            <SurfacePanel key={order.id} compact>
+              <ListRow
+                onPress={() =>
+                  router.push({
+                    pathname: "/order/[id]",
+                    params: { id: String(order.id) },
+                  })
+                }
+                subtitle={formatDateTime(order.created_at)}
+                title={`Заказ №${order.id}`}
+                trailing={<StatusPill label={order.status_name} />}
+              />
               <View style={styles.orderFoot}>
                 <Text style={styles.orderSecondary}>
                   {order.delivery_method === "pickup" ? "Самовывоз" : "Доставка"}
                 </Text>
                 <Text style={styles.orderAmount}>{formatPrice(order.total_price)}</Text>
               </View>
-            </Pressable>
+            </SurfacePanel>
           ))}
         </View>
       ) : (
@@ -201,7 +200,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: typography.semibold,
   },
-  authActions: {
+  actionRow: {
     gap: spacing.sm,
   },
   copy: {
@@ -209,66 +208,20 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySm,
     lineHeight: 20,
   },
-  trackRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  trackInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  trackTitle: {
-    color: colors.text,
-    fontSize: typography.bodySm,
-    fontWeight: typography.medium,
-  },
-  trackMeta: {
-    color: colors.muted,
-    fontSize: typography.caption,
-  },
-  remove: {
+  link: {
     color: colors.accent,
     fontSize: typography.caption,
     fontWeight: typography.medium,
   },
-  orderList: {
+  list: {
     gap: spacing.md,
-  },
-  orderCard: {
-    borderRadius: 20,
-    backgroundColor: colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  orderHead: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  orderHeadCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  orderTitle: {
-    color: colors.text,
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-  },
-  orderMeta: {
-    color: colors.muted,
-    fontSize: typography.caption,
   },
   orderFoot: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xs,
   },
   orderSecondary: {
     color: colors.muted,
