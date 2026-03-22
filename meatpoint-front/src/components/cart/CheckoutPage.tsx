@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+
 import { api } from "../../api";
 import { useAuth } from "../../authContext";
 import { useCart } from "../../cartContext";
@@ -7,6 +8,7 @@ import { saveOrderTracking } from "../../orderTracking";
 import type { CheckoutDraft, UserAddress } from "../../types";
 import { focusFirstInvalidField } from "../../utils/forms";
 import { useToast } from "../../ui/ToastProvider";
+import AddressFlowModal from "../AddressFlowModal";
 import CheckoutAuthGate from "./CheckoutAuthGate";
 import OrderSummaryCard from "./OrderSummaryCard";
 
@@ -14,12 +16,88 @@ interface Props {
   onLoginRequest: () => void;
   addresses: UserAddress[];
   addressesLoading: boolean;
+  onRefreshAddresses: () => Promise<void>;
+}
+
+const ASAP_LABEL = "Как можно быстрее";
+
+type TimeOption = {
+  value: string;
+  label: string;
+  startMinutes: number;
+};
+
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+function floorToQuarter(date: Date) {
+  const quarter = 15 * 60 * 1000;
+  return new Date(Math.floor(date.getTime() / quarter) * quarter);
+}
+
+function formatTime(date: Date) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function buildDailyTimeOptions(baseDate = new Date()): TimeOption[] {
+  const slots: TimeOption[] = [];
+
+  for (let hour = 9; hour < 22; hour += 1) {
+    for (let minutes = 0; minutes < 60; minutes += 15) {
+      const start = new Date(baseDate);
+      start.setHours(hour, minutes, 0, 0);
+      const end = addMinutes(start, 15);
+      if (end.getHours() > 22 || (end.getHours() === 22 && end.getMinutes() > 0)) {
+        continue;
+      }
+
+      const startMinutes = hour * 60 + minutes;
+      const label = `${formatTime(start)}–${formatTime(end)}`;
+      slots.push({
+        value: label,
+        label,
+        startMinutes,
+      });
+    }
+  }
+
+  return slots;
+}
+
+function buildQuickTimeOptions(allOptions: TimeOption[], baseDate = new Date()): TimeOption[] {
+  const threshold = addMinutes(baseDate, 45);
+  const thresholdRounded = floorToQuarter(threshold);
+  const thresholdMinutes =
+    thresholdRounded.getHours() * 60 + thresholdRounded.getMinutes();
+
+  return allOptions.filter((option) => option.startMinutes >= thresholdMinutes).slice(0, 4);
+}
+
+function buildOtherTimeOptions(
+  allOptions: TimeOption[],
+  quickOptions: TimeOption[],
+  baseDate = new Date()
+) {
+  const threshold = addMinutes(baseDate, 45);
+  const thresholdRounded = floorToQuarter(threshold);
+  const thresholdMinutes =
+    thresholdRounded.getHours() * 60 + thresholdRounded.getMinutes();
+  const quickValues = new Set(quickOptions.map((option) => option.value));
+
+  return allOptions.filter(
+    (option) => option.startMinutes >= thresholdMinutes && !quickValues.has(option.value)
+  );
 }
 
 export const CheckoutPage: React.FC<Props> = ({
   onLoginRequest,
   addresses,
   addressesLoading,
+  onRefreshAddresses,
 }) => {
   const { user } = useAuth();
   const { pushToast } = useToast();
@@ -32,10 +110,21 @@ export const CheckoutPage: React.FC<Props> = ({
     resetCheckoutDraft,
   } = useCart();
   const navigate = useNavigate();
+
   const [submitting, setSubmitting] = useState(false);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [addressModalSaving, setAddressModalSaving] = useState(false);
+  const [allTimesOpen, setAllTimesOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const defaultAddress = addresses.find((item) => item.is_default) || null;
+  const allTimeOptions = useMemo(() => buildDailyTimeOptions(), []);
+  const quickTimeOptions = useMemo(() => buildQuickTimeOptions(allTimeOptions), [allTimeOptions]);
+  const otherTimeOptions = useMemo(
+    () => buildOtherTimeOptions(allTimeOptions, quickTimeOptions),
+    [allTimeOptions, quickTimeOptions]
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -69,6 +158,18 @@ export const CheckoutPage: React.FC<Props> = ({
     updateCheckoutDraft({ address: defaultAddress.address });
   }, [checkoutDraft.address, checkoutDraft.deliveryMethod, defaultAddress, updateCheckoutDraft, user]);
 
+  useEffect(() => {
+    const current = checkoutDraft.deliveryTime.trim();
+    const hasCurrentOption =
+      current === ASAP_LABEL ||
+      quickTimeOptions.some((option) => option.value === current) ||
+      otherTimeOptions.some((option) => option.value === current);
+
+    if (!current || !hasCurrentOption) {
+      updateCheckoutDraft({ deliveryTime: ASAP_LABEL });
+    }
+  }, [checkoutDraft.deliveryTime, otherTimeOptions, quickTimeOptions, updateCheckoutDraft]);
+
   const summaryLines = useMemo(
     () =>
       items.map((item) => ({
@@ -89,6 +190,16 @@ export const CheckoutPage: React.FC<Props> = ({
   const trimmedName = checkoutDraft.customerName.trim();
   const trimmedPhone = checkoutDraft.customerPhone.trim();
   const trimmedAddress = checkoutDraft.address.trim();
+  const resolvedName = (user?.full_name || trimmedName).trim();
+  const resolvedPhone = (user?.login || trimmedPhone).trim();
+  const activeSavedAddress =
+    addresses.find((item) => item.address.trim() === trimmedAddress) || null;
+  const selectedCustomTime = useMemo(() => {
+    const current = checkoutDraft.deliveryTime.trim();
+    if (!current || current === ASAP_LABEL) return "";
+    if (quickTimeOptions.some((option) => option.value === current)) return "";
+    return current;
+  }, [checkoutDraft.deliveryTime, quickTimeOptions]);
 
   const clearFieldError = (key: string) => {
     setFieldErrors((prev) => {
@@ -103,8 +214,55 @@ export const CheckoutPage: React.FC<Props> = ({
     const nextErrors: Record<string, string> = {};
     if (!trimmedName) nextErrors.customerName = "Укажите имя получателя.";
     if (!trimmedPhone) nextErrors.customerPhone = "Укажите номер телефона.";
-    if (needsAddress && !trimmedAddress) nextErrors.address = "Укажите адрес доставки.";
+    if (needsAddress && !trimmedAddress) nextErrors.address = "Выберите адрес доставки.";
     return nextErrors;
+  };
+
+  const handleAddressSave = async (payload: {
+    label: string | null;
+    address: string;
+    isDefault: boolean;
+  }) => {
+    setAddressModalSaving(true);
+    setError(null);
+
+    try {
+      if (user) {
+        await api.createAddress({
+          label: payload.label,
+          address: payload.address,
+          is_default: payload.isDefault,
+        });
+        await onRefreshAddresses();
+      }
+
+      clearFieldError("address");
+      updateCheckoutDraft({
+        deliveryMethod: "delivery",
+        address: payload.address,
+      });
+      setAddressModalOpen(false);
+      pushToast({
+        tone: "success",
+        title: user ? "Адрес сохранён" : "Адрес выбран",
+        description: user
+          ? "Адрес добавлен в профиль и подставлен в заказ."
+          : "Адрес подставлен в оформление заказа.",
+      });
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error && saveError.message
+          ? saveError.message
+          : "Не удалось сохранить адрес.";
+      setError(message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось сохранить адрес",
+        description: message,
+      });
+    } finally {
+      setAddressModalSaving(false);
+    }
   };
 
   if (items.length === 0) {
@@ -135,13 +293,17 @@ export const CheckoutPage: React.FC<Props> = ({
       setError(message);
       pushToast({
         tone: "info",
-        title: "Требуется способ оформления",
+        title: "Выберите способ оформления",
         description: message,
       });
       return;
     }
 
     const nextErrors = validateCheckout();
+    if (user) {
+      delete nextErrors.customerName;
+      delete nextErrors.customerPhone;
+    }
     if (Object.keys(nextErrors).length > 0) {
       setFieldErrors(nextErrors);
       setError("Заполните обязательные поля перед оформлением заказа.");
@@ -174,8 +336,8 @@ export const CheckoutPage: React.FC<Props> = ({
     try {
       const order = await api.createOrder({
         customer: {
-          name: trimmedName || null,
-          phone: trimmedPhone,
+          name: resolvedName || null,
+          phone: resolvedPhone,
           address: needsAddress ? trimmedAddress || null : null,
         },
         delivery_method: checkoutDraft.deliveryMethod,
@@ -192,14 +354,17 @@ export const CheckoutPage: React.FC<Props> = ({
       });
 
       if (!user) {
-        saveOrderTracking(order.id, trimmedPhone);
+        saveOrderTracking(order.id, resolvedPhone);
       }
 
       clear();
       resetCheckoutDraft();
-      navigate(`/checkout/success/${order.id}`);
-    } catch (e: any) {
-      const message = e?.message || "Не удалось оформить заказ.";
+      navigate(`/orders/${order.id}`);
+    } catch (submitError: unknown) {
+      const message =
+        submitError instanceof Error && submitError.message
+          ? submitError.message
+          : "Не удалось оформить заказ.";
       setError(message);
       pushToast({
         tone: "error",
@@ -219,7 +384,7 @@ export const CheckoutPage: React.FC<Props> = ({
             <p className="eyebrow">Шаг 2</p>
             <h1>Оформление заказа</h1>
             <p className="muted">
-              Заполните данные для связи, выберите способ получения и подтвердите заказ.
+              Укажите данные для связи, выберите способ получения и подтвердите заказ.
             </p>
           </div>
 
@@ -231,10 +396,12 @@ export const CheckoutPage: React.FC<Props> = ({
           ) : null}
 
           <div className={"checkout-form" + (authGateLocked ? " checkout-form--locked" : "")}>
+            {!user ? (
             <section className="checkout-section">
               <div className="checkout-section__head">
                 <h2>Личные данные</h2>
               </div>
+
               <div className="checkout-grid">
                 <label className="field">
                   <span>Имя</span>
@@ -253,6 +420,7 @@ export const CheckoutPage: React.FC<Props> = ({
                     <p className="field-note field-note--error">{fieldErrors.customerName}</p>
                   ) : null}
                 </label>
+
                 <label className="field">
                   <span>Телефон</span>
                   <input
@@ -272,11 +440,13 @@ export const CheckoutPage: React.FC<Props> = ({
                 </label>
               </div>
             </section>
+            ) : null}
 
             <section className="checkout-section">
               <div className="checkout-section__head">
-                <h2>Доставка</h2>
+                <h2>Получение</h2>
               </div>
+
               <div className="checkout-toggle">
                 <button
                   type="button"
@@ -312,62 +482,85 @@ export const CheckoutPage: React.FC<Props> = ({
               <div className="checkout-stack">
                 {needsAddress ? (
                   <>
-                    {user ? (
-                      <div className="checkout-addresses">
-                        <div className="checkout-addresses__head">
-                          <span>Сохранённые адреса</span>
-                          {addressesLoading ? <small>Обновляем...</small> : null}
+                    <div className="checkout-addresses">
+                      <div className="checkout-addresses__head">
+                        <span>{user ? "Сохранённые адреса" : "Адрес доставки"}</span>
+                        <div className="checkout-addresses__head-actions">
+                          {addressesLoading && user ? <small>Обновляем...</small> : null}
+                          <button
+                            type="button"
+                            className="btn btn--outline btn--sm"
+                            onClick={() => setAddressModalOpen(true)}
+                            disabled={submitting}
+                          >
+                            Выбрать на карте
+                          </button>
                         </div>
-                        {addresses.length > 0 ? (
-                          <div className="checkout-addresses__list">
-                            {addresses.map((address) => {
-                              const active = checkoutDraft.address.trim() === address.address.trim();
-                              return (
-                                <button
-                                  key={address.id}
-                                  type="button"
-                                  className={
-                                    "checkout-address-chip" +
-                                    (active ? " checkout-address-chip--active" : "")
-                                  }
-                                  disabled={submitting}
-                                  onClick={() => {
-                                    clearFieldError("address");
-                                    updateCheckoutDraft({ address: address.address });
-                                  }}
-                                >
-                                  <strong>{address.label || "Адрес"}</strong>
-                                  <span>{address.address}</span>
-                                  {address.is_default ? <em>Основной</em> : null}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="checkout-hint">
-                            Сохранённых адресов пока нет. Добавить их можно в личном кабинете.
-                          </div>
-                        )}
+                      </div>
+
+                      {user && addresses.length > 0 ? (
+                        <div className="checkout-addresses__list">
+                          {addresses.map((address) => {
+                            const active = trimmedAddress === address.address.trim();
+                            return (
+                              <button
+                                key={address.id}
+                                type="button"
+                                className={
+                                  "checkout-address-chip" +
+                                  (active ? " checkout-address-chip--active" : "")
+                                }
+                                disabled={submitting}
+                                onClick={() => {
+                                  clearFieldError("address");
+                                  updateCheckoutDraft({ address: address.address });
+                                }}
+                              >
+                                <strong>{address.label || "Адрес"}</strong>
+                                <span>{address.address}</span>
+                                {address.is_default ? <em>Основной</em> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="checkout-hint">
+                          {user
+                            ? "Сохранённых адресов пока нет. Выберите адрес на карте, и он сразу появится в профиле."
+                            : "Выберите адрес на карте. Его можно уточнить и использовать сразу в заказе."}
+                        </div>
+                      )}
+                    </div>
+
+                    {!activeSavedAddress ? (
+                      <div className="checkout-selected-address">
+                        <div
+                          id="checkout-address"
+                          tabIndex={-1}
+                          className={
+                            "checkout-selected-address__card" +
+                            (fieldErrors.address ? " checkout-selected-address__card--error" : "")
+                          }
+                        >
+                          <span className="checkout-selected-address__label">Текущий адрес</span>
+                          <strong>{trimmedAddress || "Пока не выбран"}</strong>
+                        </div>
+                        {trimmedAddress ? (
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() => setAddressModalOpen(true)}
+                            disabled={submitting}
+                          >
+                            Изменить на карте
+                          </button>
+                        ) : null}
                       </div>
                     ) : null}
 
-                    <label className="field">
-                      <span>Адрес доставки</span>
-                      <input
-                        id="checkout-address"
-                        className="input"
-                        value={checkoutDraft.address}
-                        aria-invalid={fieldErrors.address ? "true" : "false"}
-                        disabled={submitting}
-                        onChange={(event) => {
-                          clearFieldError("address");
-                          updateCheckoutDraft({ address: event.target.value });
-                        }}
-                      />
-                      {fieldErrors.address ? (
-                        <p className="field-note field-note--error">{fieldErrors.address}</p>
-                      ) : null}
-                    </label>
+                    {fieldErrors.address ? (
+                      <p className="field-note field-note--error">{fieldErrors.address}</p>
+                    ) : null}
                   </>
                 ) : (
                   <div className="checkout-hint">
@@ -375,22 +568,109 @@ export const CheckoutPage: React.FC<Props> = ({
                   </div>
                 )}
 
-                <label className="field">
+                <div className="field">
                   <span>
                     {checkoutDraft.deliveryMethod === "delivery"
                       ? "Время доставки"
                       : "Время самовывоза"}
                   </span>
-                  <input
-                    className="input"
-                    placeholder="Например, к 19:30"
-                    value={checkoutDraft.deliveryTime}
-                    disabled={submitting}
-                    onChange={(event) =>
-                      updateCheckoutDraft({ deliveryTime: event.target.value })
-                    }
-                  />
-                </label>
+
+                  <div className="checkout-time-grid">
+                    <button
+                      type="button"
+                      className={
+                        "checkout-time-chip" +
+                        (checkoutDraft.deliveryTime === ASAP_LABEL
+                          ? " checkout-time-chip--active"
+                          : "")
+                      }
+                      disabled={submitting}
+                      onClick={() => {
+                        setAllTimesOpen(false);
+                        updateCheckoutDraft({ deliveryTime: ASAP_LABEL });
+                      }}
+                    >
+                      {ASAP_LABEL}
+                    </button>
+
+                    {quickTimeOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={
+                          "checkout-time-chip" +
+                          (checkoutDraft.deliveryTime === option.value
+                            ? " checkout-time-chip--active"
+                            : "")
+                        }
+                        disabled={submitting}
+                        onClick={() => {
+                          setAllTimesOpen(false);
+                          updateCheckoutDraft({ deliveryTime: option.value });
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      className={
+                        "checkout-time-chip" +
+                        (selectedCustomTime ? " checkout-time-chip--active" : "")
+                      }
+                      disabled={submitting}
+                      onClick={() => setAllTimesOpen((prev) => !prev)}
+                    >
+                      Другое
+                    </button>
+                  </div>
+
+                  {selectedCustomTime ? (
+                    <p className="field-note">Выбрано: {selectedCustomTime}</p>
+                  ) : null}
+
+                  {allTimesOpen ? (
+                    <div className="checkout-time-sheet">
+                      <div className="checkout-time-sheet__head">
+                        <strong>Все доступные слоты на сегодня</strong>
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setAllTimesOpen(false)}
+                        >
+                          Закрыть
+                        </button>
+                      </div>
+
+                      {otherTimeOptions.length ? (
+                        <div className="checkout-time-sheet__list">
+                          {otherTimeOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={
+                                "checkout-time-sheet__option" +
+                                (checkoutDraft.deliveryTime === option.value
+                                  ? " checkout-time-sheet__option--active"
+                                  : "")
+                              }
+                              disabled={submitting}
+                              onClick={() => {
+                                setAllTimesOpen(false);
+                                updateCheckoutDraft({ deliveryTime: option.value });
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="field-note">На сегодня дополнительных слотов больше нет.</p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </section>
 
@@ -415,6 +695,7 @@ export const CheckoutPage: React.FC<Props> = ({
               <div className="checkout-section__head">
                 <h2>Оплата</h2>
               </div>
+
               <div className="checkout-toggle">
                 <button
                   type="button"
@@ -477,7 +758,7 @@ export const CheckoutPage: React.FC<Props> = ({
                 />
                 <span>
                   Не перезванивать
-                  <small>Перезвоним только если потребуется уточнение.</small>
+                  <small>Свяжемся только если потребуется уточнение по заказу.</small>
                 </span>
               </label>
             </section>
@@ -512,6 +793,20 @@ export const CheckoutPage: React.FC<Props> = ({
           <OrderSummaryCard lines={summaryLines} totalPrice={totalPrice} />
         </div>
       </div>
+
+      {addressModalOpen ? (
+        <AddressFlowModal
+          title="Адрес доставки"
+          initialAddress={trimmedAddress || undefined}
+          initialLabel={activeSavedAddress?.label}
+          initialIsDefault={activeSavedAddress?.is_default ?? !addresses.length}
+          showDefaultToggle={Boolean(user)}
+          saveLabel={user ? "Сохранить адрес" : "Использовать адрес"}
+          submitting={addressModalSaving}
+          onClose={() => setAddressModalOpen(false)}
+          onSubmit={handleAddressSave}
+        />
+      ) : null}
     </section>
   );
 };

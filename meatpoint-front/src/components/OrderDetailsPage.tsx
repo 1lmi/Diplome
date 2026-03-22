@@ -275,9 +275,7 @@ const OrderDetailsPage: React.FC = () => {
 
   const adminBackLink =
     (location.state as { backTo?: string } | null)?.backTo || "/admin/orders/current";
-  const fallbackBackLink = getOrderTracking(order.id)
-    ? `/checkout/success/${order.id}`
-    : "/profile";
+  const fallbackBackLink = getOrderTracking(order.id) ? "/" : "/profile";
   const backLink = user?.is_admin ? adminBackLink : fallbackBackLink;
 
   const activeEntry = getActiveEntry(order);

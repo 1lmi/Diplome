@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { mobileApi } from "@/src/api/mobile-api";
@@ -10,12 +10,10 @@ import { PageHeader } from "@/src/components/ui/PageHeader";
 import { Screen } from "@/src/components/ui/Screen";
 import { StatusPill } from "@/src/components/ui/StatusPill";
 import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
-import { TextField } from "@/src/components/ui/TextField";
-import { formatDateTime, normalizePhone } from "@/src/lib/format";
+import { formatDateTime } from "@/src/lib/format";
 import { formatPhoneInput } from "@/src/lib/phone";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
-import { useTrackingStore } from "@/src/store/tracking-store";
 import { colors, radii, spacing, typography } from "@/src/theme/tokens";
 
 function SectionBadge({
@@ -57,9 +55,6 @@ export default function ProfileScreen() {
   const logout = useAuthStore((state) => state.logout);
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
-  const trackedItems = useTrackingStore((state) => state.items);
-  const saveTracking = useTrackingStore((state) => state.save);
-  const removeTracking = useTrackingStore((state) => state.remove);
 
   const addressesQuery = useQuery({
     queryKey: ["addresses"],
@@ -72,16 +67,6 @@ export default function ProfileScreen() {
     enabled: Boolean(user),
   });
 
-  const [orderId, setOrderId] = useState("");
-  const [phone, setPhone] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [tracking, setTracking] = useState(false);
-
-  const recentTracking = useMemo(
-    () => [...trackedItems].sort((left, right) => right.savedAt - left.savedAt).slice(0, 3),
-    [trackedItems]
-  );
-
   const handleLogout = async () => {
     await logout();
     await queryClient.removeQueries({ queryKey: ["me-orders"] });
@@ -93,48 +78,12 @@ export default function ProfileScreen() {
     router.replace("/profile");
   };
 
-  const handleTrack = async (targetOrderId?: number, targetPhone?: string) => {
-    const nextOrderId = String(targetOrderId ?? orderId).trim();
-    const nextPhone = normalizePhone(targetPhone ?? phone);
-    const nextErrors: Record<string, string> = {};
-
-    if (!nextOrderId || Number.isNaN(Number(nextOrderId))) {
-      nextErrors.orderId = "Укажите номер заказа.";
-    }
-    if (!nextPhone) {
-      nextErrors.phone = "Укажите телефон, привязанный к заказу.";
-    }
-
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
-      return;
-    }
-
-    try {
-      setTracking(true);
-      await mobileApi.trackOrder(Number(nextOrderId), nextPhone);
-      saveTracking(Number(nextOrderId), nextPhone);
-      router.push({
-        pathname: "/order/[id]",
-        params: { id: nextOrderId, phone: nextPhone },
-      });
-    } catch (error: any) {
-      pushToast({
-        tone: "error",
-        title: "Не удалось найти заказ",
-        description: error?.message || "Проверьте номер заказа и телефон.",
-      });
-    } finally {
-      setTracking(false);
-    }
-  };
-
   if (!user) {
     return (
       <Screen>
         <PageHeader
           showBack
-          subtitle="Вход, отслеживание и история заказов"
+          subtitle="Вход и сохранённые данные аккаунта"
           title="Профиль"
         />
 
@@ -144,8 +93,7 @@ export default function ProfileScreen() {
             <View style={styles.intro}>
               <Text style={styles.introTitle}>Оформляйте быстрее</Text>
               <Text style={styles.introCopy}>
-                Войдите в аккаунт, чтобы сохранить адреса и видеть все свои заказы в одном
-                месте.
+                Войдите в аккаунт, чтобы сохранить адреса и видеть все свои заказы в одном месте.
               </Text>
             </View>
             <View style={styles.actionRow}>
@@ -158,63 +106,6 @@ export default function ProfileScreen() {
             </View>
           </SurfacePanel>
         </View>
-
-        <View style={styles.sectionBlock}>
-          <SectionBadge label="Отслеживание" />
-          <SurfacePanel style={styles.sectionPanel}>
-            <Text style={styles.sectionTitle}>Найти заказ по номеру и телефону</Text>
-            <TextField
-              error={errors.orderId}
-              keyboardType="numeric"
-              label="Номер заказа"
-              onChangeText={(value) => {
-                setErrors((current) => ({ ...current, orderId: "" }));
-                setOrderId(value.replace(/[^\d]/g, ""));
-              }}
-              placeholder="Например, 128"
-              value={orderId}
-            />
-            <TextField
-              error={errors.phone}
-              keyboardType="phone-pad"
-              label="Телефон"
-              onChangeText={(value) => {
-                setErrors((current) => ({ ...current, phone: "" }));
-                setPhone(formatPhoneInput(value));
-              }}
-              placeholder="+7 (999) 123-45-67"
-              value={phone}
-            />
-            <MeatButton fullWidth loading={tracking} onPress={() => handleTrack()}>
-              Открыть заказ
-            </MeatButton>
-          </SurfacePanel>
-        </View>
-
-        {recentTracking.length ? (
-          <View style={styles.sectionBlock}>
-            <SectionBadge label="Недавние" tone="soft" />
-            <SurfacePanel style={styles.softPanel} tone="soft">
-              <Text style={styles.sectionTitle}>Последние отслеживания</Text>
-              <View style={styles.listStack}>
-                {recentTracking.map((item) => (
-                  <ListRow
-                    key={item.orderId}
-                    onPress={() => handleTrack(item.orderId, item.phone)}
-                    subtitle={formatPhoneInput(item.phone) || item.phone}
-                    title={`Заказ №${item.orderId}`}
-                    tone="surface"
-                    trailing={
-                      <Pressable onPress={() => removeTracking(item.orderId)}>
-                        <Text style={styles.link}>Удалить</Text>
-                      </Pressable>
-                    }
-                  />
-                ))}
-              </View>
-            </SurfacePanel>
-          </View>
-        ) : null}
       </Screen>
     );
   }
@@ -233,10 +124,8 @@ export default function ProfileScreen() {
             <View style={styles.accountCopy}>
               <Text style={styles.accountName}>{user.first_name || user.full_name}</Text>
               <Text style={styles.accountLogin}>{formatPhoneInput(user.login) || user.login}</Text>
+              {user.birth_date ? <Text style={styles.accountMeta}>{user.birth_date}</Text> : null}
             </View>
-          </View>
-          <View style={styles.metaRow}>
-            {user.birth_date ? <StatusPill label={user.birth_date} tone="muted" /> : null}
           </View>
           <MeatButton onPress={() => router.push("/profile/edit")} variant="secondary">
             Изменить профиль
@@ -247,7 +136,14 @@ export default function ProfileScreen() {
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHead}>
           <SectionBadge label="Адреса" />
-          <Pressable onPress={() => router.push("/address/new")}>
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: "/address/new",
+                params: { origin: "profile" },
+              })
+            }
+          >
             <Text style={styles.link}>Новый адрес</Text>
           </Pressable>
         </View>
@@ -260,7 +156,7 @@ export default function ProfileScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/address/[id]",
-                      params: { id: String(address.id) },
+                      params: { id: String(address.id), origin: "profile" },
                     })
                   }
                   subtitle={address.address}
@@ -401,11 +297,6 @@ const styles = StyleSheet.create({
   actionRow: {
     gap: spacing.sm,
   },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-  },
   copy: {
     color: colors.muted,
     fontSize: typography.bodySm,
@@ -450,10 +341,9 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: typography.caption,
   },
-  metaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs,
+  accountMeta: {
+    color: colors.muted,
+    fontSize: typography.caption,
   },
   logoutWrap: {
     marginTop: "auto",

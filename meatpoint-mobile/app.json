@@ -36,6 +36,12 @@
           "backgroundColor": "#fbf8f4"
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Разрешите Meat Point доступ к геопозиции, чтобы выбирать адрес на карте."
+        }
+      ],
       "expo-secure-store",
       "@react-native-community/datetimepicker"
     ],

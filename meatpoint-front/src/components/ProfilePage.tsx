@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+
 import { api } from "../api";
+import { useCart } from "../cartContext";
 import { formatPhoneInput } from "../phone";
 import type { Order, User, UserAddress } from "../types";
+import AddressFlowModal from "./AddressFlowModal";
 
 interface Props {
   user: User;
@@ -18,20 +21,7 @@ interface Props {
 interface ProfileFormState {
   firstName: string;
   birthDate: string;
-  gender: string;
 }
-
-interface AddressFormState {
-  label: string;
-  address: string;
-  isDefault: boolean;
-}
-
-const EMPTY_ADDRESS_FORM: AddressFormState = {
-  label: "",
-  address: "",
-  isDefault: false,
-};
 
 const formatPrice = (value: number) => `${value.toLocaleString("ru-RU")} ₽`;
 
@@ -59,8 +49,8 @@ const getDeliveryLabel = (order: Order) =>
   order.delivery_method === "pickup"
     ? "Самовывоз"
     : order.delivery_method === "delivery" || order.customer_address
-    ? "Доставка"
-    : "Самовывоз";
+      ? "Доставка"
+      : "Самовывоз";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && error.message) {
@@ -72,20 +62,10 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 const createProfileForm = (user: User): ProfileFormState => ({
   firstName: user.first_name || "",
   birthDate: user.birth_date || "",
-  gender: user.gender || "",
 });
 
 const formatProfilePhone = (value?: string | null) =>
   value ? formatPhoneInput(value) || value : "Не указано";
-
-const createAddressForm = (
-  address?: UserAddress | null,
-  fallbackDefault: boolean = false
-): AddressFormState => ({
-  label: address?.label || "",
-  address: address?.address || "",
-  isDefault: address?.is_default ?? fallbackDefault,
-});
 
 const ProfilePage: React.FC<Props> = ({
   user,
@@ -97,33 +77,35 @@ const ProfilePage: React.FC<Props> = ({
   onRefreshAddresses,
   onRefreshUser,
 }) => {
+  const { checkoutDraft, updateCheckoutDraft } = useCart();
   const [profileEditing, setProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState<ProfileFormState>(() => createProfileForm(user));
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  const [addressFormOpen, setAddressFormOpen] = useState(false);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<number | null>(null);
-  const [addressForm, setAddressForm] = useState<AddressFormState>(EMPTY_ADDRESS_FORM);
   const [addressSaving, setAddressSaving] = useState(false);
   const [addressDeletingId, setAddressDeletingId] = useState<number | null>(null);
   const [addressStatus, setAddressStatus] = useState<string | null>(null);
   const [addressError, setAddressError] = useState<string | null>(null);
+
+  const editingAddress = useMemo(
+    () => addresses.find((item) => item.id === editingAddressId) || null,
+    [addresses, editingAddressId]
+  );
 
   useEffect(() => {
     setProfileForm(createProfileForm(user));
   }, [user]);
 
   useEffect(() => {
-    if (editingAddressId === null) return;
-    const currentAddress = addresses.find((item) => item.id === editingAddressId);
-    if (!currentAddress) {
+    if (editingAddressId !== null && !editingAddress) {
       setEditingAddressId(null);
-      setAddressFormOpen(false);
-      setAddressForm(EMPTY_ADDRESS_FORM);
+      setAddressModalOpen(false);
     }
-  }, [addresses, editingAddressId]);
+  }, [editingAddress, editingAddressId]);
 
   const profileRows = [
     {
@@ -141,33 +123,25 @@ const ProfilePage: React.FC<Props> = ({
       value: formatBirthDate(user.birth_date),
       muted: !user.birth_date,
     },
-    {
-      label: "Пол",
-      value: user.gender || "Не указано",
-      muted: !user.gender,
-    },
   ];
 
   const openCreateAddressForm = () => {
     setAddressStatus(null);
     setAddressError(null);
     setEditingAddressId(null);
-    setAddressForm(createAddressForm(null, addresses.length === 0));
-    setAddressFormOpen(true);
+    setAddressModalOpen(true);
   };
 
   const openEditAddressForm = (address: UserAddress) => {
     setAddressStatus(null);
     setAddressError(null);
     setEditingAddressId(address.id);
-    setAddressForm(createAddressForm(address));
-    setAddressFormOpen(true);
+    setAddressModalOpen(true);
   };
 
   const closeAddressForm = () => {
     setEditingAddressId(null);
-    setAddressFormOpen(false);
-    setAddressForm(EMPTY_ADDRESS_FORM);
+    setAddressModalOpen(false);
   };
 
   const handleProfileSave = async () => {
@@ -180,7 +154,7 @@ const ProfilePage: React.FC<Props> = ({
         first_name: profileForm.firstName.trim() || null,
         last_name: null,
         birth_date: profileForm.birthDate || null,
-        gender: profileForm.gender || null,
+        gender: null,
       });
       await onRefreshUser();
       setProfileEditing(false);
@@ -192,31 +166,40 @@ const ProfilePage: React.FC<Props> = ({
     }
   };
 
-  const handleAddressSave = async () => {
-    const payload = {
-      label: addressForm.label.trim() || null,
-      address: addressForm.address.trim(),
-      is_default: addressForm.isDefault,
-    };
-
-    if (!payload.address) {
-      setAddressError("Введите адрес доставки.");
-      return;
-    }
-
+  const handleAddressSave = async (payload: {
+    label: string | null;
+    address: string;
+    isDefault: boolean;
+  }) => {
     setAddressSaving(true);
     setAddressStatus(null);
     setAddressError(null);
 
     try {
+      const previousAddress = editingAddress?.address.trim() || "";
+
       if (editingAddressId === null) {
-        await api.createAddress(payload);
+        await api.createAddress({
+          label: payload.label,
+          address: payload.address,
+          is_default: payload.isDefault,
+        });
         setAddressStatus("Адрес добавлен");
       } else {
-        await api.updateAddress(editingAddressId, payload);
+        await api.updateAddress(editingAddressId, {
+          label: payload.label,
+          address: payload.address,
+          is_default: payload.isDefault,
+        });
         setAddressStatus("Адрес обновлён");
       }
+
       await onRefreshAddresses();
+
+      if (previousAddress && checkoutDraft.address.trim() === previousAddress) {
+        updateCheckoutDraft({ address: payload.address });
+      }
+
       closeAddressForm();
     } catch (error) {
       setAddressError(getErrorMessage(error, "Не удалось сохранить адрес."));
@@ -254,6 +237,11 @@ const ProfilePage: React.FC<Props> = ({
       await api.deleteAddress(address.id);
       await onRefreshAddresses();
       setAddressStatus("Адрес удалён");
+
+      if (checkoutDraft.address.trim() === address.address.trim()) {
+        updateCheckoutDraft({ address: "" });
+      }
+
       if (editingAddressId === address.id) {
         closeAddressForm();
       }
@@ -270,8 +258,8 @@ const ProfilePage: React.FC<Props> = ({
         <p className="eyebrow">Профиль</p>
         <h1>Личный кабинет</h1>
         <p className="muted">
-          Управляйте данными аккаунта, храните адреса доставки и быстро возвращайтесь к своим
-          заказам.
+          Управляйте данными аккаунта, храните адреса доставки и быстро возвращайтесь к
+          своим заказам.
         </p>
       </div>
 
@@ -319,6 +307,7 @@ const ProfilePage: React.FC<Props> = ({
                   <span className="profile-form__label">Номер телефона</span>
                   <input className="input" value={formatPhoneInput(user.login || "") || ""} disabled />
                 </label>
+
                 <label className="profile-form__field">
                   <span className="profile-form__label">Имя</span>
                   <input
@@ -329,6 +318,7 @@ const ProfilePage: React.FC<Props> = ({
                     }
                   />
                 </label>
+
                 <label className="profile-form__field">
                   <span className="profile-form__label">Дата рождения</span>
                   <input
@@ -339,21 +329,6 @@ const ProfilePage: React.FC<Props> = ({
                       setProfileForm((prev) => ({ ...prev, birthDate: event.target.value }))
                     }
                   />
-                </label>
-                <label className="profile-form__field">
-                  <span className="profile-form__label">Пол</span>
-                  <select
-                    className="input"
-                    value={profileForm.gender}
-                    onChange={(event) =>
-                      setProfileForm((prev) => ({ ...prev, gender: event.target.value }))
-                    }
-                  >
-                    <option value="">Не выбрано</option>
-                    <option value="Мужской">Мужской</option>
-                    <option value="Женский">Женский</option>
-                    <option value="Другое">Другое</option>
-                  </select>
                 </label>
 
                 <div className="profile-form__actions">
@@ -390,7 +365,7 @@ const ProfilePage: React.FC<Props> = ({
             <div className="profile-section__header">
               <div>
                 <h3>Адреса</h3>
-                <p className="muted">Сохраните несколько адресов и выбирайте нужный при оформлении.</p>
+                <p className="muted">Сохраняйте несколько адресов и выбирайте нужный при оформлении.</p>
               </div>
               <button className="btn btn--outline btn--sm" type="button" onClick={openCreateAddressForm}>
                 Добавить
@@ -403,7 +378,7 @@ const ProfilePage: React.FC<Props> = ({
               <div className="profile-empty-state">
                 <strong>Адресов пока нет</strong>
                 <p className="muted">
-                  Добавьте основной адрес, чтобы не вводить его заново при каждом заказе.
+                  Добавьте основной адрес, чтобы не выбирать его заново при каждом заказе.
                 </p>
               </div>
             ) : null}
@@ -413,15 +388,11 @@ const ProfilePage: React.FC<Props> = ({
                 {addresses.map((address) => (
                   <article
                     key={address.id}
-                    className={
-                      "address-card" + (address.is_default ? " address-card--default" : "")
-                    }
+                    className={"address-card" + (address.is_default ? " address-card--default" : "")}
                   >
                     <div className="address-card__top">
                       <div>
-                        <div className="address-card__title">
-                          {address.label || "Адрес доставки"}
-                        </div>
+                        <div className="address-card__title">{address.label || "Адрес доставки"}</div>
                         <p className="address-card__value">{address.address}</p>
                       </div>
                       {address.is_default ? (
@@ -434,12 +405,13 @@ const ProfilePage: React.FC<Props> = ({
                         <button
                           className="btn btn--ghost btn--sm"
                           type="button"
-                          onClick={() => handleMakeDefault(address.id)}
+                          onClick={() => void handleMakeDefault(address.id)}
                           disabled={addressSaving}
                         >
                           Сделать основным
                         </button>
                       ) : null}
+
                       <button
                         className="btn btn--outline btn--sm"
                         type="button"
@@ -447,10 +419,11 @@ const ProfilePage: React.FC<Props> = ({
                       >
                         Изменить
                       </button>
+
                       <button
                         className="btn btn--ghost btn--sm"
                         type="button"
-                        onClick={() => handleDeleteAddress(address)}
+                        onClick={() => void handleDeleteAddress(address)}
                         disabled={addressDeletingId === address.id}
                       >
                         {addressDeletingId === address.id ? "Удаляем..." : "Удалить"}
@@ -458,66 +431,6 @@ const ProfilePage: React.FC<Props> = ({
                     </div>
                   </article>
                 ))}
-              </div>
-            ) : null}
-
-            {addressFormOpen ? (
-              <div className="profile-address-form">
-                <h4>{editingAddressId === null ? "Новый адрес" : "Редактирование адреса"}</h4>
-                <div className="profile-address-form__grid">
-                  <label className="profile-form__field">
-                    <span className="profile-form__label">Название</span>
-                    <input
-                      className="input"
-                      placeholder="Например, Дом или Офис"
-                      value={addressForm.label}
-                      onChange={(event) =>
-                        setAddressForm((prev) => ({ ...prev, label: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="profile-form__field profile-form__field--full">
-                    <span className="profile-form__label">Адрес</span>
-                    <textarea
-                      className="textarea"
-                      placeholder="Улица, дом, подъезд, ориентир"
-                      value={addressForm.address}
-                      onChange={(event) =>
-                        setAddressForm((prev) => ({ ...prev, address: event.target.value }))
-                      }
-                    />
-                  </label>
-                </div>
-
-                <label className="checkbox profile-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={addressForm.isDefault}
-                    onChange={(event) =>
-                      setAddressForm((prev) => ({ ...prev, isDefault: event.target.checked }))
-                    }
-                  />
-                  <span>Использовать как основной адрес</span>
-                </label>
-
-                <div className="profile-address-form__actions">
-                  <button
-                    className="btn btn--ghost btn--sm"
-                    type="button"
-                    onClick={closeAddressForm}
-                    disabled={addressSaving}
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    className="btn btn--primary btn--sm"
-                    type="button"
-                    onClick={handleAddressSave}
-                    disabled={addressSaving}
-                  >
-                    {addressSaving ? "Сохраняем..." : editingAddressId === null ? "Добавить" : "Сохранить"}
-                  </button>
-                </div>
               </div>
             ) : null}
 
@@ -530,9 +443,9 @@ const ProfilePage: React.FC<Props> = ({
           <div className="profile-section__header">
             <div>
               <h3>История заказов</h3>
-              <p className="muted">Все ваши заказы в одном месте, без детального разбора состава.</p>
+              <p className="muted">Все ваши заказы в одном месте, без лишней детализации состава.</p>
             </div>
-            <button className="btn btn--outline btn--sm" type="button" onClick={onRefreshOrders}>
+            <button className="btn btn--outline btn--sm" type="button" onClick={() => void onRefreshOrders()}>
               Обновить
             </button>
           </div>
@@ -598,6 +511,20 @@ const ProfilePage: React.FC<Props> = ({
           ) : null}
         </div>
       </div>
+
+      {addressModalOpen ? (
+        <AddressFlowModal
+          title={editingAddressId === null ? "Новый адрес" : "Редактирование адреса"}
+          initialAddress={editingAddress?.address}
+          initialLabel={editingAddress?.label}
+          initialIsDefault={editingAddress?.is_default ?? addresses.length === 0}
+          submitting={addressSaving}
+          deleting={addressDeletingId === editingAddressId && editingAddressId !== null}
+          onClose={closeAddressForm}
+          onSubmit={handleAddressSave}
+          onDelete={editingAddress ? () => handleDeleteAddress(editingAddress) : undefined}
+        />
+      ) : null}
     </section>
   );
 };

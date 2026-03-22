@@ -387,7 +387,13 @@ export default function HomeScreen() {
     closePicker();
   };
 
-  const openNewAddress = () => closePicker(() => router.push("/address/new"));
+  const openNewAddress = () =>
+    closePicker(() =>
+      router.push({
+        pathname: "/address/new",
+        params: { origin: "catalog" },
+      })
+    );
 
   const renderDeliverySheetBody = () => {
     if (tempMethod === "pickup") {
@@ -458,7 +464,7 @@ export default function HomeScreen() {
                     closePicker(() =>
                       router.push({
                         pathname: "/address/[id]",
-                        params: { id: String(address.id) },
+                        params: { id: String(address.id), origin: "catalog" },
                       })
                     )
                   }

@@ -495,6 +495,7 @@ const AppContent: React.FC = () => {
                 onLoginRequest={() => openAuth("login", "/checkout")}
                 addresses={myAddresses}
                 addressesLoading={addressesLoading}
+                onRefreshAddresses={refreshMyAddresses}
               />
             }
           />

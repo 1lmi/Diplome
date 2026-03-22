@@ -1,57 +1,101 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { EmptyState } from "@/src/components/ui/EmptyState";
-import { ListRow } from "@/src/components/ui/ListRow";
-import { MeatButton } from "@/src/components/ui/MeatButton";
-import { PageHeader } from "@/src/components/ui/PageHeader";
-import { Screen } from "@/src/components/ui/Screen";
-import { SegmentedControl } from "@/src/components/ui/SegmentedControl";
-import { StatusPill } from "@/src/components/ui/StatusPill";
-import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
-import { TextField } from "@/src/components/ui/TextField";
 import { mobileApi } from "@/src/api/mobile-api";
+import { EmptyState } from "@/src/components/ui/EmptyState";
+import { MeatButton } from "@/src/components/ui/MeatButton";
+import { Screen } from "@/src/components/ui/Screen";
 import { formatPrice, normalizePhone } from "@/src/lib/format";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { getCartTotal, useCartStore } from "@/src/store/cart-store";
 import { useTrackingStore } from "@/src/store/tracking-store";
-import { colors, radii, spacing, typography } from "@/src/theme/tokens";
+import { colors, radii, shadows, spacing, typography } from "@/src/theme/tokens";
 
-function SectionBadge({
-  label,
-  tone = "neutral",
-}: {
+const ASAP_LABEL = "Как можно быстрее";
+
+type TimeOption = {
+  value: string;
   label: string;
-  tone?: "accent" | "neutral" | "soft";
-}) {
-  return (
-    <View
-      style={[
-        styles.sectionBadge,
-        tone === "accent"
-          ? styles.sectionBadgeAccent
-          : tone === "soft"
-            ? styles.sectionBadgeSoft
-            : styles.sectionBadgeNeutral,
-      ]}
-    >
-      <Text
-        style={[
-          styles.sectionBadgeText,
-          tone === "accent"
-            ? styles.sectionBadgeTextAccent
-            : tone === "soft"
-              ? styles.sectionBadgeTextSoft
-              : styles.sectionBadgeTextNeutral,
-        ]}
-      >
-        {label}
-      </Text>
-    </View>
+  startMinutes: number;
+};
+
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+function floorToQuarter(date: Date) {
+  const quarter = 15 * 60 * 1000;
+  return new Date(Math.floor(date.getTime() / quarter) * quarter);
+}
+
+function formatTime(date: Date) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function buildDailyTimeOptions(baseDate = new Date()): TimeOption[] {
+  const slots: TimeOption[] = [];
+
+  for (let hour = 9; hour < 22; hour += 1) {
+    for (let minutes = 0; minutes < 60; minutes += 15) {
+      const start = new Date(baseDate);
+      start.setHours(hour, minutes, 0, 0);
+      const end = addMinutes(start, 15);
+      if (end.getHours() > 22 || (end.getHours() === 22 && end.getMinutes() > 0)) {
+        continue;
+      }
+
+      const startMinutes = hour * 60 + minutes;
+      const label = `${formatTime(start)}–${formatTime(end)}`;
+      slots.push({
+        value: label,
+        label,
+        startMinutes,
+      });
+    }
+  }
+
+  return slots;
+}
+
+function buildQuickTimeOptions(allOptions: TimeOption[], baseDate = new Date()): TimeOption[] {
+  const threshold = addMinutes(baseDate, 45);
+  const thresholdRounded = floorToQuarter(threshold);
+  const thresholdMinutes =
+    thresholdRounded.getHours() * 60 + thresholdRounded.getMinutes();
+
+  return allOptions.filter((option) => option.startMinutes >= thresholdMinutes).slice(0, 4);
+}
+
+function buildOtherTimeOptions(
+  allOptions: TimeOption[],
+  quickOptions: TimeOption[],
+  baseDate = new Date()
+) {
+  const threshold = addMinutes(baseDate, 45);
+  const thresholdRounded = floorToQuarter(threshold);
+  const thresholdMinutes =
+    thresholdRounded.getHours() * 60 + thresholdRounded.getMinutes();
+  const quickValues = new Set(quickOptions.map((option) => option.value));
+
+  return allOptions.filter(
+    (option) => option.startMinutes >= thresholdMinutes && !quickValues.has(option.value)
   );
+}
+
+function formatItemsCount(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) return `${count} товар`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} товара`;
+  return `${count} товаров`;
 }
 
 export default function CheckoutScreen() {
@@ -62,39 +106,56 @@ export default function CheckoutScreen() {
   const clearCart = useCartStore((state) => state.clear);
   const resetCheckoutDraft = useCartStore((state) => state.resetCheckoutDraft);
   const saveTracking = useTrackingStore((state) => state.save);
-  const { pushToast } = useToast();
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
+  const insets = useSafeAreaInsets();
 
   const [submitting, setSubmitting] = useState(false);
-  const [cashChangeError, setCashChangeError] = useState("");
+  const [allTimesOpen, setAllTimesOpen] = useState(false);
 
   const totalPrice = useMemo(() => getCartTotal(items), [items]);
-  const needsAddress = checkoutDraft.deliveryMethod === "delivery";
+  const itemsCount = useMemo(
+    () => items.reduce((sum, item) => sum + item.quantity, 0),
+    [items]
+  );
+  const allTimeOptions = useMemo(() => buildDailyTimeOptions(), []);
+  const quickTimeOptions = useMemo(() => buildQuickTimeOptions(allTimeOptions), [allTimeOptions]);
+  const otherTimeOptions = useMemo(
+    () => buildOtherTimeOptions(allTimeOptions, quickTimeOptions),
+    [allTimeOptions, quickTimeOptions]
+  );
+  const title = checkoutDraft.deliveryMethod === "delivery" ? "Доставка" : "Самовывоз";
+  const timeSectionTitle =
+    checkoutDraft.deliveryMethod === "delivery" ? "Время доставки" : "Время выдачи";
+  const selectedCustomTime = useMemo(() => {
+    const current = checkoutDraft.deliveryTime.trim();
+    if (!current || current === ASAP_LABEL) return "";
+    if (quickTimeOptions.some((option) => option.value === current)) return "";
+    return current;
+  }, [checkoutDraft.deliveryTime, quickTimeOptions]);
+
+  useEffect(() => {
+    const current = checkoutDraft.deliveryTime.trim();
+    const hasCurrentOption =
+      current === ASAP_LABEL ||
+      quickTimeOptions.some((option) => option.value === current) ||
+      otherTimeOptions.some((option) => option.value === current);
+
+    if (!current || !hasCurrentOption) {
+      updateCheckoutDraft({ deliveryTime: ASAP_LABEL });
+    }
+  }, [checkoutDraft.deliveryTime, otherTimeOptions, quickTimeOptions, updateCheckoutDraft]);
 
   const handleSubmit = async () => {
     if (submitting || !user) return;
 
-    if (needsAddress && !checkoutDraft.address.trim()) {
+    if (checkoutDraft.deliveryMethod === "delivery" && !checkoutDraft.address.trim()) {
       pushToast({
         tone: "error",
         title: "Не выбран адрес доставки",
         description: "Выберите адрес в каталоге перед оформлением заказа.",
       });
       router.replace("/");
-      return;
-    }
-
-    if (
-      checkoutDraft.paymentMethod === "cash" &&
-      checkoutDraft.cashChangeFrom.trim() &&
-      Number(checkoutDraft.cashChangeFrom) < totalPrice
-    ) {
-      setCashChangeError("Сумма для сдачи должна быть не меньше суммы заказа.");
-      pushToast({
-        tone: "error",
-        title: "Проверьте оплату",
-        description: "Сумма для сдачи меньше итоговой стоимости заказа.",
-      });
       return;
     }
 
@@ -106,15 +167,15 @@ export default function CheckoutScreen() {
         customer: {
           name: user.full_name?.trim() || user.first_name?.trim() || null,
           phone: fallbackPhone,
-          address: needsAddress ? checkoutDraft.address.trim() || null : null,
+          address:
+            checkoutDraft.deliveryMethod === "delivery"
+              ? checkoutDraft.address.trim() || null
+              : null,
         },
         delivery_method: checkoutDraft.deliveryMethod,
-        delivery_time: checkoutDraft.deliveryTime.trim() || null,
+        delivery_time: checkoutDraft.deliveryTime.trim() || ASAP_LABEL,
         payment_method: checkoutDraft.paymentMethod,
-        cash_change_from:
-          checkoutDraft.paymentMethod === "cash" && checkoutDraft.cashChangeFrom.trim()
-            ? Number(checkoutDraft.cashChangeFrom)
-            : null,
+        cash_change_from: null,
         do_not_call: checkoutDraft.doNotCall,
         comment: checkoutDraft.comment.trim() || null,
         items: items.map((item) => ({
@@ -154,19 +215,19 @@ export default function CheckoutScreen() {
   if (!items.length) {
     return (
       <Screen>
-        <PageHeader
-          showBack
-          subtitle="Сначала добавьте что-нибудь из меню"
-          title="Оформление"
-        />
-        <EmptyState
-          description="Когда в корзине появятся позиции, здесь можно будет оплатить заказ."
-          icon="shopping-bag"
-          title="Корзина пока пустая"
-        />
-        <MeatButton fullWidth onPress={() => router.replace("/cart")} variant="secondary">
-          Вернуться в корзину
-        </MeatButton>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.closeLink} onPress={() => router.back()}>
+            Закрыть
+          </Text>
+          <EmptyState
+            description="Когда в корзине появятся позиции, здесь можно будет подтвердить заказ."
+            icon="shopping-bag"
+            title="Корзина пока пустая"
+          />
+          <MeatButton fullWidth onPress={() => router.replace("/cart")} variant="secondary">
+            Вернуться в корзину
+          </MeatButton>
+        </View>
       </Screen>
     );
   }
@@ -174,40 +235,30 @@ export default function CheckoutScreen() {
   if (!user) {
     return (
       <Screen>
-        <PageHeader
-          showBack
-          subtitle="Оформление доступно только после входа"
-          title="Оформление"
-        />
-
-        <View style={styles.sectionWrap}>
-          <SectionBadge label="Аккаунт" tone="accent" />
-          <SurfacePanel style={styles.accentPanel} tone="tint">
-            <Text style={styles.panelTitle}>Войдите, чтобы продолжить</Text>
-            <Text style={styles.copy}>
-              Адрес и способ получения выбираются в каталоге, а оформление заказа доступно только
-              авторизованному пользователю.
-            </Text>
-            <View style={styles.actionRow}>
-              <MeatButton
-                fullWidth
-                onPress={() => router.push("/auth/sign-in")}
-                variant="secondary"
-              >
-                Войти
-              </MeatButton>
-              <MeatButton fullWidth onPress={() => router.push("/auth/sign-up")}>
-                Создать аккаунт
-              </MeatButton>
-            </View>
-          </SurfacePanel>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.closeLink} onPress={() => router.back()}>
+            Закрыть
+          </Text>
+          <EmptyState
+            description="Оформление заказа доступно только после входа в аккаунт."
+            icon="user"
+            title="Войдите, чтобы продолжить"
+          />
+          <View style={styles.authActions}>
+            <MeatButton fullWidth onPress={() => router.push("/auth/sign-in")} variant="secondary">
+              Войти
+            </MeatButton>
+            <MeatButton fullWidth onPress={() => router.push("/auth/sign-up")}>
+              Создать аккаунт
+            </MeatButton>
+          </View>
         </View>
       </Screen>
     );
   }
 
   return (
-    <Screen padded={false} scroll={false} keyboard>
+    <Screen padded={false} scroll={false}>
       <View style={styles.root}>
         <ScrollView
           alwaysBounceVertical={false}
@@ -217,116 +268,190 @@ export default function CheckoutScreen() {
           overScrollMode="never"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.headerWrap}>
-            <PageHeader
-              showBack
-              subtitle="Адрес и способ получения уже выбраны в каталоге"
-              title="Оформление"
-            />
-          </View>
+          <View style={styles.sheet}>
+            <Pressable onPress={() => router.back()} style={styles.closeWrap}>
+              <Text style={styles.closeLink}>Закрыть</Text>
+            </Pressable>
 
-          <View style={styles.sectionWrap}>
-            <SectionBadge label="Оплата" tone="soft" />
-            <SurfacePanel style={styles.softPanel} tone="soft">
-              <Text style={styles.panelTitle}>Как оплатить заказ</Text>
-              <SegmentedControl
-                options={[
-                  { label: "Наличными", value: "cash" },
-                  { label: "Картой", value: "card" },
-                ]}
-                tone="accent"
-                value={checkoutDraft.paymentMethod}
-                onChange={(value) => {
-                  setCashChangeError("");
-                  updateCheckoutDraft({
-                    paymentMethod: value,
-                    cashChangeFrom: value === "cash" ? checkoutDraft.cashChangeFrom : "",
-                  });
-                }}
-              />
+            <Text style={styles.title}>{title}</Text>
 
-              {checkoutDraft.paymentMethod === "cash" ? (
-                <TextField
-                  error={cashChangeError}
-                  keyboardType="numeric"
-                  label="Подготовить сдачу с"
-                  onChangeText={(value) => {
-                    setCashChangeError("");
-                    updateCheckoutDraft({
-                      cashChangeFrom: value.replace(/[^\d]/g, ""),
-                    });
-                  }}
-                  placeholder="Например, 2000"
-                  value={checkoutDraft.cashChangeFrom}
-                />
-              ) : (
-                <SurfacePanel compact style={styles.notePanel}>
-                  <Text style={styles.noteText}>
-                    Карта при получении. Онлайн-оплата в приложении пока не используется.
-                  </Text>
-                </SurfacePanel>
-              )}
-
-              <Pressable
-                onPress={() =>
-                  updateCheckoutDraft({
-                    doNotCall: !checkoutDraft.doNotCall,
-                  })
-                }
-                style={({ pressed }) => [
-                  styles.toggleRow,
-                  checkoutDraft.doNotCall ? styles.toggleRowActive : null,
-                  pressed ? styles.toggleRowPressed : null,
-                ]}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{timeSectionTitle}</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.timeRow}
               >
-                <View style={styles.toggleCopy}>
-                  <Text style={styles.toggleTitle}>Не перезванивать</Text>
-                  <Text style={styles.toggleText}>
-                    Свяжемся только если потребуется уточнение по заказу.
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.toggleKnob,
-                    checkoutDraft.doNotCall ? styles.toggleKnobActive : null,
+                <Pressable
+                  onPress={() => updateCheckoutDraft({ deliveryTime: ASAP_LABEL })}
+                  style={({ pressed }) => [
+                    styles.timeChip,
+                    checkoutDraft.deliveryTime === ASAP_LABEL ? styles.timeChipActive : null,
+                    pressed ? styles.timeChipPressed : null,
                   ]}
-                />
-              </Pressable>
-            </SurfacePanel>
-          </View>
+                >
+                  <Text
+                    style={[
+                      styles.timeChipLabel,
+                      checkoutDraft.deliveryTime === ASAP_LABEL ? styles.timeChipLabelActive : null,
+                    ]}
+                  >
+                    {ASAP_LABEL}
+                  </Text>
+                </Pressable>
 
-          <View style={styles.sectionWrap}>
-            <SectionBadge label="Итог" tone="accent" />
-            <SurfacePanel style={styles.summaryPanel} tone="tint">
-              <View style={styles.panelHead}>
-                <View style={styles.panelTitleWrap}>
-                  <Text style={styles.panelTitle}>Проверка перед оплатой</Text>
-                  <Text style={styles.copy}>Осталось только подтвердить способ оплаты.</Text>
-                </View>
-                <StatusPill label={`${items.length} поз.`} tone="muted" />
+                {quickTimeOptions.map((option) => {
+                  const active = checkoutDraft.deliveryTime === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => updateCheckoutDraft({ deliveryTime: option.value })}
+                      style={({ pressed }) => [
+                        styles.timeChip,
+                        active ? styles.timeChipActive : null,
+                        pressed ? styles.timeChipPressed : null,
+                      ]}
+                    >
+                      <Text
+                        style={[styles.timeChipLabel, active ? styles.timeChipLabelActive : null]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+
+                <Pressable
+                  onPress={() => setAllTimesOpen(true)}
+                  style={({ pressed }) => [
+                    styles.timeChip,
+                    selectedCustomTime ? styles.timeChipActive : null,
+                    pressed ? styles.timeChipPressed : null,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.timeChipLabel,
+                      selectedCustomTime ? styles.timeChipLabelActive : null,
+                    ]}
+                  >
+                    Другое
+                  </Text>
+                </Pressable>
+              </ScrollView>
+              {selectedCustomTime ? (
+                <Text style={styles.selectedTimeText}>Выбрано: {selectedCustomTime}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Оплата</Text>
+              <View style={styles.paymentSwitch}>
+                {[
+                  { value: "cash" as const, label: "Наличными" },
+                  { value: "card" as const, label: "По карте" },
+                ].map((option) => {
+                  const active = checkoutDraft.paymentMethod === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => updateCheckoutDraft({ paymentMethod: option.value })}
+                      style={({ pressed }) => [
+                        styles.paymentOption,
+                        active ? styles.paymentOptionActive : null,
+                        pressed ? styles.paymentOptionPressed : null,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.paymentOptionLabel,
+                          active ? styles.paymentOptionLabelActive : null,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-
-              <View style={styles.summaryRows}>
-                <ListRow
-                  subtitle={checkoutDraft.deliveryMethod === "delivery" ? "Доставка" : "Самовывоз"}
-                  title={`Позиции в корзине: ${items.length}`}
-                  tone="surface"
-                  trailing={<Text style={styles.summaryValue}>{formatPrice(totalPrice)}</Text>}
-                />
-              </View>
-
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Итого</Text>
-                <Text style={styles.totalValue}>{formatPrice(totalPrice)}</Text>
-              </View>
-
-              <MeatButton fullWidth loading={submitting} onPress={handleSubmit} size="cta">
-                Оформить заказ
-              </MeatButton>
-            </SurfacePanel>
+              <Text style={styles.paymentHint}>
+                {checkoutDraft.paymentMethod === "card"
+                  ? "Оплата по карте при получении"
+                  : "Оплата наличными при получении"}
+              </Text>
+            </View>
           </View>
         </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerMeta}>{formatItemsCount(itemsCount)}</Text>
+            <Text style={styles.footerMeta}>{formatPrice(totalPrice)}</Text>
+          </View>
+          <View style={styles.footerDivider} />
+          <View style={styles.footerRow}>
+            <Text style={styles.footerTotalLabel}>Итого</Text>
+            <Text style={styles.footerTotalValue}>{formatPrice(totalPrice)}</Text>
+          </View>
+
+          <MeatButton fullWidth loading={submitting} onPress={handleSubmit} size="cta">
+            Заказать
+          </MeatButton>
+        </View>
       </View>
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={allTimesOpen}
+        onRequestClose={() => setAllTimesOpen(false)}
+      >
+        <Pressable style={styles.timesModalBackdrop} onPress={() => setAllTimesOpen(false)}>
+          <Pressable style={styles.timesModalCard} onPress={(event) => event.stopPropagation()}>
+            <View style={styles.timesModalHead}>
+              <Text style={styles.timesModalTitle}>Выберите удобное время</Text>
+              <Pressable onPress={() => setAllTimesOpen(false)}>
+                <Text style={styles.closeLink}>Готово</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.timesModalList}
+            >
+              {otherTimeOptions.map((option) => {
+                const active = checkoutDraft.deliveryTime === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => {
+                      updateCheckoutDraft({ deliveryTime: option.value });
+                      setAllTimesOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.timeListItem,
+                      active ? styles.timeListItemActive : null,
+                      pressed ? styles.timeListItemPressed : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.timeListItemLabel,
+                        active ? styles.timeListItemLabelActive : null,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {!otherTimeOptions.length ? (
+                <Text style={styles.selectedTimeText}>На сегодня дополнительных слотов больше нет.</Text>
+              ) : null}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -337,158 +462,204 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   content: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  sheet: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.xxxl,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: colors.bg,
   },
-  headerWrap: {
-    paddingHorizontal: spacing.lg,
-  },
-  sectionWrap: {
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.xl,
-    gap: spacing.md,
-  },
-  sectionBadge: {
+  closeWrap: {
     alignSelf: "flex-start",
-    minHeight: 24,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    justifyContent: "center",
+    paddingVertical: 6,
   },
-  sectionBadgeAccent: {
-    backgroundColor: colors.accentSoft,
-  },
-  sectionBadgeNeutral: {
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  sectionBadgeSoft: {
-    backgroundColor: colors.bgSoft,
-  },
-  sectionBadgeText: {
-    fontSize: typography.caption,
-    fontWeight: typography.semibold,
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  },
-  sectionBadgeTextAccent: {
+  closeLink: {
     color: colors.accent,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
   },
-  sectionBadgeTextNeutral: {
+  title: {
+    marginTop: 2,
     color: colors.text,
-  },
-  sectionBadgeTextSoft: {
-    color: colors.muted,
-  },
-  accentPanel: {
-    borderWidth: 1,
-    borderColor: "rgba(230, 122, 46, 0.18)",
-  },
-  softPanel: {
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  summaryPanel: {
-    borderWidth: 1,
-    borderColor: "rgba(230, 122, 46, 0.18)",
-  },
-  panelHead: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  panelTitleWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  panelTitle: {
-    color: colors.text,
-    fontSize: typography.body,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: typography.semibold,
   },
-  copy: {
-    color: colors.muted,
-    fontSize: typography.bodySm,
-    lineHeight: 20,
-  },
-  actionRow: {
+  section: {
+    marginTop: spacing.xl,
     gap: spacing.sm,
   },
-  notePanel: {
-    paddingVertical: spacing.sm,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceStrong,
-  },
-  noteText: {
-    color: colors.muted,
-    fontSize: typography.bodySm,
-    lineHeight: 20,
-  },
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    borderRadius: radii.xl,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surfaceStrong,
-  },
-  toggleRowActive: {
-    backgroundColor: colors.accentSoft,
-  },
-  toggleRowPressed: {
-    opacity: 0.94,
-  },
-  toggleCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  toggleTitle: {
+  sectionTitle: {
     color: colors.text,
-    fontSize: typography.bodySm,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: typography.semibold,
   },
-  toggleText: {
+  timeRow: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  timeChip: {
+    minHeight: 46,
+    minWidth: 108,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: "rgba(234, 223, 211, 0.9)",
+  },
+  timeChipActive: {
+    borderColor: colors.accent,
+    ...shadows.soft,
+  },
+  timeChipPressed: {
+    opacity: 0.95,
+  },
+  timeChipLabel: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
+    textAlign: "center",
+  },
+  timeChipLabelActive: {
+    color: colors.text,
+  },
+  selectedTimeText: {
     color: colors.muted,
     fontSize: typography.caption,
     lineHeight: 18,
   },
-  toggleKnob: {
-    width: 18,
-    height: 18,
+  paymentSwitch: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 4,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "#d9d9d9",
   },
-  toggleKnobActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+  paymentOption: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  summaryRows: {
-    gap: spacing.xs,
+  paymentOptionActive: {
+    backgroundColor: colors.surfaceStrong,
+    ...shadows.soft,
   },
-  summaryValue: {
+  paymentOptionPressed: {
+    opacity: 0.95,
+  },
+  paymentOptionLabel: {
     color: colors.text,
-    fontSize: typography.bodySm,
+    fontSize: typography.body,
+    fontWeight: typography.medium,
+  },
+  paymentOptionLabelActive: {
     fontWeight: typography.semibold,
   },
-  totalRow: {
+  paymentHint: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    backgroundColor: colors.surfaceStrong,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
+  },
+  footerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: spacing.xs,
+    gap: spacing.md,
   },
-  totalLabel: {
+  footerMeta: {
+    color: colors.muted,
+    fontSize: typography.body,
+  },
+  footerDivider: {
+    height: 1,
+    backgroundColor: colors.line,
+  },
+  footerTotalLabel: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: typography.semibold,
+  },
+  footerTotalValue: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: typography.semibold,
+  },
+  emptyWrap: {
+    flex: 1,
+    gap: spacing.lg,
+  },
+  authActions: {
+    gap: spacing.sm,
+  },
+  timesModalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: colors.scrim,
+  },
+  timesModalCard: {
+    maxHeight: "72%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: colors.surfaceStrong,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+  },
+  timesModalHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  timesModalTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: typography.semibold,
+  },
+  timesModalList: {
+    paddingTop: spacing.md,
+    gap: spacing.sm,
+  },
+  timeListItem: {
+    minHeight: 48,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
+  },
+  timeListItemActive: {
+    backgroundColor: colors.accentSoft,
+  },
+  timeListItemPressed: {
+    opacity: 0.95,
+  },
+  timeListItemLabel: {
     color: colors.text,
     fontSize: typography.bodySm,
     fontWeight: typography.medium,
   },
-  totalValue: {
-    color: colors.text,
-    fontSize: typography.titleSm,
+  timeListItemLabelActive: {
+    color: colors.accent,
     fontWeight: typography.semibold,
   },
 });
