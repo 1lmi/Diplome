@@ -11,6 +11,7 @@ import { api } from "./api";
 import { useAuth } from "./authContext";
 import { AdminPanel } from "./components/AdminPanel";
 import { Header } from "./components/Header";
+import { HomeBannerCarousel } from "./components/HomeBannerCarousel";
 import OrderDetailsPage from "./components/OrderDetailsPage";
 import ProfilePage from "./components/ProfilePage";
 import { ProductCard } from "./components/ProductCard";
@@ -39,29 +40,7 @@ type View = "menu" | "profile" | "admin" | "checkout";
 const getHeaderOffset = () =>
   document.querySelector(".header")?.getBoundingClientRect().height ?? 118;
 
-const buildCarouselBanners = (banners: ReturnType<typeof parseHomeBanners>) => {
-  const makeCopy = (copyIndex: -1 | 0 | 1, prefix: string) =>
-    banners.map((banner, index) => ({
-      ...banner,
-      renderKey: `${prefix}-${banner.id}-${index}`,
-      sourceIndex: index,
-      copyIndex,
-    }));
-
-  const middle = makeCopy(0, "middle");
-  if (middle.length <= 1) {
-    return middle;
-  }
-
-  return [
-    ...makeCopy(-1, "prev"),
-    ...middle,
-    ...makeCopy(1, "next"),
-  ];
-};
-
 const AppContent: React.FC = () => {
-  const [activeSlide, setActiveSlide] = useState(0);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authClosing, setAuthClosing] = useState(false);
   const [authReturnTo, setAuthReturnTo] = useState("/profile");
@@ -91,7 +70,6 @@ const AppContent: React.FC = () => {
       }),
     [settings.hero_banners]
   );
-  const carouselBanners = useMemo(() => buildCarouselBanners(homeBanners), [homeBanners]);
 
   const passwordValid = useMemo(
     () => authForm.password.trim().length >= 6,
@@ -99,10 +77,6 @@ const AppContent: React.FC = () => {
   );
 
   const sectionRefs = useRef<Record<number, HTMLElement | null>>({});
-  const carouselViewportRef = useRef<HTMLDivElement | null>(null);
-  const carouselSlideRefs = useRef<Record<string, HTMLElement | null>>({});
-  const pendingCarouselTargetRef = useRef<number | null>(null);
-  const pendingCarouselSettleRef = useRef<number | null>(null);
   const { user, login, register, logout, refresh, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -132,13 +106,13 @@ const AppContent: React.FC = () => {
     if (successMatch) {
       return {
         href: `/orders/${successMatch[1]}`,
-        label: "К заказу",
+        label: "Рљ Р·Р°РєР°Р·Сѓ",
       };
     }
 
     return {
       href: "/",
-      label: "В меню",
+      label: "Р’ РјРµРЅСЋ",
     };
   }, [location.pathname]);
 
@@ -225,73 +199,6 @@ const AppContent: React.FC = () => {
   }, [categories]);
 
   useEffect(() => {
-    if (!homeBanners.length) {
-      setActiveSlide(0);
-      return;
-    }
-    setActiveSlide((prev) => Math.min(prev, homeBanners.length - 1));
-  }, [homeBanners]);
-
-  const getRenderedIndexForActual = (index: number) => {
-    if (homeBanners.length <= 1) return index;
-    return homeBanners.length + index;
-  };
-
-  const getCarouselTargetLeft = (renderedIndex: number) => {
-    const viewport = carouselViewportRef.current;
-    const banner = carouselBanners[renderedIndex];
-    if (!viewport || !banner) return null;
-
-    const slide = carouselSlideRefs.current[banner.renderKey];
-    if (!slide) return null;
-
-    return Math.max(
-      0,
-      slide.offsetLeft - (viewport.clientWidth - slide.clientWidth) / 2
-    );
-  };
-
-  const scrollCarouselToIndex = (
-    actualIndex: number,
-    behavior: ScrollBehavior = "smooth",
-    lockScrollSync = false,
-    overrideRenderedIndex?: number,
-    settleActualIndex?: number | null
-  ) => {
-    const viewport = carouselViewportRef.current;
-    const renderedIndex = overrideRenderedIndex ?? getRenderedIndexForActual(actualIndex);
-    const targetLeft = getCarouselTargetLeft(renderedIndex);
-    if (!viewport || targetLeft === null) return;
-
-    if (lockScrollSync) {
-      pendingCarouselTargetRef.current = renderedIndex;
-      pendingCarouselSettleRef.current = settleActualIndex ?? null;
-    }
-
-    viewport.scrollTo({
-      left: targetLeft,
-      behavior,
-    });
-  };
-
-  useEffect(() => {
-    const frameId = window.requestAnimationFrame(() => {
-      scrollCarouselToIndex(activeSlide, "auto");
-    });
-
-    return () => window.cancelAnimationFrame(frameId);
-  }, [homeBanners.length, carouselBanners.length]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      scrollCarouselToIndex(activeSlide, "auto");
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [activeSlide, homeBanners]);
-
-  useEffect(() => {
     if (loading) return;
 
     if (location.pathname === "/auth") {
@@ -371,86 +278,6 @@ const AppContent: React.FC = () => {
     window.scrollTo({ top, behavior: "smooth" });
   };
 
-  const showPrevSlide = () => {
-    if (!homeBanners.length) return;
-    setActiveSlide((prev) => {
-      const next = prev === 0 ? homeBanners.length - 1 : prev - 1;
-      if (homeBanners.length > 1 && prev === 0) {
-        scrollCarouselToIndex(next, "smooth", true, homeBanners.length - 1, next);
-      } else {
-        scrollCarouselToIndex(next, "smooth", true);
-      }
-      return next;
-    });
-  };
-
-  const showNextSlide = () => {
-    if (!homeBanners.length) return;
-    setActiveSlide((prev) => {
-      const next = (prev + 1) % homeBanners.length;
-      if (homeBanners.length > 1 && prev === homeBanners.length - 1) {
-        scrollCarouselToIndex(next, "smooth", true, homeBanners.length * 2, next);
-      } else {
-        scrollCarouselToIndex(next, "smooth", true);
-      }
-      return next;
-    });
-  };
-
-  const handleCarouselScroll = () => {
-    const viewport = carouselViewportRef.current;
-    if (!viewport || !homeBanners.length) return;
-
-    const pendingIndex = pendingCarouselTargetRef.current;
-    if (pendingIndex !== null) {
-      const pendingLeft = getCarouselTargetLeft(pendingIndex);
-      if (pendingLeft !== null && Math.abs(viewport.scrollLeft - pendingLeft) <= 8) {
-        const settleActualIndex = pendingCarouselSettleRef.current;
-        pendingCarouselTargetRef.current = null;
-        pendingCarouselSettleRef.current = null;
-        if (settleActualIndex !== null) {
-          window.requestAnimationFrame(() => {
-            scrollCarouselToIndex(settleActualIndex, "auto");
-          });
-        }
-      } else {
-        return;
-      }
-    }
-
-    const viewportCenter = viewport.scrollLeft + viewport.clientWidth / 2;
-    let bestIndex = 0;
-    let bestDelta = Number.POSITIVE_INFINITY;
-
-    carouselBanners.forEach((banner, index) => {
-      const slide = carouselSlideRefs.current[banner.renderKey];
-      if (!slide) return;
-      const slideCenter = slide.offsetLeft + slide.clientWidth / 2;
-      const delta = Math.abs(slideCenter - viewportCenter);
-      if (delta < bestDelta) {
-        bestDelta = delta;
-        bestIndex = index;
-      }
-    });
-
-    const bestBanner = carouselBanners[bestIndex];
-    if (!bestBanner) return;
-
-    if (bestBanner.copyIndex !== 0) {
-      setActiveSlide((prev) =>
-        prev === bestBanner.sourceIndex ? prev : bestBanner.sourceIndex
-      );
-      window.requestAnimationFrame(() => {
-        scrollCarouselToIndex(bestBanner.sourceIndex, "auto");
-      });
-      return;
-    }
-
-    setActiveSlide((prev) =>
-      prev === bestBanner.sourceIndex ? prev : bestBanner.sourceIndex
-    );
-  };
-
   const openAuth = (mode: "login" | "register" = "login", returnTo = "/profile") => {
     setAuthForm((prev) => ({ ...prev, mode }));
     setAuthReturnTo(returnTo);
@@ -474,23 +301,23 @@ const AppContent: React.FC = () => {
     const passwordValue = authForm.password;
 
     if (!phoneValue || !passwordValue) {
-      setAuthError("Введите номер телефона и пароль.");
+      setAuthError("Р’РІРµРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° Рё РїР°СЂРѕР»СЊ.");
       return;
     }
 
     if (!isCompletePhoneInput(phoneValue)) {
-      setAuthError("Укажите номер телефона в формате +7 (xxx) xxx-xx-xx.");
+      setAuthError("РЈРєР°Р¶РёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° РІ С„РѕСЂРјР°С‚Рµ +7 (xxx) xxx-xx-xx.");
       return;
     }
 
     if (authForm.mode === "register") {
       const firstName = authForm.firstName.trim();
       if (!firstName) {
-        setAuthError("Введите имя.");
+        setAuthError("Р’РІРµРґРёС‚Рµ РёРјСЏ.");
         return;
       }
       if (!passwordValid) {
-        setAuthError("Пароль должен быть не короче 6 символов.");
+        setAuthError("РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РєРѕСЂРѕС‡Рµ 6 СЃРёРјРІРѕР»РѕРІ.");
         return;
       }
     }
@@ -509,90 +336,16 @@ const AppContent: React.FC = () => {
       setAuthModalOpen(false);
       navigate(authReturnTo);
     } catch (e: any) {
-      setAuthError(e?.message || "Не удалось авторизоваться.");
+      setAuthError(e?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р°РІС‚РѕСЂРёР·РѕРІР°С‚СЊСЃСЏ.");
     }
   };
 
 
   const menuPanel = (
     <section className="menu-section">
-      <section className="placeholder-carousel" aria-label="Промо-блок">
-        <button
-          className="placeholder-carousel__arrow"
-          type="button"
-          onClick={showPrevSlide}
-          aria-label="Предыдущий слайд"
-        >
-          ‹
-        </button>
+      <HomeBannerCarousel banners={homeBanners} />
 
-        <div
-          ref={carouselViewportRef}
-          className="placeholder-carousel__viewport"
-          onScroll={handleCarouselScroll}
-        >
-          {carouselBanners.map((slide) => (
-            <article
-              key={slide.renderKey}
-              ref={(element) => {
-                carouselSlideRefs.current[slide.renderKey] = element;
-              }}
-              className={
-                "placeholder-carousel__slide placeholder-carousel__slide--" +
-                slide.theme +
-                (slide.sourceIndex === activeSlide
-                  ? " placeholder-carousel__slide--active"
-                  : "")
-              }
-              aria-hidden={slide.sourceIndex !== activeSlide}
-            >
-              <div className="placeholder-carousel__copy">
-                <span className="placeholder-carousel__kicker">{slide.kicker}</span>
-                <div>
-                  <strong className="placeholder-carousel__title">{slide.title}</strong>
-                  <p className="placeholder-carousel__text">{slide.text}</p>
-                </div>
-              </div>
-
-              <div className="placeholder-carousel__art" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <button
-          className="placeholder-carousel__arrow"
-          type="button"
-          onClick={showNextSlide}
-          aria-label="Следующий слайд"
-        >
-          ›
-        </button>
-
-        <div className="placeholder-carousel__dots" aria-label="Навигация по слайдам">
-          {homeBanners.map((slide, index) => (
-            <button
-              key={slide.id}
-              type="button"
-              className={
-                "placeholder-carousel__dot" +
-                (index === activeSlide ? " placeholder-carousel__dot--active" : "")
-              }
-              onClick={() => {
-                setActiveSlide(index);
-                scrollCarouselToIndex(index, "smooth", true);
-              }}
-              aria-label={`Слайд ${index + 1}`}
-              aria-pressed={index === activeSlide}
-            />
-          ))}
-        </div>
-      </section>
-
-      {loadingMenu ? <p className="loading">Загружаем блюда...</p> : null}
+      {loadingMenu ? <p className="loading">Р—Р°РіСЂСѓР¶Р°РµРј Р±Р»СЋРґР°...</p> : null}
 
       {!loadingMenu
         ? categories.map((category) => {
@@ -691,13 +444,13 @@ const AppContent: React.FC = () => {
                 <div className="panel">
                   <div className="panel__header">
                     <div>
-                      <h2>Войдите в профиль</h2>
+                      <h2>Р’РѕР№РґРёС‚Рµ РІ РїСЂРѕС„РёР»СЊ</h2>
                       <p className="muted">
-                        История заказов и личные данные появятся после авторизации.
+                        РСЃС‚РѕСЂРёСЏ Р·Р°РєР°Р·РѕРІ Рё Р»РёС‡РЅС‹Рµ РґР°РЅРЅС‹Рµ РїРѕСЏРІСЏС‚СЃСЏ РїРѕСЃР»Рµ Р°РІС‚РѕСЂРёР·Р°С†РёРё.
                       </p>
                     </div>
                     <button className="btn btn--primary" onClick={() => openAuth("login", "/profile")}>
-                      Войти
+                      Р’РѕР№С‚Рё
                     </button>
                   </div>
                 </div>
@@ -712,7 +465,7 @@ const AppContent: React.FC = () => {
               ) : (
                 <div className="panel">
                   <div className="alert">
-                    Доступ в админку есть только у администраторов.
+                    Р”РѕСЃС‚СѓРї РІ Р°РґРјРёРЅРєСѓ РµСЃС‚СЊ С‚РѕР»СЊРєРѕ Сѓ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРІ.
                   </div>
                 </div>
               )
@@ -735,17 +488,17 @@ const AppContent: React.FC = () => {
             onClick={(event) => event.stopPropagation()}
           >
             <button className="modal__close" onClick={closeAuth}>
-              ×
+              Г—
             </button>
             <div className="auth-box">
               <div className="auth-box__header">
                 <div className="auth-box__title">
-                  {authForm.mode === "login" ? "Вход в аккаунт" : "Создать аккаунт"}
+                  {authForm.mode === "login" ? "Р’С…РѕРґ РІ Р°РєРєР°СѓРЅС‚" : "РЎРѕР·РґР°С‚СЊ Р°РєРєР°СѓРЅС‚"}
                 </div>
                 <p className="auth-box__text">
                   {authForm.mode === "login"
-                    ? "Авторизуйтесь, чтобы видеть историю заказов и оформлять покупки быстрее."
-                    : "После регистрации вы сможете быстрее оформлять заказы и отслеживать их статус."}
+                    ? "РђРІС‚РѕСЂРёР·СѓР№С‚РµСЃСЊ, С‡С‚РѕР±С‹ РІРёРґРµС‚СЊ РёСЃС‚РѕСЂРёСЋ Р·Р°РєР°Р·РѕРІ Рё РѕС„РѕСЂРјР»СЏС‚СЊ РїРѕРєСѓРїРєРё Р±С‹СЃС‚СЂРµРµ."
+                    : "РџРѕСЃР»Рµ СЂРµРіРёСЃС‚СЂР°С†РёРё РІС‹ СЃРјРѕР¶РµС‚Рµ Р±С‹СЃС‚СЂРµРµ РѕС„РѕСЂРјР»СЏС‚СЊ Р·Р°РєР°Р·С‹ Рё РѕС‚СЃР»РµР¶РёРІР°С‚СЊ РёС… СЃС‚Р°С‚СѓСЃ."}
                 </p>
               </div>
 
@@ -758,7 +511,7 @@ const AppContent: React.FC = () => {
                     setAuthForm((prev) => ({ ...prev, mode: "login" }));
                   }}
                 >
-                  Вход
+                  Р’С…РѕРґ
                 </button>
                 <button
                   type="button"
@@ -770,14 +523,14 @@ const AppContent: React.FC = () => {
                     setAuthForm((prev) => ({ ...prev, mode: "register" }));
                   }}
                 >
-                  Регистрация
+                  Р РµРіРёСЃС‚СЂР°С†РёСЏ
                 </button>
               </div>
 
               {authForm.mode === "register" ? (
                 <input
                   className="input"
-                  placeholder="Имя"
+                  placeholder="РРјСЏ"
                   value={authForm.firstName}
                   onChange={(event) =>
                     setAuthForm((prev) => ({ ...prev, firstName: event.target.value }))
@@ -801,7 +554,7 @@ const AppContent: React.FC = () => {
               <input
                 className="input"
                 type="password"
-                placeholder="Пароль"
+                placeholder="РџР°СЂРѕР»СЊ"
                 value={authForm.password}
                 onChange={(event) =>
                   setAuthForm((prev) => ({ ...prev, password: event.target.value }))
@@ -809,17 +562,17 @@ const AppContent: React.FC = () => {
               />
 
               <div className="muted" style={{ fontSize: "12px" }}>
-                Номер телефона нужен для входа. Пароль: минимум 6 символов.
+                РќРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° РЅСѓР¶РµРЅ РґР»СЏ РІС…РѕРґР°. РџР°СЂРѕР»СЊ: РјРёРЅРёРјСѓРј 6 СЃРёРјРІРѕР»РѕРІ.
               </div>
               <p className="auth-box__helper">
-                Используйте актуальные данные: это поможет быстрее находить и отслеживать ваши
-                заказы.
+                РСЃРїРѕР»СЊР·СѓР№С‚Рµ Р°РєС‚СѓР°Р»СЊРЅС‹Рµ РґР°РЅРЅС‹Рµ: СЌС‚Рѕ РїРѕРјРѕР¶РµС‚ Р±С‹СЃС‚СЂРµРµ РЅР°С…РѕРґРёС‚СЊ Рё РѕС‚СЃР»РµР¶РёРІР°С‚СЊ РІР°С€Рё
+                Р·Р°РєР°Р·С‹.
               </p>
 
               {authError ? <div className="alert alert--error">{authError}</div> : null}
 
               <button className="btn btn--primary btn--full" type="button" onClick={handleAuthSubmit}>
-                {authForm.mode === "login" ? "Войти" : "Создать аккаунт"}
+                {authForm.mode === "login" ? "Р’РѕР№С‚Рё" : "РЎРѕР·РґР°С‚СЊ Р°РєРєР°СѓРЅС‚"}
               </button>
             </div>
           </div>
@@ -843,5 +596,6 @@ const App: React.FC = () => (
 );
 
 export default App;
+
 
 
