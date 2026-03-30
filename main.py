@@ -19,14 +19,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-DB_PATH = Path("meatpoint.db")
+DB_PATH = Path("sc-restaurant.db")
 UPLOAD_DIR = Path("uploads")
 TOKEN_TTL_DAYS = 30
 DEFAULT_IMAGE_NAME = "default.png"
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
-app = FastAPI(title="Meat Point API")
-logger = logging.getLogger("meatpoint")
+app = FastAPI(title="SC restaurant API")
+logger = logging.getLogger("sc-restaurant")
 
 app.add_middleware(
     CORSMiddleware,
@@ -501,7 +501,7 @@ def apply_migrations() -> None:
         )
 
     default_settings = {
-        "hero_title": "Meat Point",
+        "hero_title": "SC restaurant",
         "hero_subtitle": "Свежие блюда и десерты с быстрой доставкой.",
         "contact_phone": "+7 (900) 000-00-00",
         "delivery_hint": "Доставляем по городу с 10:00 до 23:00.",
@@ -512,6 +512,10 @@ def apply_migrations() -> None:
             conn.execute(
                 "INSERT INTO site_settings(key, value) VALUES (?, ?)", (key, value)
             )
+    conn.execute(
+        "UPDATE site_settings SET value = ? WHERE key = 'hero_title' AND value = 'Meat Point'",
+        ("SC restaurant",),
+    )
 
     conn.commit()
     conn.close()

@@ -1,0 +1,19 @@
+<svg width="1600" height="720" viewBox="0 0 1600 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="720" rx="52" fill="#F8F4EE"/>
+  <rect x="44" y="44" width="1512" height="632" rx="40" fill="url(#paint0_linear_1_2)"/>
+  <circle cx="1268" cy="224" r="128" fill="white" fill-opacity="0.74"/>
+  <circle cx="1116" cy="478" r="72" fill="white" fill-opacity="0.82"/>
+  <rect x="142" y="150" width="238" height="60" rx="30" fill="#FFE7D3"/>
+  <text x="187" y="190" fill="#C7631E" font-family="Manrope, Arial, sans-serif" font-size="24" font-weight="800">SC restaurant</text>
+  <text x="142" y="316" fill="#1F1A16" font-family="Manrope, Arial, sans-serif" font-size="92" font-weight="800">Баннер 01</text>
+  <text x="142" y="392" fill="#6F6358" font-family="Manrope, Arial, sans-serif" font-size="34">Здесь будет основной промо-визуал</text>
+  <text x="142" y="438" fill="#6F6358" font-family="Manrope, Arial, sans-serif" font-size="34">для витрины сайта.</text>
+  <rect x="1220" y="316" width="180" height="180" rx="56" fill="#E67A2E"/>
+  <text x="1262" y="426" fill="white" font-family="Manrope, Arial, sans-serif" font-size="74" font-weight="800">SC</text>
+  <defs>
+    <linearGradient id="paint0_linear_1_2" x1="146" y1="96" x2="1432" y2="624" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDFC"/>
+      <stop offset="1" stop-color="#F7F1EA"/>
+    </linearGradient>
+  </defs>
+</svg>

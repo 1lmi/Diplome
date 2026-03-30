@@ -1,4 +1,4 @@
-# Meat Point
+# SC restaurant
 
 Web-приложение для онлайн-меню и заказов еды.
 
@@ -44,7 +44,7 @@ Web-приложение для онлайн-меню и заказов еды.
 - `schema.sql` - схема БД.
 - `init_db.py` - альтернативная инициализация БД и наполнение демо-меню.
 - `uploads/` - загруженные картинки (создается `default.png` при первом старте).
-- `meatpoint-front/` - клиентское приложение (Vite + React + TS).
+- `sc-restaurant-front/` - клиентское приложение (Vite + React + TS).
 
 ## Быстрый старт
 
@@ -71,12 +71,12 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ### 2. Frontend
 
 ```bash
-cd c:\Users\mg853\VSCode_prodj\Diplome\meatpoint-front
+cd c:\Users\mg853\VSCode_prodj\Diplome\sc-restaurant-front
 npm ci
 npm run dev -- --host --port 5173
 ```
 
-По умолчанию фронт ожидает API на `http://localhost:8000` (см. `meatpoint-front/src/api.ts`, константа `API_BASE`).
+По умолчанию фронт ожидает API на `http://localhost:8000` (см. `sc-restaurant-front/src/api.ts`, константа `API_BASE`).
 
 ### 3. Дефолтный админ
 
@@ -145,7 +145,7 @@ python init_db.py
 
 ```bash
 # frontend
-cd meatpoint-front
+cd sc-restaurant-front
 npm run lint
 npm run build
 npm run preview

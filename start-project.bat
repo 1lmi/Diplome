@@ -4,8 +4,8 @@ setlocal
 set "ROOT_DIR=%~dp0"
 if "%ROOT_DIR:~-1%"=="\" set "ROOT_DIR=%ROOT_DIR:~0,-1%"
 
-set "FRONTEND_DIR=%ROOT_DIR%\meatpoint-front"
-set "MOBILE_DIR=%ROOT_DIR%\meatpoint-mobile"
+set "FRONTEND_DIR=%ROOT_DIR%\sc-restaurant-front"
+set "MOBILE_DIR=%ROOT_DIR%\sc-restaurant-mobile"
 set "VENV_DIR=%ROOT_DIR%\.venv"
 set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
 
@@ -72,14 +72,14 @@ for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "(Get-NetIPCon
 if not defined LAN_IP set "LAN_IP=127.0.0.1"
 
 echo Starting backend on http://127.0.0.1:8000 ...
-start "Meat Point API" powershell -NoExit -ExecutionPolicy Bypass -Command "Set-Location -LiteralPath '%ROOT_DIR%'; & '%PYTHON_EXE%' -m uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+start "SC restaurant API" powershell -NoExit -ExecutionPolicy Bypass -Command "Set-Location -LiteralPath '%ROOT_DIR%'; & '%PYTHON_EXE%' -m uvicorn main:app --reload --host 0.0.0.0 --port 8000"
 if errorlevel 1 (
   echo Failed to start the backend window.
   exit /b 1
 )
 
 echo Starting frontend on http://127.0.0.1:5173 ...
-start "Meat Point Frontend" powershell -NoExit -ExecutionPolicy Bypass -Command "Set-Location -LiteralPath '%FRONTEND_DIR%'; npm run dev -- --host --port 5173"
+start "SC restaurant Frontend" powershell -NoExit -ExecutionPolicy Bypass -Command "Set-Location -LiteralPath '%FRONTEND_DIR%'; npm run dev -- --host --port 5173"
 if errorlevel 1 (
   echo Failed to start the frontend window.
   exit /b 1
@@ -87,7 +87,7 @@ if errorlevel 1 (
 
 if exist "%MOBILE_DIR%\package.json" (
   echo Starting mobile Expo Go on http://%LAN_IP% ...
-  start "Meat Point Mobile (Expo Go)" powershell -NoExit -ExecutionPolicy Bypass -Command "$env:EXPO_PUBLIC_API_BASE_URL='http://%LAN_IP%:8000'; Set-Location -LiteralPath '%MOBILE_DIR%'; npm run start:lan"
+  start "SC restaurant Mobile (Expo Go)" powershell -NoExit -ExecutionPolicy Bypass -Command "$env:EXPO_PUBLIC_API_BASE_URL='http://%LAN_IP%:8000'; Set-Location -LiteralPath '%MOBILE_DIR%'; npm run start:lan"
   if errorlevel 1 (
     echo Failed to start the mobile window.
     exit /b 1

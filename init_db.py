@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path("meatpoint.db")
+DB_PATH = Path("sc-restaurant.db")
 
 SCHEMA_SQL = Path("schema.sql").read_text(encoding="utf-8")
 

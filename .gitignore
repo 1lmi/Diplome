@@ -55,7 +55,7 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
-meatpoint.db
+sc-restaurant.db
 uploads/
 
 # Editor/OS

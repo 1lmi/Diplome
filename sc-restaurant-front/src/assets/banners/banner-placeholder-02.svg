@@ -1,0 +1,19 @@
+<svg width="1600" height="720" viewBox="0 0 1600 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="720" rx="52" fill="#F5F8FB"/>
+  <rect x="44" y="44" width="1512" height="632" rx="40" fill="url(#paint0_linear_2_2)"/>
+  <circle cx="1316" cy="198" r="146" fill="white" fill-opacity="0.82"/>
+  <circle cx="1162" cy="502" r="88" fill="white" fill-opacity="0.8"/>
+  <rect x="142" y="150" width="238" height="60" rx="30" fill="#E7EEF8"/>
+  <text x="187" y="190" fill="#3B6489" font-family="Manrope, Arial, sans-serif" font-size="24" font-weight="800">SC restaurant</text>
+  <text x="142" y="316" fill="#1F1A16" font-family="Manrope, Arial, sans-serif" font-size="92" font-weight="800">Баннер 02</text>
+  <text x="142" y="392" fill="#637082" font-family="Manrope, Arial, sans-serif" font-size="34">Спокойная нейтральная заглушка</text>
+  <text x="142" y="438" fill="#637082" font-family="Manrope, Arial, sans-serif" font-size="34">для второго слайда.</text>
+  <rect x="1188" y="300" width="210" height="210" rx="64" fill="#D8E4F2"/>
+  <text x="1250" y="428" fill="#3B6489" font-family="Manrope, Arial, sans-serif" font-size="74" font-weight="800">SC</text>
+  <defs>
+    <linearGradient id="paint0_linear_2_2" x1="146" y1="96" x2="1432" y2="624" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EEF4FA"/>
+    </linearGradient>
+  </defs>
+</svg>
