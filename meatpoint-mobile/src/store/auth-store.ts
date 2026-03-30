@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { mobileApi } from "@/src/api/mobile-api";
 import type { AuthResponse, User } from "@/src/api/types";
 import { setApiToken } from "@/src/api/client";
+import { loadStoredPushToken } from "@/src/lib/notifications";
 
 const TOKEN_KEY = "meatpoint-mobile-auth-token";
 
@@ -71,6 +72,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ token: null, user: null, hydrated: true, bootstrapping: false });
   },
   async logout() {
+    const pushToken = await loadStoredPushToken();
+    if (pushToken) {
+      try {
+        await mobileApi.unregisterPushToken(pushToken);
+      } catch {
+        // Ignore push token unregister races during logout.
+      }
+    }
     try {
       await mobileApi.logout();
     } catch {

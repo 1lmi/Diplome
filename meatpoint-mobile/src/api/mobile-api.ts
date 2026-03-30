@@ -90,6 +90,20 @@ export const mobileApi = {
     return request<{ ok: boolean }>("/auth/logout", { method: "POST" });
   },
 
+  registerPushToken(token: string, platform: string) {
+    return request<{ ok: boolean }>("/me/push-token", {
+      method: "PUT",
+      body: JSON.stringify({ token, platform }),
+    });
+  },
+
+  unregisterPushToken(token: string) {
+    return request<{ ok: boolean }>("/me/push-token", {
+      method: "DELETE",
+      body: JSON.stringify({ token }),
+    });
+  },
+
   updateProfile(payload: {
     first_name?: string | null;
     last_name?: string | null;

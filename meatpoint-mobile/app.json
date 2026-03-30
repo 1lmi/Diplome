@@ -42,6 +42,7 @@
           "locationWhenInUsePermission": "Разрешите Meat Point доступ к геопозиции, чтобы выбирать адрес на карте."
         }
       ],
+      "expo-notifications",
       "expo-secure-store",
       "@react-native-community/datetimepicker"
     ],

@@ -87,6 +87,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_addresses_default
     ON user_addresses(user_id)
     WHERE is_default = 1;
 
+CREATE TABLE IF NOT EXISTS push_devices (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    token      TEXT NOT NULL UNIQUE,
+    platform   TEXT,
+    is_active  INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_devices_user_id ON push_devices(user_id);
+
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
     user_id    INTEGER NOT NULL,

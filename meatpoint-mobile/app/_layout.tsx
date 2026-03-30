@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 import "react-native-reanimated";
 
 import { AppProviders } from "@/src/providers/AppProviders";
+import { NotificationController } from "@/src/providers/NotificationController";
 import { useAuthStore } from "@/src/store/auth-store";
 import { colors } from "@/src/theme/tokens";
 
@@ -28,6 +29,7 @@ function RootNavigator() {
 
   return (
     <>
+      <NotificationController />
       <Stack
         screenOptions={{
           headerShown: false,

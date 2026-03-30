@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+import logging
 import re
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,8 +23,10 @@ DB_PATH = Path("meatpoint.db")
 UPLOAD_DIR = Path("uploads")
 TOKEN_TTL_DAYS = 30
 DEFAULT_IMAGE_NAME = "default.png"
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
 app = FastAPI(title="Meat Point API")
+logger = logging.getLogger("meatpoint")
 
 app.add_middleware(
     CORSMiddleware,
@@ -282,6 +288,21 @@ def apply_migrations() -> None:
 
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS push_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT NOT NULL UNIQUE,
+            platform TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS site_settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -367,6 +388,9 @@ def apply_migrations() -> None:
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login ON users(login)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_user_addresses_user_id ON user_addresses(user_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_push_devices_user_id ON push_devices(user_id)"
     )
     conn.execute(
         """
@@ -721,6 +745,19 @@ class UserAddressOut(BaseModel):
     created_at: datetime
 
 
+class PushTokenUpsert(BaseModel):
+    token: str = Field(min_length=8)
+    platform: Optional[str] = None
+
+
+class PushTokenDelete(BaseModel):
+    token: str = Field(min_length=8)
+
+
+class OkResponse(BaseModel):
+    ok: bool
+
+
 class ProductSizePayload(BaseModel):
     id: Optional[int] = None
     size_name: Optional[str] = None
@@ -850,6 +887,174 @@ def serialize_user_address(row: sqlite3.Row) -> UserAddressOut:
         is_default=bool(row["is_default"]),
         created_at=datetime.fromisoformat(row["created_at"]),
     )
+
+
+def normalize_push_token(value: str) -> str:
+    token = (value or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Push token обязателен.")
+    if not (
+        token.startswith("ExponentPushToken[")
+        or token.startswith("ExpoPushToken[")
+    ):
+        raise HTTPException(status_code=400, detail="Некорректный push token.")
+    return token
+
+
+def normalize_push_platform(value: Optional[str]) -> Optional[str]:
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized in {"android", "ios"}:
+        return normalized
+    return "unknown"
+
+
+def upsert_push_device(
+    db: sqlite3.Connection, user_id: int, token: str, platform: Optional[str]
+) -> None:
+    db.execute(
+        """
+        INSERT INTO push_devices(user_id, token, platform, is_active, updated_at)
+        VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
+        ON CONFLICT(token) DO UPDATE SET
+            user_id = excluded.user_id,
+            platform = excluded.platform,
+            is_active = 1,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (user_id, token, platform),
+    )
+
+
+def deactivate_push_device(db: sqlite3.Connection, token: str, user_id: Optional[int] = None) -> None:
+    if user_id is None:
+        db.execute(
+            """
+            UPDATE push_devices
+            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE token = ?
+            """,
+            (token,),
+        )
+        return
+
+    db.execute(
+        """
+        UPDATE push_devices
+        SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE token = ? AND user_id = ?
+        """,
+        (token, user_id),
+    )
+
+
+def build_order_push_copy(order_id: int, status_code: str) -> tuple[str, str]:
+    normalized = (status_code or "").strip().lower()
+    title = f"Заказ №{order_id}"
+    body_map = {
+        "new": "принят",
+        "cooking": "готовится",
+        "ready": "готов",
+        "on_way": "в пути",
+        "done": "завершён",
+        "canceled": "отменён",
+        "cancelled": "отменён",
+    }
+    return title, f"Заказ №{order_id} {body_map.get(normalized, 'обновлён')}"
+
+
+def send_expo_push_messages(messages: List[Dict[str, Any]]) -> List[str]:
+    if not messages:
+        return []
+
+    request = urllib_request.Request(
+        EXPO_PUSH_URL,
+        data=json.dumps(messages).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib_error.URLError:
+        logger.exception("Failed to send Expo push notifications")
+        return []
+    except Exception:
+        logger.exception("Unexpected Expo push notification error")
+        return []
+
+    invalid_tokens: List[str] = []
+    results = payload.get("data")
+    if not isinstance(results, list):
+        return invalid_tokens
+
+    for message, item in zip(messages, results):
+        if not isinstance(item, dict):
+            continue
+        if item.get("status") != "error":
+            continue
+        details = item.get("details") or {}
+        if isinstance(details, dict) and details.get("error") == "DeviceNotRegistered":
+            token = message.get("to")
+            if isinstance(token, str) and token:
+                invalid_tokens.append(token)
+    return invalid_tokens
+
+
+def notify_order_status_change(
+    db: sqlite3.Connection,
+    order_id: int,
+    user_id: Optional[int],
+    status_code: str,
+    status_name: str,
+) -> None:
+    if not user_id:
+        return
+
+    rows = db.execute(
+        """
+        SELECT token
+        FROM push_devices
+        WHERE user_id = ? AND is_active = 1
+        ORDER BY updated_at DESC, id DESC
+        """,
+        (user_id,),
+    ).fetchall()
+    if not rows:
+        return
+
+    title, body = build_order_push_copy(order_id, status_code)
+    messages = [
+        {
+            "to": row["token"],
+            "title": title,
+            "body": body,
+            "sound": "default",
+            "data": {
+                "orderId": order_id,
+                "statusCode": status_code,
+                "statusName": status_name,
+                "screen": "order",
+            },
+        }
+        for row in rows
+    ]
+    invalid_tokens = send_expo_push_messages(messages)
+    if invalid_tokens:
+        db.executemany(
+            """
+            UPDATE push_devices
+            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE token = ?
+            """,
+            [(token,) for token in invalid_tokens],
+        )
+        db.commit()
 
 
 def list_user_address_rows(db: sqlite3.Connection, user_id: int) -> List[sqlite3.Row]:
@@ -1389,6 +1594,13 @@ def create_order(
         )
 
     db.commit()
+    notify_order_status_change(
+        db,
+        order_id,
+        current_user["id"] if current_user else None,
+        "new",
+        "Новый",
+    )
     _, out = fetch_order(db, order_id, request=request)
     return out
 
@@ -1570,6 +1782,31 @@ def my_orders(
     return results
 
 
+@app.put("/me/push-token", response_model=OkResponse)
+def register_my_push_token(
+    body: PushTokenUpsert,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(get_current_user),
+):
+    token = normalize_push_token(body.token)
+    platform = normalize_push_platform(body.platform)
+    upsert_push_device(db, current_user["id"], token, platform)
+    db.commit()
+    return OkResponse(ok=True)
+
+
+@app.delete("/me/push-token", response_model=OkResponse)
+def unregister_my_push_token(
+    body: PushTokenDelete,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(get_current_user),
+):
+    token = normalize_push_token(body.token)
+    deactivate_push_device(db, token, current_user["id"])
+    db.commit()
+    return OkResponse(ok=True)
+
+
 @app.get("/admin/orders", response_model=List[OrderOut])
 def admin_orders(
     request: Request,
@@ -1618,6 +1855,7 @@ def update_order_status(
     order_row = cur.execute(
         """
         SELECT o.id,
+               o.user_id,
                o.delivery_method,
                os.code AS status,
                c.address AS customer_address
@@ -1653,6 +1891,16 @@ def update_order_status(
 
     record_status_history(db, order_id, status_row["id"], body.comment)
     db.commit()
+    notify_order_status_change(
+        db,
+        order_id,
+        order_row["user_id"],
+        target_status,
+        db.execute(
+            "SELECT name FROM order_statuses WHERE id = ?",
+            (status_row["id"],),
+        ).fetchone()["name"],
+    )
     _, out = fetch_order(db, order_id, request=request)
     return out
 # --- Auth --------------------------------------------------------------------
