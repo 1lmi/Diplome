@@ -1475,7 +1475,7 @@ def create_order(
 
     customer_phone = normalize_phone_login(order.customer.phone)
     if False:  # normalize_phone_login already validates phone
-        raise HTTPException(status_code=400, detail="РўРµР»РµС„РѕРЅ РѕР±СЏР·Р°С‚РµР»РµРЅ")
+        raise HTTPException(status_code=400, detail="Телефон обязателен")
     customer_name = (order.customer.name or "").strip() or None
     customer_address = (order.customer.address or "").strip() or None
 
@@ -1485,24 +1485,24 @@ def create_order(
             "delivery" if customer_address else "pickup"
         )
     if delivery_method == "delivery" and not customer_address:
-        raise HTTPException(status_code=400, detail="РђРґСЂРµСЃ РґРѕСЃС‚Р°РІРєРё РѕР±СЏР·Р°С‚РµР»РµРЅ")
+        raise HTTPException(status_code=400, detail="Адрес доставки обязателен")
 
     delivery_time = (order.delivery_time or "").strip() or None
 
     payment_method = (order.payment_method or "cash").strip().lower()
     if payment_method not in ("cash", "card"):
-        raise HTTPException(status_code=400, detail="РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЃРїРѕСЃРѕР± РѕРїР»Р°С‚С‹")
+        raise HTTPException(status_code=400, detail="Некорректный способ оплаты")
 
     cash_change_from = order.cash_change_from
     if payment_method != "cash" and cash_change_from is not None:
         raise HTTPException(
             status_code=400,
-            detail="РЎРґР°С‡Р° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РїСЂРё РѕРїР»Р°С‚Рµ РЅР°Р»РёС‡РЅС‹РјРё",
+            detail="Сдача доступна только при оплате наличными",
         )
     if cash_change_from is not None and cash_change_from <= 0:
         raise HTTPException(
             status_code=400,
-            detail="РЎСѓРјРјР° РґР»СЏ СЃРґР°С‡Рё РґРѕР»Р¶РЅР° Р±С‹С‚СЊ Р±РѕР»СЊС€Рµ РЅСѓР»СЏ",
+            detail="Сумма для сдачи должна быть больше нуля",
         )
 
     total_price = 0
@@ -1529,7 +1529,7 @@ def create_order(
     if cash_change_from is not None and cash_change_from < total_price:
         raise HTTPException(
             status_code=400,
-            detail="РЎСѓРјРјР° РґР»СЏ СЃРґР°С‡Рё РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РјРµРЅСЊС€Рµ СЃСѓРјРјС‹ Р·Р°РєР°Р·Р°",
+            detail="Сумма для сдачи не может быть меньше суммы заказа",
         )
 
     customer_row = cur.execute(

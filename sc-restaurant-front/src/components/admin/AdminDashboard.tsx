@@ -198,22 +198,6 @@ const AdminDashboard: React.FC<Props> = ({
         </div>
         <div className="stack gap-8">
           <label className="field">
-            <span>Заголовок</span>
-            <input
-              className="input"
-              value={settings.hero_title || ""}
-              onChange={(e) => onSettingChange("hero_title", e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>Подзаголовок</span>
-            <input
-              className="input"
-              value={settings.hero_subtitle || ""}
-              onChange={(e) => onSettingChange("hero_subtitle", e.target.value)}
-            />
-          </label>
-          <label className="field">
             <span>Телефон</span>
             <input
               className="input"
@@ -240,4 +224,3 @@ const AdminDashboard: React.FC<Props> = ({
 };
 
 export default AdminDashboard;
-

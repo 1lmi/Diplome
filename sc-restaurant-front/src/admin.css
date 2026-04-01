@@ -1817,6 +1817,17 @@
   object-fit: cover;
 }
 
+.admin-banner-card__empty {
+  min-height: 196px;
+  aspect-ratio: 16 / 7;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  text-align: center;
+  color: var(--muted);
+  background: linear-gradient(180deg, #fffaf4, #ffffff);
+}
+
 .admin-banner-card__meta {
   display: flex;
   align-items: center;
@@ -1941,6 +1952,36 @@
 .admin-banner-card__form {
   display: grid;
   gap: 12px;
+}
+
+.admin-banner-card__upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-banner-card__upload-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: #f58b33;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.admin-banner-card__file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .admin-banner-card__row {

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, TransitionEvent } from "react";
+import type { CSSProperties, FocusEvent, TransitionEvent } from "react";
+import { resolveStaticImageUrl } from "../api";
 import type { HomeBanner } from "../bannerSettings";
 
 interface Props {
@@ -10,6 +11,8 @@ interface RenderedBanner extends HomeBanner {
   renderKey: string;
   sourceIndex: number;
 }
+
+const AUTOPLAY_DELAY_MS = 8_000;
 
 const createRenderedBanners = (banners: HomeBanner[]): RenderedBanner[] => {
   if (banners.length <= 1) {
@@ -35,6 +38,7 @@ export const HomeBannerCarousel: React.FC<Props> = ({ banners }) => {
   const [currentIndex, setCurrentIndex] = useState(actualCount > 1 ? actualCount : 0);
   const [transitionEnabled, setTransitionEnabled] = useState(actualCount > 1);
   const [metrics, setMetrics] = useState({ viewportWidth: 0, slideWidth: 0, gap: 18 });
+  const [autoplayPaused, setAutoplayPaused] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const sampleSlideRef = useRef<HTMLElement | null>(null);
@@ -88,6 +92,20 @@ export const HomeBannerCarousel: React.FC<Props> = ({ banners }) => {
     return () => window.cancelAnimationFrame(frameId);
   }, [transitionEnabled]);
 
+  useEffect(() => {
+    if (actualCount <= 1 || autoplayPaused) return;
+
+    const intervalId = window.setInterval(() => {
+      if (interactionLockedRef.current) return;
+
+      interactionLockedRef.current = true;
+      setTransitionEnabled(true);
+      setCurrentIndex((prev) => Math.min(renderedBanners.length - 1, prev + 1));
+    }, AUTOPLAY_DELAY_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [actualCount, autoplayPaused, currentIndex, renderedBanners.length]);
+
   const activeDotIndex =
     actualCount <= 1 ? 0 : ((currentIndex % actualCount) + actualCount) % actualCount;
 
@@ -110,8 +128,6 @@ export const HomeBannerCarousel: React.FC<Props> = ({ banners }) => {
 
   const handlePrev = () => goToRenderedIndex((index) => index - 1);
   const handleNext = () => goToRenderedIndex((index) => index + 1);
-  const handleDotClick = (index: number) =>
-    goToRenderedIndex(actualCount > 1 ? actualCount + index : index);
 
   const handleTrackTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
     if (event.target !== trackRef.current || event.propertyName !== "transform") {
@@ -135,6 +151,14 @@ export const HomeBannerCarousel: React.FC<Props> = ({ banners }) => {
     interactionLockedRef.current = false;
   };
 
+  const handleBlurCapture = (event: FocusEvent<HTMLElement>) => {
+    const nextFocused = event.relatedTarget;
+    if (nextFocused instanceof Node && event.currentTarget.contains(nextFocused)) {
+      return;
+    }
+    setAutoplayPaused(false);
+  };
+
   const trackStyle = {
     transform: `translate3d(${Math.round(translateX)}px, 0, 0)`,
   } as CSSProperties;
@@ -144,7 +168,14 @@ export const HomeBannerCarousel: React.FC<Props> = ({ banners }) => {
   }
 
   return (
-    <section className="placeholder-carousel" aria-label="Промо-блок">
+    <section
+      className="placeholder-carousel"
+      aria-label="Промо-блок"
+      onMouseEnter={() => setAutoplayPaused(true)}
+      onMouseLeave={() => setAutoplayPaused(false)}
+      onFocusCapture={() => setAutoplayPaused(true)}
+      onBlurCapture={handleBlurCapture}
+    >
       <div className="placeholder-carousel__stage">
         <button
           className="placeholder-carousel__arrow placeholder-carousel__arrow--prev"
@@ -175,27 +206,20 @@ export const HomeBannerCarousel: React.FC<Props> = ({ banners }) => {
                   }
                 }}
                 className={
-                  "placeholder-carousel__slide placeholder-carousel__slide--" +
-                  slide.theme +
+                  "placeholder-carousel__slide" +
                   (slide.sourceIndex === activeDotIndex
                     ? " placeholder-carousel__slide--active"
                     : "")
                 }
                 aria-hidden={slide.sourceIndex !== activeDotIndex}
               >
-                <div className="placeholder-carousel__copy">
-                  <span className="placeholder-carousel__kicker">{slide.kicker}</span>
-                  <div>
-                    <strong className="placeholder-carousel__title">{slide.title}</strong>
-                    <p className="placeholder-carousel__text">{slide.text}</p>
-                  </div>
-                </div>
-
-                <div className="placeholder-carousel__art" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                </div>
+                <img
+                  className="placeholder-carousel__image"
+                  src={resolveStaticImageUrl(slide.image_path)}
+                  alt=""
+                  loading="lazy"
+                  draggable={false}
+                />
               </article>
             ))}
           </div>
@@ -211,21 +235,6 @@ export const HomeBannerCarousel: React.FC<Props> = ({ banners }) => {
         </button>
       </div>
 
-      <div className="placeholder-carousel__dots" aria-label="Навигация по слайдам">
-        {banners.map((slide, index) => (
-          <button
-            key={slide.id}
-            type="button"
-            className={
-              "placeholder-carousel__dot" +
-              (index === activeDotIndex ? " placeholder-carousel__dot--active" : "")
-            }
-            onClick={() => handleDotClick(index)}
-            aria-label={`Слайд ${index + 1}`}
-            aria-pressed={index === activeDotIndex}
-          />
-        ))}
-      </div>
     </section>
   );
 };

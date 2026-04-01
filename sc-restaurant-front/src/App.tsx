@@ -66,7 +66,7 @@ const AppContent: React.FC = () => {
   const homeBanners = useMemo(
     () =>
       parseHomeBanners(settings.hero_banners, {
-        fallbackToDefaults: true,
+        fallbackToDefaults: false,
       }),
     [settings.hero_banners]
   );
@@ -106,13 +106,13 @@ const AppContent: React.FC = () => {
     if (successMatch) {
       return {
         href: `/orders/${successMatch[1]}`,
-        label: "Рљ Р·Р°РєР°Р·Сѓ",
+        label: "К заказу",
       };
     }
 
     return {
       href: "/",
-      label: "Р’ РјРµРЅСЋ",
+      label: "В меню",
     };
   }, [location.pathname]);
 
@@ -301,23 +301,23 @@ const AppContent: React.FC = () => {
     const passwordValue = authForm.password;
 
     if (!phoneValue || !passwordValue) {
-      setAuthError("Р’РІРµРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° Рё РїР°СЂРѕР»СЊ.");
+      setAuthError("Введите номер телефона и пароль.");
       return;
     }
 
     if (!isCompletePhoneInput(phoneValue)) {
-      setAuthError("РЈРєР°Р¶РёС‚Рµ РЅРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° РІ С„РѕСЂРјР°С‚Рµ +7 (xxx) xxx-xx-xx.");
+      setAuthError("Укажите номер телефона в формате +7 (xxx) xxx-xx-xx.");
       return;
     }
 
     if (authForm.mode === "register") {
       const firstName = authForm.firstName.trim();
       if (!firstName) {
-        setAuthError("Р’РІРµРґРёС‚Рµ РёРјСЏ.");
+        setAuthError("Введите имя.");
         return;
       }
       if (!passwordValid) {
-        setAuthError("РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РєРѕСЂРѕС‡Рµ 6 СЃРёРјРІРѕР»РѕРІ.");
+        setAuthError("Пароль должен быть не короче 6 символов.");
         return;
       }
     }
@@ -336,7 +336,7 @@ const AppContent: React.FC = () => {
       setAuthModalOpen(false);
       navigate(authReturnTo);
     } catch (e: any) {
-      setAuthError(e?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р°РІС‚РѕСЂРёР·РѕРІР°С‚СЊСЃСЏ.");
+      setAuthError(e?.message || "Не удалось авторизоваться.");
     }
   };
 
@@ -345,7 +345,7 @@ const AppContent: React.FC = () => {
     <section className="menu-section">
       <HomeBannerCarousel banners={homeBanners} />
 
-      {loadingMenu ? <p className="loading">Р—Р°РіСЂСѓР¶Р°РµРј Р±Р»СЋРґР°...</p> : null}
+      {loadingMenu ? <p className="loading">Загружаем блюда...</p> : null}
 
       {!loadingMenu
         ? categories.map((category) => {
@@ -444,13 +444,13 @@ const AppContent: React.FC = () => {
                 <div className="panel">
                   <div className="panel__header">
                     <div>
-                      <h2>Р’РѕР№РґРёС‚Рµ РІ РїСЂРѕС„РёР»СЊ</h2>
+                      <h2>Войдите в профиль</h2>
                       <p className="muted">
-                        РСЃС‚РѕСЂРёСЏ Р·Р°РєР°Р·РѕРІ Рё Р»РёС‡РЅС‹Рµ РґР°РЅРЅС‹Рµ РїРѕСЏРІСЏС‚СЃСЏ РїРѕСЃР»Рµ Р°РІС‚РѕСЂРёР·Р°С†РёРё.
+                        История заказов и личные данные появятся после авторизации.
                       </p>
                     </div>
                     <button className="btn btn--primary" onClick={() => openAuth("login", "/profile")}>
-                      Р’РѕР№С‚Рё
+                      Войти
                     </button>
                   </div>
                 </div>
@@ -465,7 +465,7 @@ const AppContent: React.FC = () => {
               ) : (
                 <div className="panel">
                   <div className="alert">
-                    Р”РѕСЃС‚СѓРї РІ Р°РґРјРёРЅРєСѓ РµСЃС‚СЊ С‚РѕР»СЊРєРѕ Сѓ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРІ.
+                    Доступ в админку есть только у администраторов.
                   </div>
                 </div>
               )
@@ -487,18 +487,18 @@ const AppContent: React.FC = () => {
             data-leave={authClosing ? "true" : undefined}
             onClick={(event) => event.stopPropagation()}
           >
-            <button className="modal__close" onClick={closeAuth}>
-              Г—
-            </button>
+              <button className="modal__close" onClick={closeAuth}>
+                ×
+              </button>
             <div className="auth-box">
               <div className="auth-box__header">
                 <div className="auth-box__title">
-                  {authForm.mode === "login" ? "Р’С…РѕРґ РІ Р°РєРєР°СѓРЅС‚" : "РЎРѕР·РґР°С‚СЊ Р°РєРєР°СѓРЅС‚"}
+                  {authForm.mode === "login" ? "Вход в аккаунт" : "Создать аккаунт"}
                 </div>
                 <p className="auth-box__text">
                   {authForm.mode === "login"
-                    ? "РђРІС‚РѕСЂРёР·СѓР№С‚РµСЃСЊ, С‡С‚РѕР±С‹ РІРёРґРµС‚СЊ РёСЃС‚РѕСЂРёСЋ Р·Р°РєР°Р·РѕРІ Рё РѕС„РѕСЂРјР»СЏС‚СЊ РїРѕРєСѓРїРєРё Р±С‹СЃС‚СЂРµРµ."
-                    : "РџРѕСЃР»Рµ СЂРµРіРёСЃС‚СЂР°С†РёРё РІС‹ СЃРјРѕР¶РµС‚Рµ Р±С‹СЃС‚СЂРµРµ РѕС„РѕСЂРјР»СЏС‚СЊ Р·Р°РєР°Р·С‹ Рё РѕС‚СЃР»РµР¶РёРІР°С‚СЊ РёС… СЃС‚Р°С‚СѓСЃ."}
+                    ? "Авторизуйтесь, чтобы видеть историю заказов и оформлять покупки быстрее."
+                    : "После регистрации вы сможете быстрее оформлять заказы и отслеживать их статус."}
                 </p>
               </div>
 
@@ -511,7 +511,7 @@ const AppContent: React.FC = () => {
                     setAuthForm((prev) => ({ ...prev, mode: "login" }));
                   }}
                 >
-                  Р’С…РѕРґ
+                  Вход
                 </button>
                 <button
                   type="button"
@@ -523,14 +523,14 @@ const AppContent: React.FC = () => {
                     setAuthForm((prev) => ({ ...prev, mode: "register" }));
                   }}
                 >
-                  Р РµРіРёСЃС‚СЂР°С†РёСЏ
+                  Регистрация
                 </button>
               </div>
 
               {authForm.mode === "register" ? (
                 <input
                   className="input"
-                  placeholder="РРјСЏ"
+                  placeholder="Имя"
                   value={authForm.firstName}
                   onChange={(event) =>
                     setAuthForm((prev) => ({ ...prev, firstName: event.target.value }))
@@ -554,7 +554,7 @@ const AppContent: React.FC = () => {
               <input
                 className="input"
                 type="password"
-                placeholder="РџР°СЂРѕР»СЊ"
+                placeholder="Пароль"
                 value={authForm.password}
                 onChange={(event) =>
                   setAuthForm((prev) => ({ ...prev, password: event.target.value }))
@@ -562,17 +562,17 @@ const AppContent: React.FC = () => {
               />
 
               <div className="muted" style={{ fontSize: "12px" }}>
-                РќРѕРјРµСЂ С‚РµР»РµС„РѕРЅР° РЅСѓР¶РµРЅ РґР»СЏ РІС…РѕРґР°. РџР°СЂРѕР»СЊ: РјРёРЅРёРјСѓРј 6 СЃРёРјРІРѕР»РѕРІ.
+                Номер телефона нужен для входа. Пароль: минимум 6 символов.
               </div>
               <p className="auth-box__helper">
-                РСЃРїРѕР»СЊР·СѓР№С‚Рµ Р°РєС‚СѓР°Р»СЊРЅС‹Рµ РґР°РЅРЅС‹Рµ: СЌС‚Рѕ РїРѕРјРѕР¶РµС‚ Р±С‹СЃС‚СЂРµРµ РЅР°С…РѕРґРёС‚СЊ Рё РѕС‚СЃР»РµР¶РёРІР°С‚СЊ РІР°С€Рё
-                Р·Р°РєР°Р·С‹.
+                Используйте актуальные данные: это поможет быстрее находить и отслеживать ваши
+                заказы.
               </p>
 
               {authError ? <div className="alert alert--error">{authError}</div> : null}
 
               <button className="btn btn--primary btn--full" type="button" onClick={handleAuthSubmit}>
-                {authForm.mode === "login" ? "Р’РѕР№С‚Рё" : "РЎРѕР·РґР°С‚СЊ Р°РєРєР°СѓРЅС‚"}
+                {authForm.mode === "login" ? "Войти" : "Создать аккаунт"}
               </button>
             </div>
           </div>
@@ -596,6 +596,5 @@ const App: React.FC = () => (
 );
 
 export default App;
-
 
 
