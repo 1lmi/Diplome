@@ -17,7 +17,6 @@ import ProfilePage from "./components/ProfilePage";
 import { ProductCard } from "./components/ProductCard";
 import { ProductModal } from "./components/ProductModal";
 import CartPage from "./components/cart/CartPage";
-import CheckoutFlowHeader from "./components/cart/CheckoutFlowHeader";
 import CheckoutPage from "./components/cart/CheckoutPage";
 import CheckoutSuccessPage from "./components/cart/CheckoutSuccessPage";
 import { parseHomeBanners } from "./bannerSettings";
@@ -38,7 +37,9 @@ import type {
 
 type View = "menu" | "profile" | "admin" | "checkout";
 const getHeaderOffset = () =>
-  document.querySelector(".header-sticky")?.getBoundingClientRect().height ?? 72;
+  document.querySelector(".header__bottom-shell")?.getBoundingClientRect().height ??
+  document.querySelector(".header")?.getBoundingClientRect().height ??
+  72;
 
 const AppContent: React.FC = () => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -94,27 +95,7 @@ const AppContent: React.FC = () => {
     return "menu";
   }, [location.pathname]);
 
-  const checkoutStep = useMemo<1 | 2 | 3 | null>(() => {
-    if (location.pathname.startsWith("/checkout/success/")) return 3;
-    if (location.pathname.startsWith("/checkout")) return 2;
-    if (location.pathname.startsWith("/cart")) return 1;
-    return null;
-  }, [location.pathname]);
-
-  const checkoutUtility = useMemo(() => {
-    const successMatch = location.pathname.match(/^\/checkout\/success\/(\d+)/);
-    if (successMatch) {
-      return {
-        href: `/orders/${successMatch[1]}`,
-        label: "К заказу",
-      };
-    }
-
-    return {
-      href: "/",
-      label: "В меню",
-    };
-  }, [location.pathname]);
+  const showCatalogHeaderBottom = currentView === "menu";
 
   const refreshMyOrders = async () => {
     setOrdersLoading(true);
@@ -381,32 +362,26 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="app">
-      {currentView === "checkout" && checkoutStep ? (
-        <CheckoutFlowHeader
-          step={checkoutStep}
-          utilityHref={checkoutUtility.href}
-          utilityLabel={checkoutUtility.label}
-        />
-      ) : (
-        <Header
-          activeView={currentView}
-          onChange={(view) => {
-            const map: Record<"menu" | "profile" | "admin", string> = {
-              menu: "/",
-              profile: "/profile",
-              admin: "/admin",
-            };
-            navigate(map[view]);
-          }}
-          onCartClick={() => navigate("/cart")}
-          user={user}
-          onLogout={logout}
-          categories={categories}
-          activeCategoryId={activeCategoryId ?? undefined}
-          onCategoryChange={handleCategoryClick}
-          onAuthOpen={() => openAuth("login")}
-        />
-      )}
+      <Header
+        activeView={currentView}
+        onChange={(view) => {
+          const map: Record<"menu" | "profile" | "admin", string> = {
+            menu: "/",
+            profile: "/profile",
+            admin: "/admin",
+          };
+          navigate(map[view]);
+        }}
+        onCartClick={() => navigate("/cart")}
+        user={user}
+        onLogout={logout}
+        categories={categories}
+        activeCategoryId={activeCategoryId ?? undefined}
+        onCategoryChange={handleCategoryClick}
+        onAuthOpen={() => openAuth("login")}
+        showBottom={showCatalogHeaderBottom}
+        showCartButton={showCatalogHeaderBottom}
+      />
 
       <main className={"main" + (currentView === "checkout" ? " main--checkout" : "")}>
         <Routes>
@@ -596,4 +571,3 @@ const App: React.FC = () => (
 );
 
 export default App;
-

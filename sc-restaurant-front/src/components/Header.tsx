@@ -13,6 +13,8 @@ interface Props {
   categories: Category[];
   activeCategoryId?: number;
   onCategoryChange: (id: number) => void;
+  showBottom?: boolean;
+  showCartButton?: boolean;
 }
 
 const formatPrice = (value: number) => `${value.toLocaleString("ru-RU")} ₽`;
@@ -27,6 +29,8 @@ export const Header: React.FC<Props> = ({
   categories,
   activeCategoryId,
   onCategoryChange,
+  showBottom = false,
+  showCartButton = false,
 }) => {
   const { lineCount, totalPrice, lastAddedAt } = useCart();
   const showCategories = activeView === "menu" && categories.length > 0;
@@ -41,7 +45,7 @@ export const Header: React.FC<Props> = ({
 
   return (
     <>
-      <header className="header">
+      <header className={"header" + (showBottom ? " header--with-bottom" : " header--top-only")}>
         <div className="header__inner">
           <div className="header__top">
             <button className="header__brand" type="button" onClick={() => onChange("menu")}>
@@ -77,37 +81,41 @@ export const Header: React.FC<Props> = ({
         </div>
       </header>
 
-      <div className="header-sticky">
-        <div className="header__inner header__inner--sticky">
-          <div className="header__bottom">
-            {showCategories ? (
-              <div className="header__categories">
-                <CategoryTabs
-                  categories={categories}
-                  activeId={activeCategoryId}
-                  onChange={onCategoryChange}
-                />
-              </div>
-            ) : (
-              <div className="header__categories header__categories--empty" />
-            )}
+      {showBottom ? (
+        <div className="header__bottom-shell">
+          <div className="header__inner header__inner--sticky">
+            <div className="header__bottom">
+              {showCategories ? (
+                <div className="header__categories">
+                  <CategoryTabs
+                    categories={categories}
+                    activeId={activeCategoryId}
+                    onChange={onCategoryChange}
+                  />
+                </div>
+              ) : (
+                <div className="header__categories header__categories--empty" />
+              )}
 
-            <button
-              type="button"
-              className={
-                "cart-button cart-button--compact" + (cartPulse ? " cart-button--pulse" : "")
-              }
-              onClick={onCartClick}
-            >
-              <span className="cart-button__label">Корзина</span>
-              <span className="cart-button__meta">
-                {lineCount > 0 ? formatPrice(totalPrice) : "Пока пусто"}
-              </span>
-              <span className="cart-button__badge">{lineCount}</span>
-            </button>
+              {showCartButton ? (
+                <button
+                  type="button"
+                  className={
+                    "cart-button cart-button--compact" + (cartPulse ? " cart-button--pulse" : "")
+                  }
+                  onClick={onCartClick}
+                >
+                  <span className="cart-button__label">Корзина</span>
+                  <span className="cart-button__meta">
+                    {lineCount > 0 ? formatPrice(totalPrice) : "Пока пусто"}
+                  </span>
+                  <span className="cart-button__badge">{lineCount}</span>
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </>
   );
 };

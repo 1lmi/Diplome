@@ -16,14 +16,11 @@
   backdrop-filter: blur(18px);
 }
 
-.header-sticky {
+.header--top-only {
   position: sticky;
   top: 0;
   z-index: 50;
-  width: 100%;
   border-bottom: 1px solid rgba(234, 223, 211, 0.9);
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(18px);
 }
 
 .header__inner {
@@ -38,6 +35,15 @@
 .header__inner--sticky {
   padding-top: 8px;
   padding-bottom: 8px;
+}
+
+.header__bottom-shell {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(18px);
 }
 
 .header__brand {
@@ -284,7 +290,7 @@
 }
 
 .main {
-  padding: var(--space-6) var(--container-pad) var(--space-8);
+  padding: var(--space-3) var(--container-pad) var(--space-8);
 }
 
 .hero,
