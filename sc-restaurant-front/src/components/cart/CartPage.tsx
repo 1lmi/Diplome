@@ -44,16 +44,12 @@ export const CartPage: React.FC<Props> = ({ products, onSelectProduct }) => {
   }, [items, products]);
 
   if (items.length === 0) {
-    return (
-      <section className="cart-page cart-page--empty">
-        <div className="cart-page__content">
-          <div className="cart-page__breadcrumbs">
-            <Link to="/">Главная</Link>
-            <span>Корзина</span>
-          </div>
-          <div className="panel cart-empty-state">
-            <p className="eyebrow">Корзина</p>
-            <h1>Корзина пуста</h1>
+      return (
+        <section className="cart-page cart-page--empty">
+          <div className="cart-page__content">
+            <div className="panel cart-empty-state">
+              <p className="eyebrow">Корзина</p>
+              <h1>Корзина пуста</h1>
             <p className="muted">
               Добавьте блюда из меню, а затем перейдите к оформлению заказа.
             </p>
@@ -72,11 +68,6 @@ export const CartPage: React.FC<Props> = ({ products, onSelectProduct }) => {
     <section className="cart-page">
       <div className="cart-page__layout">
         <div className="cart-page__content">
-          <div className="cart-page__breadcrumbs">
-            <Link to="/">Главная</Link>
-            <span>Корзина</span>
-          </div>
-
           <div className="cart-page__header">
             <div>
               <p className="eyebrow">Шаг 1</p>

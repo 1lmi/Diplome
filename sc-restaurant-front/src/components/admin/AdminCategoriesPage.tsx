@@ -295,9 +295,6 @@ const AdminCategoriesPage: React.FC<Props> = ({
           <h2 className="admin-page__title">Структура меню</h2>
           <p className="muted">Перетаскивайте категории, редактируйте названия и сразу сохраняйте.</p>
         </div>
-        <button className="btn btn--outline" onClick={onRefresh}>
-          Перезагрузить
-        </button>
       </div>
 
       <div className="panel menu-form">

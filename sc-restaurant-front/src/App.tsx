@@ -468,12 +468,12 @@ const AppContent: React.FC = () => {
             <div className="auth-box">
               <div className="auth-box__header">
                 <div className="auth-box__title">
-                  {authForm.mode === "login" ? "Вход в аккаунт" : "Создать аккаунт"}
+                  {authForm.mode === "login" ? "Вход" : "Регистрация"}
                 </div>
                 <p className="auth-box__text">
                   {authForm.mode === "login"
-                    ? "Авторизуйтесь, чтобы видеть историю заказов и оформлять покупки быстрее."
-                    : "После регистрации вы сможете быстрее оформлять заказы и отслеживать их статус."}
+                    ? "Укажите номер телефона и пароль, чтобы войти в аккаунт."
+                    : "Укажите номер телефона и пароль, чтобы создать аккаунт."}
                 </p>
               </div>
 
@@ -537,12 +537,10 @@ const AppContent: React.FC = () => {
               />
 
               <div className="muted" style={{ fontSize: "12px" }}>
-                Номер телефона нужен для входа. Пароль: минимум 6 символов.
+                  {authForm.mode === "login"
+                    ? ""
+                    : "Пароль минимум 6 символов."}
               </div>
-              <p className="auth-box__helper">
-                Используйте актуальные данные: это поможет быстрее находить и отслеживать ваши
-                заказы.
-              </p>
 
               {authError ? <div className="alert alert--error">{authError}</div> : null}
 
