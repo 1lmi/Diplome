@@ -38,7 +38,7 @@ import type {
 
 type View = "menu" | "profile" | "admin" | "checkout";
 const getHeaderOffset = () =>
-  document.querySelector(".header")?.getBoundingClientRect().height ?? 118;
+  document.querySelector(".header-sticky")?.getBoundingClientRect().height ?? 72;
 
 const AppContent: React.FC = () => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -596,5 +596,4 @@ const App: React.FC = () => (
 );
 
 export default App;
-
 

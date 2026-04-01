@@ -40,68 +40,74 @@ export const Header: React.FC<Props> = ({
   }, [lastAddedAt]);
 
   return (
-    <header className="header">
-      <div className="header__inner">
-        <div className="header__top">
-          <button className="header__brand" type="button" onClick={() => onChange("menu")}>
-            <span className="header__brand-mark">SC</span>
-            <span className="header__brand-copy">
-              <span className="header__brand-title">SC restaurant</span>
-            </span>
-          </button>
+    <>
+      <header className="header">
+        <div className="header__inner">
+          <div className="header__top">
+            <button className="header__brand" type="button" onClick={() => onChange("menu")}>
+              <span className="header__brand-mark">SC</span>
+              <span className="header__brand-copy">
+                <span className="header__brand-title">SC restaurant</span>
+              </span>
+            </button>
 
-          <div className="header__nav">
-            {user ? (
-              <>
-                <button
-                  type="button"
-                  className={
-                    "nav__link" + (activeView === "profile" ? " nav__link--active" : "")
-                  }
-                  onClick={() => onChange("profile")}
-                >
-                  Профиль
+            <div className="header__nav">
+              {user ? (
+                <>
+                  <button
+                    type="button"
+                    className={
+                      "nav__link" + (activeView === "profile" ? " nav__link--active" : "")
+                    }
+                    onClick={() => onChange("profile")}
+                  >
+                    Профиль
+                  </button>
+                  <button type="button" className="link-btn" onClick={onLogout}>
+                    Выйти
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="link-btn" onClick={onAuthOpen}>
+                  Вход / Регистрация
                 </button>
-                <button type="button" className="link-btn" onClick={onLogout}>
-                  Выйти
-                </button>
-              </>
-            ) : (
-              <button type="button" className="link-btn" onClick={onAuthOpen}>
-                Вход / Регистрация
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </div>
+      </header>
 
-        <div className="header__bottom">
-          {showCategories ? (
-            <div className="header__categories">
-              <CategoryTabs
-                categories={categories}
-                activeId={activeCategoryId}
-                onChange={onCategoryChange}
-              />
-            </div>
-          ) : (
-            <div className="header__categories header__categories--empty" />
-          )}
+      <div className="header-sticky">
+        <div className="header__inner header__inner--sticky">
+          <div className="header__bottom">
+            {showCategories ? (
+              <div className="header__categories">
+                <CategoryTabs
+                  categories={categories}
+                  activeId={activeCategoryId}
+                  onChange={onCategoryChange}
+                />
+              </div>
+            ) : (
+              <div className="header__categories header__categories--empty" />
+            )}
 
-          <button
-            type="button"
-            className={
-              "cart-button cart-button--compact" + (cartPulse ? " cart-button--pulse" : "")
-            }
-            onClick={onCartClick}
-          >
-            <span className="cart-button__label">Корзина</span>
-            <span className="cart-button__meta">
-              {lineCount > 0 ? formatPrice(totalPrice) : "Пока пусто"}
-            </span>
-            <span className="cart-button__badge">{lineCount}</span>
-          </button>
+            <button
+              type="button"
+              className={
+                "cart-button cart-button--compact" + (cartPulse ? " cart-button--pulse" : "")
+              }
+              onClick={onCartClick}
+            >
+              <span className="cart-button__label">Корзина</span>
+              <span className="cart-button__meta">
+                {lineCount > 0 ? formatPrice(totalPrice) : "Пока пусто"}
+              </span>
+              <span className="cart-button__badge">{lineCount}</span>
+            </button>
+          </div>
         </div>
       </div>
-    </header>
+    </>
   );
 };
