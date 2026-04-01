@@ -571,7 +571,6 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 onDeleteCategory={handleDeleteCategory}
                 onReorderCategories={handleReorderCategories}
                 saving={saving}
-                onRefresh={refreshAll}
               />
             }
           />

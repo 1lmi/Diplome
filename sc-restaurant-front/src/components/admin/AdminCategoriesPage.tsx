@@ -26,7 +26,6 @@ interface Props {
   onDeleteCategory: (id: number, deleteProducts: boolean) => Promise<void>;
   onReorderCategories: (categoryIds: number[]) => Promise<void>;
   saving: boolean;
-  onRefresh: () => void;
 }
 
 interface SortableCardProps {
@@ -146,7 +145,6 @@ const AdminCategoriesPage: React.FC<Props> = ({
   onDeleteCategory,
   onReorderCategories,
   saving,
-  onRefresh,
 }) => {
   const [drafts, setDrafts] = useState<Record<number, Category>>({});
   const [savingId, setSavingId] = useState<number | null>(null);

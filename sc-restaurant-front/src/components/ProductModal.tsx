@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { MenuItem, ProductDisplay } from "../types";
 import { useCart } from "../cartContext";
 import { useToast } from "../ui/ToastProvider";
@@ -14,13 +14,52 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
   const [variantId, setVariantId] = useState<number | null>(null);
   const [closing, setClosing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [nutritionOpen, setNutritionOpen] = useState(false);
+  const nutritionRef = useRef<HTMLDivElement | null>(null);
+
+  const formatNutritionValue = (value: number | null | undefined) =>
+    value === null || value === undefined
+      ? "-"
+      : new Intl.NumberFormat("ru-RU", {
+          minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+          maximumFractionDigits: 1,
+        }).format(value);
 
   useEffect(() => {
     if (!product?.variants?.length) return;
     setVariantId(product.variants[0].id);
     setClosing(false);
     setAdding(false);
+    setNutritionOpen(false);
   }, [product]);
+
+  useEffect(() => {
+    setNutritionOpen(false);
+  }, [variantId]);
+
+  useEffect(() => {
+    if (!nutritionOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!nutritionRef.current?.contains(event.target as Node)) {
+        setNutritionOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setNutritionOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [nutritionOpen]);
 
   if (!product) return null;
 
@@ -42,6 +81,18 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
     [variant.calories, variant.carbs, variant.protein, variant.fat].some(
       (value) => value !== null && value !== undefined
     );
+
+  const nutritionRows = [
+    { label: "Энерг. ценн.", value: formatNutritionValue(variant?.calories), unit: "Ккал" },
+    { label: "Белки", value: formatNutritionValue(variant?.protein), unit: "грамм" },
+    { label: "Жиры", value: formatNutritionValue(variant?.fat), unit: "грамм" },
+    { label: "Углеводы", value: formatNutritionValue(variant?.carbs), unit: "грамм" },
+    {
+      label: "Вес",
+      value: formatNutritionValue(variant?.size_amount),
+      unit: variant?.size_unit || "",
+    },
+  ];
 
   const handleClose = () => {
     setClosing(true);
@@ -136,7 +187,36 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
             )}
 
             {hasNutrition ? (
-              <div className="product-modal__section">
+              <div className="product-modal__section product-modal__section--nutrition">
+                <div className="product-modal__nutrition" ref={nutritionRef}>
+                  <span className="product-modal__nutrition-label">Пищевая ценность</span>
+                  <button
+                    type="button"
+                    className="product-modal__nutrition-toggle"
+                    aria-expanded={nutritionOpen}
+                    aria-label="Показать пищевую ценность"
+                    onClick={() => setNutritionOpen((prev) => !prev)}
+                  >
+                    ( i )
+                  </button>
+
+                  {nutritionOpen ? (
+                    <div className="product-modal__nutrition-popover" role="dialog" aria-modal="false">
+                      <div className="product-modal__nutrition-popover-title">
+                        Пищевая ценность на 100 г
+                      </div>
+                      <div className="product-modal__nutrition-rows">
+                        {nutritionRows.map((row) => (
+                          <div key={row.label} className="product-modal__nutrition-row">
+                            <span>{row.label}</span>
+                            <strong>{row.value}</strong>
+                            <span>{row.unit}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
                 <p className="product-modal__section-title">Пищевая ценность</p>
                 <div className="stat-cards">
                   <div className="stat-card">

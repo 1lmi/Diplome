@@ -654,6 +654,12 @@
   gap: var(--space-3);
 }
 
+.product-modal__section--nutrition > .product-modal__section-title,
+.product-modal__section--nutrition > .stat-cards,
+.product-modal__section--nutrition > .stat-note {
+  display: none;
+}
+
 .product-modal__section-title {
   margin: 0;
   font-size: 13px;
@@ -661,6 +667,87 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-soft);
+}
+
+.product-modal__nutrition {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+}
+
+.product-modal__nutrition-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.product-modal__nutrition-toggle {
+  min-height: auto;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.product-modal__nutrition-toggle:hover {
+  color: var(--accent-hover);
+}
+
+.product-modal__nutrition-popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 10px);
+  z-index: 3;
+  min-width: 262px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(26, 24, 23, 0.96);
+  color: #fff;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+}
+
+.product-modal__nutrition-popover-title {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.product-modal__nutrition-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.product-modal__nutrition-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.product-modal__nutrition-row span:first-child {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.product-modal__nutrition-row strong {
+  font-size: 16px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.product-modal__nutrition-row span:last-child {
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
 }
 
 .size-tabs {
