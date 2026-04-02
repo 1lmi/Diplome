@@ -2596,6 +2596,13 @@
   gap: var(--space-3);
 }
 
+.cart-page__auth-note {
+  margin: -4px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-soft);
+}
+
 .upsell-rail {
   display: flex;
   flex-direction: column;

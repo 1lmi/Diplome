@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../authContext";
 import { useCart } from "../../cartContext";
 import type { ProductDisplay } from "../../types";
 import CartLineItem from "./CartLineItem";
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export const CartPage: React.FC<Props> = ({ products, onSelectProduct }) => {
+  const { user } = useAuth();
   const { items, totalPrice, changeQuantity, removeItem, clear } = useCart();
   const navigate = useNavigate();
 
@@ -98,10 +100,12 @@ export const CartPage: React.FC<Props> = ({ products, onSelectProduct }) => {
             <button
               type="button"
               className="btn btn--primary btn--full"
+              disabled={!user}
               onClick={() => navigate("/checkout")}
             >
               Перейти к оформлению
             </button>
+            {!user ? <p className="cart-page__auth-note">Войдите, чтобы оформить заказ</p> : null}
             <Link className="btn btn--ghost btn--full" to="/">
               Вернуться в меню
             </Link>
