@@ -145,11 +145,6 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
                 <div className="size-tabs">
                   {product.variants.map((item) => {
                     const label = item.size_name || item.size_label || "Размер";
-                    const amount =
-                      item.size_amount !== undefined && item.size_amount !== null
-                        ? `${item.size_amount}${item.size_unit ? ` ${item.size_unit}` : ""}`
-                        : null;
-
                     return (
                       <button
                         key={item.id}
@@ -158,10 +153,7 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
                         onClick={() => setVariantId(item.id)}
                       >
                         <span className="size-tab__label">{label}</span>
-                        <span className="size-tab__meta">
-                          {amount ? `${amount} · ` : ""}
-                          {item.price} руб.
-                        </span>
+
                       </button>
                     );
                   })}
