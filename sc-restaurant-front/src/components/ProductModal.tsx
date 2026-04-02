@@ -87,11 +87,6 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
     { label: "Белки", value: formatNutritionValue(variant?.protein), unit: "грамм" },
     { label: "Жиры", value: formatNutritionValue(variant?.fat), unit: "грамм" },
     { label: "Углеводы", value: formatNutritionValue(variant?.carbs), unit: "грамм" },
-    {
-      label: "Вес",
-      value: formatNutritionValue(variant?.size_amount),
-      unit: variant?.size_unit || "",
-    },
   ];
 
   const handleClose = () => {
@@ -197,7 +192,9 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
                     aria-label="Показать пищевую ценность"
                     onClick={() => setNutritionOpen((prev) => !prev)}
                   >
-                    ( i )
+                    <span className="product-modal__nutrition-icon" aria-hidden="true">
+                      i
+                    </span>
                   </button>
 
                   {nutritionOpen ? (

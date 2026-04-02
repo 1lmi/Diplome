@@ -660,6 +660,11 @@
   display: none;
 }
 
+.product-modal__section--nutrition {
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
 .product-modal__section-title {
   margin: 0;
   font-size: 13px;
@@ -679,31 +684,44 @@
 
 .product-modal__nutrition-label {
   font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
+  font-weight: 600;
+  color: var(--text-soft);
 }
 
 .product-modal__nutrition-toggle {
-  min-height: auto;
   border: none;
   background: transparent;
   padding: 0;
   color: var(--text-soft);
   font: inherit;
-  font-size: 14px;
-  font-weight: 700;
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .product-modal__nutrition-toggle:hover {
   color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.product-modal__nutrition-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(111, 99, 88, 0.42);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .product-modal__nutrition-popover {
   position: absolute;
   left: 0;
-  top: calc(100% + 10px);
+  bottom: calc(100% + 10px);
   z-index: 3;
   min-width: 262px;
   padding: 14px 16px;
@@ -827,7 +845,7 @@
 }
 
 .product-modal__footer {
-  margin-top: auto;
+  margin-top: var(--space-4);
   padding-top: var(--space-4);
   border-top: 1px solid rgba(234, 223, 211, 0.9);
   display: flex;
