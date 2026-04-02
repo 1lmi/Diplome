@@ -809,7 +809,8 @@
 .size-tabs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-  width: min(100%, 304px);
+  width: 100%;
+  max-width: none;
   gap: 4px;
   padding: 4px;
   border-radius: 999px;
