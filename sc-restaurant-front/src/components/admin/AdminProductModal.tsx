@@ -45,7 +45,7 @@ type EditorTab = "main" | "nutrition" | "sizes";
 
 const EDITOR_SECTIONS: { id: EditorTab; label: string; subtitle: string }[] = [
   { id: "main", label: "Основное", subtitle: "Название, описание, фото и статус товара" },
-  { id: "nutrition", label: "КБЖУ", subtitle: "Пищевая ценность применяется ко всем размерам" },
+  { id: "nutrition", label: "КБЖУ", subtitle: "Пищевая ценность на 100 грамм" },
   { id: "sizes", label: "Размеры", subtitle: "Цены, размеры и видимость каждого варианта" },
 ];
 

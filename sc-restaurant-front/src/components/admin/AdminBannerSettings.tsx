@@ -131,7 +131,7 @@ const AdminBannerSettings: React.FC<Props> = ({ rawValue, onChange }) => {
                     <input
                       className="admin-banner-card__file-input"
                       type="file"
-                      accept="image/png,image/jpeg,image/webp"
+                      accept="image/png,image/jpeg,image/webp,image/avif"
                       disabled={isUploading}
                       onChange={(event) => {
                         void handleFileSelected(index, event.target.files?.[0]);

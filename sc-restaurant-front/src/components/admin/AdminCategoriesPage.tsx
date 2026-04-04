@@ -409,13 +409,6 @@ const AdminCategoriesPage: React.FC<Props> = ({
                     </button>
                   </div>
                   <div className="admin-modal__footer">
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      onClick={closeDeleteModal}
-                      disabled={deleting}
-                    >
-                      Отмена
-                    </button>
                   </div>
                 </>
               ) : (

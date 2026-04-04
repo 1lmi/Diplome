@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import logging
+import mimetypes
 import re
 import secrets
 import sqlite3
@@ -24,6 +25,8 @@ UPLOAD_DIR = Path("uploads")
 TOKEN_TTL_DAYS = 30
 DEFAULT_IMAGE_NAME = "default.png"
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+
+mimetypes.add_type("image/avif", ".avif")
 
 app = FastAPI(title="SC restaurant API")
 logger = logging.getLogger("sc-restaurant")
@@ -2320,9 +2323,17 @@ async def upload_image(
     db: sqlite3.Connection = Depends(get_db),
     _: sqlite3.Row = Depends(require_admin),
 ):
-    if file.content_type not in ("image/png", "image/jpeg", "image/webp"):
-        raise HTTPException(status_code=400, detail="Допустимы PNG/JPEG/WEBP")
-    extension = Path(file.filename or "").suffix.lower() or ".png"
+    allowed_types = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+        "image/avif": ".avif",
+    }
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Допустимы PNG/JPEG/WEBP/AVIF")
+    extension = Path(file.filename or "").suffix.lower()
+    if not extension:
+        extension = allowed_types[file.content_type]
     filename = f"{secrets.token_hex(8)}{extension}"
     target = UPLOAD_DIR / filename
     target.write_bytes(await file.read())
