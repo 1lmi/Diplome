@@ -3,9 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../../api";
 import { useAuth } from "../../authContext";
+import { getUnavailableCartItems } from "../../cartAvailability";
 import { useCart } from "../../cartContext";
 import { saveOrderTracking } from "../../orderTracking";
-import type { CheckoutDraft, UserAddress } from "../../types";
+import type { CheckoutDraft, ProductDisplay, UserAddress } from "../../types";
 import { focusFirstInvalidField } from "../../utils/forms";
 import { useToast } from "../../ui/ToastProvider";
 import AddressFlowModal from "../AddressFlowModal";
@@ -14,6 +15,8 @@ import OrderSummaryCard from "./OrderSummaryCard";
 
 interface Props {
   onLoginRequest: () => void;
+  products: ProductDisplay[];
+  availabilityReady: boolean;
   addresses: UserAddress[];
   addressesLoading: boolean;
   onRefreshAddresses: () => Promise<void>;
@@ -95,6 +98,8 @@ function buildOtherTimeOptions(
 
 export const CheckoutPage: React.FC<Props> = ({
   onLoginRequest,
+  products,
+  availabilityReady,
   addresses,
   addressesLoading,
   onRefreshAddresses,
@@ -170,19 +175,37 @@ export const CheckoutPage: React.FC<Props> = ({
     }
   }, [checkoutDraft.deliveryTime, otherTimeOptions, quickTimeOptions, updateCheckoutDraft]);
 
+  const unavailableItems = useMemo(
+    () => (availabilityReady ? getUnavailableCartItems(items, products) : []),
+    [availabilityReady, items, products]
+  );
+
+  const unavailableItemIds = useMemo(
+    () => new Set(unavailableItems.map((item) => item.productSizeId)),
+    [unavailableItems]
+  );
+
+  const hasUnavailableItems = unavailableItems.length > 0;
+
   const summaryLines = useMemo(
     () =>
-      items.map((item) => ({
-        id: item.productSizeId,
-        name: item.productName,
-        meta:
+      items.map((item) => {
+        const baseMeta =
           item.sizeLabel ||
           (item.sizeAmount !== null && item.sizeAmount !== undefined
             ? `${item.sizeAmount}${item.sizeUnit ? ` ${item.sizeUnit}` : ""}`
-            : null),
-        amount: item.price * item.quantity,
-      })),
-    [items]
+            : null);
+
+        return {
+          id: item.productSizeId,
+          name: item.productName,
+          meta: unavailableItemIds.has(item.productSizeId)
+            ? [baseMeta, "Недоступно"].filter(Boolean).join(" • ")
+            : baseMeta,
+          amount: item.price * item.quantity,
+        };
+      }),
+    [items, unavailableItemIds]
   );
 
   const authGateLocked = !user && !checkoutDraft.guestMode;
@@ -200,6 +223,12 @@ export const CheckoutPage: React.FC<Props> = ({
     if (quickTimeOptions.some((option) => option.value === current)) return "";
     return current;
   }, [checkoutDraft.deliveryTime, quickTimeOptions]);
+
+  const availabilityMessage = !availabilityReady
+    ? "Проверяем актуальность корзины..."
+    : hasUnavailableItems
+      ? "В корзине есть недоступные товары. Вернитесь в корзину и удалите их, чтобы оформить заказ."
+      : "";
 
   const clearFieldError = (key: string) => {
     setFieldErrors((prev) => {
@@ -287,6 +316,23 @@ export const CheckoutPage: React.FC<Props> = ({
 
   const handleSubmit = async () => {
     if (submitting) return;
+
+    if (!availabilityReady) {
+      setError("Проверяем актуальность корзины. Попробуйте ещё раз через пару секунд.");
+      return;
+    }
+
+    if (hasUnavailableItems) {
+      const message =
+        "В корзине есть недоступные товары. Вернитесь в корзину и удалите их, чтобы оформить заказ.";
+      setError(message);
+      pushToast({
+        tone: "error",
+        title: "В корзине есть недоступные товары",
+        description: "Удалите их из корзины и повторите оформление.",
+      });
+      return;
+    }
 
     if (authGateLocked) {
       const message = "Выберите вход или продолжите как гость, чтобы оформить заказ.";
@@ -396,6 +442,7 @@ export const CheckoutPage: React.FC<Props> = ({
           ) : null}
 
           <div className={"checkout-form" + (authGateLocked ? " checkout-form--locked" : "")}>
+            {availabilityMessage ? <div className="alert alert--error">{availabilityMessage}</div> : null}
             {!user ? (
             <section className="checkout-section">
               <div className="checkout-section__head">
@@ -773,7 +820,7 @@ export const CheckoutPage: React.FC<Props> = ({
               <button
                 type="button"
                 className={"btn btn--primary" + (submitting ? " btn--loading" : "")}
-                disabled={submitting}
+                disabled={submitting || !availabilityReady || hasUnavailableItems}
                 onClick={handleSubmit}
               >
                 {submitting ? (

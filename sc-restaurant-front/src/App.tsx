@@ -47,7 +47,7 @@ const AppContent: React.FC = () => {
   const [authReturnTo, setAuthReturnTo] = useState("/profile");
   const [categories, setCategories] = useState<Category[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [loadingMenu, setLoadingMenu] = useState(false);
+  const [loadingMenu, setLoadingMenu] = useState(true);
   const [settings, setSettings] = useState<SettingsMap>({});
   const [statuses, setStatuses] = useState<StatusOption[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ProductDisplay | null>(null);
@@ -387,12 +387,23 @@ const AppContent: React.FC = () => {
         <Routes>
           <Route path="/" element={menuPanel} />
           <Route path="/auth" element={<Navigate to="/" replace />} />
-          <Route path="/cart" element={<CartPage products={allProducts} onSelectProduct={setSelectedProduct} />} />
+          <Route
+            path="/cart"
+            element={
+              <CartPage
+                products={allProducts}
+                availabilityReady={!loadingMenu}
+                onSelectProduct={setSelectedProduct}
+              />
+            }
+          />
           <Route
             path="/checkout"
             element={
               <CheckoutPage
                 onLoginRequest={() => openAuth("login", "/checkout")}
+                products={allProducts}
+                availabilityReady={!loadingMenu}
                 addresses={myAddresses}
                 addressesLoading={addressesLoading}
                 onRefreshAddresses={refreshMyAddresses}

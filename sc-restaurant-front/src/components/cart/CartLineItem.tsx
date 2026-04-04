@@ -4,6 +4,7 @@ import type { CartItem } from "../../types";
 
 interface Props {
   item: CartItem;
+  unavailable?: boolean;
   onChangeQuantity: (productSizeId: number, quantity: number) => void;
   onRemove: (productSizeId: number) => void;
 }
@@ -20,27 +21,36 @@ function buildSizeText(item: CartItem) {
 
 export const CartLineItem: React.FC<Props> = ({
   item,
+  unavailable = false,
   onChangeQuantity,
   onRemove,
 }) => {
   const sizeText = buildSizeText(item);
 
   return (
-    <article className="cart-page__item">
+    <article className={"cart-page__item" + (unavailable ? " cart-page__item--unavailable" : "")}>
       <div className="cart-page__item-media">
         <img src={item.imageUrl || "/img/default.png"} alt={item.productName} />
       </div>
 
       <div className="cart-page__item-main">
         <div className="cart-page__item-copy">
-          <h3>{item.productName}</h3>
+          <div className="cart-page__item-head">
+            <h3>{item.productName}</h3>
+          </div>
           {sizeText ? <p>{sizeText}</p> : null}
           <span>{formatPrice(item.price)} за шт.</span>
+          {unavailable ? (
+            <p className="cart-page__item-note">
+              Сейчас эта позиция недоступна для заказа. Удалите её из корзины, чтобы продолжить.
+            </p>
+          ) : null}
         </div>
 
         <div className="cart-page__item-controls">
           <QuantityControl
             value={item.quantity}
+            disabled={unavailable}
             onChange={(nextValue) => onChangeQuantity(item.productSizeId, nextValue)}
           />
         </div>

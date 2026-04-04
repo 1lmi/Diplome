@@ -1513,14 +1513,26 @@ def create_order(
     for item in order.items:
         row = cur.execute(
             """
-            SELECT ps.price, ps.is_hidden, p.is_active
+            SELECT
+                ps.price,
+                ps.is_hidden AS size_hidden,
+                p.is_active,
+                p.is_hidden AS product_hidden,
+                COALESCE(c.is_hidden, 1) AS category_hidden
             FROM product_sizes ps
             JOIN products p ON p.id = ps.product_id
+            LEFT JOIN categories c ON c.id = p.category_id
             WHERE ps.id = ?
             """,
             (item.product_size_id,),
         ).fetchone()
-        if row is None or row["is_hidden"] or not row["is_active"]:
+        if (
+            row is None
+            or row["size_hidden"]
+            or row["product_hidden"]
+            or row["category_hidden"]
+            or not row["is_active"]
+        ):
             raise HTTPException(
                 status_code=400,
                 detail=f"product_size_id {item.product_size_id} недоступен",
