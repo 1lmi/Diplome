@@ -614,7 +614,7 @@
   grid-template-columns: minmax(320px, 1fr) minmax(272px, var(--product-modal-copy-width));
   justify-content: center;
   align-items: stretch;
-  column-gap: clamp(12px, 1.8vw, 22px);
+  column-gap: 0;
   min-height: min(560px, calc(100vh - 88px));
 }
 
