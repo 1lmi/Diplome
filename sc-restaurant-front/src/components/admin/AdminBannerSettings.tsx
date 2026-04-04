@@ -94,31 +94,6 @@ const AdminBannerSettings: React.FC<Props> = ({ rawValue, onChange }) => {
         </div>
       </div>
 
-      <div className="admin-banner-rail-preview">
-        {banners.length ? (
-          <div className="admin-banner-rail-preview__viewport">
-            {banners.map((banner, index) => (
-              <div
-                key={banner.id}
-                className={
-                  "admin-banner-rail-preview__slide" +
-                  (index === 0 ? " admin-banner-rail-preview__slide--active" : "")
-                }
-              >
-                {banner.image_path ? (
-                  <img src={resolveStaticImageUrl(banner.image_path)} alt="" />
-                ) : (
-                  <div className="admin-banner-card__empty">Выберите изображение</div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="admin-banner-rail-preview__empty">
-            Пока нет фото-баннеров. Добавьте первый баннер и загрузите изображение.
-          </div>
-        )}
-      </div>
 
       {uploadError ? <div className="alert alert--error">{uploadError}</div> : null}
 

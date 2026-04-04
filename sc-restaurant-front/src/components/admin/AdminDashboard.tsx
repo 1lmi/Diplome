@@ -205,14 +205,6 @@ const AdminDashboard: React.FC<Props> = ({
               onChange={(e) => onSettingChange("contact_phone", e.target.value)}
             />
           </label>
-          <label className="field">
-            <span>Подсказка о доставке</span>
-            <input
-              className="input"
-              value={settings.delivery_hint || ""}
-              onChange={(e) => onSettingChange("delivery_hint", e.target.value)}
-            />
-          </label>
           <AdminBannerSettings
             rawValue={settings.hero_banners}
             onChange={(value) => onSettingChange("hero_banners", value)}

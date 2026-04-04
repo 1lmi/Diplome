@@ -72,9 +72,9 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
       : null;
 
   const currentVariantLabel =
-    variant?.size_name ||
-    variant?.size_label ||
-    (product.variants.length > 1 ? "Выбранный размер" : "Подача");
+    product.variants.length > 1
+      ? variant?.size_name || variant?.size_label || "Выбранный размер"
+      : null;
 
   const hasNutrition =
     !!variant &&
@@ -139,7 +139,7 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
               </p>
             </div>
 
-            {product.variants.length > 1 ? (
+            {product.variants.length > 1 && (
               <div className="product-modal__section">
                 <p className="product-modal__section-title">Размер и цена</p>
                 <div className="size-tabs">
@@ -157,18 +157,6 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
                       </button>
                     );
                   })}
-                </div>
-              </div>
-            ) : (
-              <div className="product-modal__section">
-                <p className="product-modal__section-title">Формат</p>
-                <div className="size-tabs">
-                  <button type="button" className="size-tab size-tab--active">
-                    <span className="size-tab__label">
-                      {variant?.size_name || variant?.size_label || "Стандарт"}
-                    </span>
-                    <span className="size-tab__meta">{variant?.price || 0} руб.</span>
-                  </button>
                 </div>
               </div>
             )}
@@ -231,7 +219,7 @@ export const ProductModal: React.FC<Props> = ({ product, onClose }) => {
 
             <div className="product-modal__footer">
               <div className="product-modal__price-box">
-                <span className="product-modal__price-label">{currentVariantLabel}</span>
+                <span className="product-modal__price-label">{currentVariantLabel || "Цена"}</span>
                 <span className="product-modal__price">{variant?.price || 0} руб.</span>
               </div>
               <button

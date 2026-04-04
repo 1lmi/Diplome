@@ -956,13 +956,14 @@
 }
 
 .admin-edit-modal-shell {
-  width: min(960px, calc(100vw - 24px));
+  --admin-edit-modal-image-size: clamp(280px, 24.4792vw, 470px);
+  width: min(1220px, calc(100vw - 48px));
   max-height: calc(100vh - 24px);
 }
 
 .admin-edit-modal {
   display: grid;
-  grid-template-columns: 152px minmax(0, 1fr);
+  grid-template-columns: var(--admin-edit-modal-image-size) minmax(0, 1fr);
   gap: 18px;
   padding: 28px 24px 24px;
   background: #efefef;
@@ -989,17 +990,21 @@
   flex-direction: column;
   gap: 16px;
   height: 100%;
+  width: var(--admin-edit-modal-image-size);
 }
 
 .admin-edit-modal__media {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  align-items: flex-start;
 }
 
 .admin-edit-modal__image-frame {
-  width: 148px;
-  aspect-ratio: 1 / 1;
+  width: var(--admin-edit-modal-image-size);
+  height: var(--admin-edit-modal-image-size);
+  box-sizing: border-box;
+  padding: 14px;
   border: 1px solid #b9b9b9;
   border-radius: 20px;
   background: #fff;
@@ -1011,7 +1016,9 @@
 .admin-edit-modal__image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  display: block;
+  object-fit: contain;
+  object-position: center;
 }
 
 .admin-edit-modal__image-placeholder {
@@ -1213,6 +1220,11 @@
 }
 
 @media (max-width: 860px) {
+  .admin-edit-modal-shell {
+    --admin-edit-modal-image-size: min(280px, 100%);
+    width: min(960px, calc(100vw - 24px));
+  }
+
   .admin-edit-modal {
     display: flex;
     flex-direction: column;
@@ -2600,7 +2612,7 @@
 }
 
 .admin-edit-modal {
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: var(--admin-edit-modal-image-size) minmax(0, 1fr);
   gap: 20px;
   padding: 22px;
   background:
@@ -2620,6 +2632,7 @@
 
 .admin-edit-modal__sidebar {
   padding: 18px;
+  width: var(--admin-edit-modal-image-size);
 }
 
 .admin-edit-modal__panel {
@@ -2628,10 +2641,13 @@
 
 .admin-edit-modal__media {
   gap: 14px;
+  align-items: flex-start;
 }
 
 .admin-edit-modal__image-frame {
-  width: 100%;
+  width: var(--admin-edit-modal-image-size);
+  height: var(--admin-edit-modal-image-size);
+  max-width: 100%;
   border-color: rgba(234, 223, 211, 0.94);
   background: linear-gradient(180deg, rgba(255, 247, 239, 0.92), rgba(255, 255, 255, 0.96));
 }
