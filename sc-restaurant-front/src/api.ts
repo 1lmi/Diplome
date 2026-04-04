@@ -14,7 +14,28 @@ import type {
   UserAddressPatch,
 } from "./types";
 
-export const API_BASE = "http://localhost:8000";
+function normalizeApiBase(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function resolveApiBase() {
+  const envBase = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (envBase) {
+    return normalizeApiBase(envBase);
+  }
+
+  if (typeof window === "undefined") {
+    return "http://localhost:8000";
+  }
+
+  if (import.meta.env.DEV) {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  return "";
+}
+
+export const API_BASE = resolveApiBase();
 const AUTH_TOKEN_KEY = "sc_restaurant_auth_token";
 const LEGACY_AUTH_TOKEN_KEYS = ["auth_token"];
 
@@ -272,6 +293,10 @@ export const api = {
       unit?: string;
       price: number;
       is_hidden?: boolean;
+      calories?: number;
+      protein?: number;
+      fat?: number;
+      carbs?: number;
     }[];
   }): Promise<AdminProduct> {
     const normalizedSizes =
@@ -282,6 +307,10 @@ export const api = {
             unit: size.unit,
             price: size.price,
             is_hidden: size.is_hidden ?? false,
+            calories: size.calories,
+            protein: size.protein,
+            fat: size.fat,
+            carbs: size.carbs,
           }))
         : [
             {
@@ -290,6 +319,10 @@ export const api = {
               unit: payload.size_unit,
               price: payload.price ?? 0,
               is_hidden: false,
+              calories: undefined,
+              protein: undefined,
+              fat: undefined,
+              carbs: undefined,
             },
           ];
 
