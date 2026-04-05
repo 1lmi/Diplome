@@ -331,6 +331,7 @@ def apply_migrations() -> None:
     ensure_column(conn, "categories", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "products", "sort_order", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "products", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "products", "is_deleted", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(
         conn,
         "products",
@@ -470,6 +471,7 @@ def apply_migrations() -> None:
         JOIN categories c ON c.id = p.category_id
         LEFT JOIN sizes s ON s.id = ps.size_id
         WHERE p.is_active = 1
+          AND COALESCE(p.is_deleted, 0) = 0
           AND p.is_hidden = 0
           AND ps.is_hidden = 0
           AND c.is_hidden = 0;
@@ -1517,6 +1519,7 @@ def create_order(
                 ps.price,
                 ps.is_hidden AS size_hidden,
                 p.is_active,
+                COALESCE(p.is_deleted, 0) AS product_deleted,
                 p.is_hidden AS product_hidden,
                 COALESCE(c.is_hidden, 1) AS category_hidden
             FROM product_sizes ps
@@ -1529,6 +1532,7 @@ def create_order(
         if (
             row is None
             or row["size_hidden"]
+            or row["product_deleted"]
             or row["product_hidden"]
             or row["category_hidden"]
             or not row["is_active"]
@@ -2056,6 +2060,7 @@ def admin_menu(
                    is_hidden, is_active, sort_order
             FROM products
             WHERE category_id = ?
+              AND COALESCE(is_deleted, 0) = 0
             ORDER BY sort_order, id
             """,
             (cat["id"],),
@@ -2211,7 +2216,10 @@ def create_product(
         )
 
     db.commit()
-    row = db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+    row = db.execute(
+        "SELECT * FROM products WHERE id = ? AND COALESCE(is_deleted, 0) = 0",
+        (product_id,),
+    ).fetchone()
     return build_admin_product(db, row, request)
 
 
@@ -2224,7 +2232,8 @@ def update_product(
     _: sqlite3.Row = Depends(require_admin),
 ):
     existing = db.execute(
-        "SELECT * FROM products WHERE id = ?", (product_id,)
+        "SELECT * FROM products WHERE id = ? AND COALESCE(is_deleted, 0) = 0",
+        (product_id,),
     ).fetchone()
     if existing is None:
         raise HTTPException(status_code=404, detail="Товар не найден")
@@ -2310,7 +2319,10 @@ def update_product(
                 )
 
     db.commit()
-    updated = db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+    updated = db.execute(
+        "SELECT * FROM products WHERE id = ? AND COALESCE(is_deleted, 0) = 0",
+        (product_id,),
+    ).fetchone()
     return build_admin_product(db, updated, request)
 
 
@@ -2321,7 +2333,15 @@ def delete_product(
     _: sqlite3.Row = Depends(require_admin),
 ):
     cur = db.execute(
-        "UPDATE products SET is_hidden = 1 WHERE id = ?", (product_id,)
+        """
+        UPDATE products
+        SET is_deleted = 1,
+            is_hidden = 1,
+            is_active = 0
+        WHERE id = ?
+          AND COALESCE(is_deleted, 0) = 0
+        """,
+        (product_id,),
     )
     if cur.rowcount == 0:
         raise HTTPException(status_code=404, detail="Товар не найден")

@@ -78,7 +78,7 @@ const AppContent: React.FC = () => {
   );
 
   const sectionRefs = useRef<Record<number, HTMLElement | null>>({});
-  const { user, login, register, logout, refresh, loading } = useAuth();
+  const { user, login, register, refresh, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -374,7 +374,6 @@ const AppContent: React.FC = () => {
         }}
         onCartClick={() => navigate("/cart")}
         user={user}
-        onLogout={logout}
         categories={categories}
         activeCategoryId={activeCategoryId ?? undefined}
         onCategoryChange={handleCategoryClick}

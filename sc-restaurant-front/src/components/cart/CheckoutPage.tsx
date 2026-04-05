@@ -429,9 +429,6 @@ export const CheckoutPage: React.FC<Props> = ({
           <div className="checkout-page__header">
             <p className="eyebrow">Шаг 2</p>
             <h1>Оформление заказа</h1>
-            <p className="muted">
-              Укажите данные для связи, выберите способ получения и подтвердите заказ.
-            </p>
           </div>
 
           {authGateLocked ? (
@@ -540,7 +537,7 @@ export const CheckoutPage: React.FC<Props> = ({
                             onClick={() => setAddressModalOpen(true)}
                             disabled={submitting}
                           >
-                            Выбрать на карте
+                            Добавить адрес
                           </button>
                         </div>
                       </div>
@@ -573,7 +570,7 @@ export const CheckoutPage: React.FC<Props> = ({
                       ) : (
                         <div className="checkout-hint">
                           {user
-                            ? "Сохранённых адресов пока нет. Выберите адрес на карте, и он сразу появится в профиле."
+                            ? "Сохранённых адресов пока нет."
                             : "Выберите адрес на карте. Его можно уточнить и использовать сразу в заказе."}
                         </div>
                       )}
@@ -581,17 +578,6 @@ export const CheckoutPage: React.FC<Props> = ({
 
                     {!activeSavedAddress ? (
                       <div className="checkout-selected-address">
-                        <div
-                          id="checkout-address"
-                          tabIndex={-1}
-                          className={
-                            "checkout-selected-address__card" +
-                            (fieldErrors.address ? " checkout-selected-address__card--error" : "")
-                          }
-                        >
-                          <span className="checkout-selected-address__label">Текущий адрес</span>
-                          <strong>{trimmedAddress || "Пока не выбран"}</strong>
-                        </div>
                         {trimmedAddress ? (
                           <button
                             type="button"
@@ -599,7 +585,7 @@ export const CheckoutPage: React.FC<Props> = ({
                             onClick={() => setAddressModalOpen(true)}
                             disabled={submitting}
                           >
-                            Изменить на карте
+                            Изменить
                           </button>
                         ) : null}
                       </div>
@@ -793,21 +779,6 @@ export const CheckoutPage: React.FC<Props> = ({
                   />
                 </label>
               ) : null}
-
-              <label className="checkbox checkout-checkbox">
-                <input
-                  type="checkbox"
-                  checked={checkoutDraft.doNotCall}
-                  disabled={submitting}
-                  onChange={(event) =>
-                    updateCheckoutDraft({ doNotCall: event.target.checked })
-                  }
-                />
-                <span>
-                  Не перезванивать
-                  <small>Свяжемся только если потребуется уточнение по заказу.</small>
-                </span>
-              </label>
             </section>
           </div>
 

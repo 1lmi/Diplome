@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
+import { useAuth } from "../authContext";
 import { useCart } from "../cartContext";
 import { formatPhoneInput } from "../phone";
 import type { Order, User, UserAddress } from "../types";
@@ -77,12 +78,15 @@ const ProfilePage: React.FC<Props> = ({
   onRefreshAddresses,
   onRefreshUser,
 }) => {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const { checkoutDraft, updateCheckoutDraft } = useCart();
   const [profileEditing, setProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState<ProfileFormState>(() => createProfileForm(user));
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [logoutPending, setLogoutPending] = useState(false);
 
   const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<number | null>(null);
@@ -249,6 +253,18 @@ const ProfilePage: React.FC<Props> = ({
       setAddressError(getErrorMessage(error, "Не удалось удалить адрес."));
     } finally {
       setAddressDeletingId(null);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (logoutPending) return;
+
+    setLogoutPending(true);
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } finally {
+      setLogoutPending(false);
     }
   };
 
@@ -436,6 +452,17 @@ const ProfilePage: React.FC<Props> = ({
 
             {addressStatus ? <div className="alert alert--success">{addressStatus}</div> : null}
             {addressError ? <div className="alert alert--error">{addressError}</div> : null}
+          </div>
+
+          <div className="profile-logout">
+            <button
+              className="btn btn--ghost"
+              type="button"
+              onClick={() => void handleLogout()}
+              disabled={logoutPending}
+            >
+              {logoutPending ? "Выходим..." : "Выйти"}
+            </button>
           </div>
         </div>
 

@@ -1382,6 +1382,16 @@
   flex-wrap: wrap;
 }
 
+.profile-logout {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.profile-logout .btn {
+  min-width: 132px;
+}
+
 .profile-info-list {
   display: grid;
   gap: var(--space-3);
@@ -2708,13 +2718,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-.cart-page__auth-note {
-  margin: -4px 0 0;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text-soft);
 }
 
 .cart-page__availability-note {

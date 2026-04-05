@@ -4,6 +4,7 @@ import { useAuth } from "../../authContext";
 import { useCart } from "../../cartContext";
 import { getUnavailableCartItems } from "../../cartAvailability";
 import type { ProductDisplay } from "../../types";
+import { useToast } from "../../ui/ToastProvider";
 import CartLineItem from "./CartLineItem";
 import OrderSummaryCard from "./OrderSummaryCard";
 import UpsellRail from "./UpsellRail";
@@ -21,6 +22,7 @@ export const CartPage: React.FC<Props> = ({
 }) => {
   const { user } = useAuth();
   const { items, totalPrice, changeQuantity, removeItem, clear } = useCart();
+  const { pushToast } = useToast();
   const navigate = useNavigate();
 
   const unavailableItems = useMemo(
@@ -34,6 +36,19 @@ export const CartPage: React.FC<Props> = ({
   );
 
   const hasUnavailableItems = unavailableItems.length > 0;
+
+  const handleCheckoutClick = () => {
+    if (!user) {
+      pushToast({
+        tone: "error",
+        title: "Требуется авторизация",
+        description: "Войдите или зарегистрируйтесь, чтобы перейти к оформлению заказа.",
+      });
+      return;
+    }
+
+    navigate("/checkout");
+  };
 
   const summaryLines = useMemo(
     () =>
@@ -126,8 +141,8 @@ export const CartPage: React.FC<Props> = ({
             <button
               type="button"
               className="btn btn--primary btn--full"
-              disabled={!availabilityReady || hasUnavailableItems || !user}
-              onClick={() => navigate("/checkout")}
+              disabled={!availabilityReady || hasUnavailableItems}
+              onClick={handleCheckoutClick}
             >
               Перейти к оформлению
             </button>
@@ -139,7 +154,6 @@ export const CartPage: React.FC<Props> = ({
                 Удалите недоступные позиции, чтобы продолжить оформление.
               </p>
             ) : null}
-            {!user ? <p className="cart-page__auth-note">Войдите, чтобы оформить заказ</p> : null}
             <Link className="btn btn--ghost btn--full" to="/">
               Вернуться в меню
             </Link>

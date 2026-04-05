@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../authContext";
 import { getOrderTracking } from "../orderTracking";
@@ -152,7 +152,7 @@ const getStatusHint = (entry: ActiveStatusEntry, order: Order) => {
     return "Курьер уже в пути.";
   }
   if (status === "done") {
-    return "Заказ завершён. Спасибо, что выбрали SC restaurant.";
+    return "Заказ завершён.";
   }
   if (CANCELED_STATUSES.has(status)) {
     return "Заказ отменён. Если это ошибка, оформите его заново.";
@@ -186,7 +186,6 @@ const OrderDetailsPage: React.FC = () => {
   const { orderId } = useParams();
   const { user, loading } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [order, setOrder] = useState<Order | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -273,11 +272,6 @@ const OrderDetailsPage: React.FC = () => {
     return null;
   }
 
-  const adminBackLink =
-    (location.state as { backTo?: string } | null)?.backTo || "/admin/orders/current";
-  const fallbackBackLink = getOrderTracking(order.id) ? "/" : "/profile";
-  const backLink = user?.is_admin ? adminBackLink : fallbackBackLink;
-
   const activeEntry = getActiveEntry(order);
   const progressSteps = buildOrderProgressSteps(order);
   const progressTone = getActiveStatusTone(activeEntry.status);
@@ -292,29 +286,13 @@ const OrderDetailsPage: React.FC = () => {
             {getDeliveryLabel(order)} · {formatDateTime(order.created_at)}
           </div>
         </div>
-        <div className="order-page__actions">
-          <span
-            className={
-              "chip order-page__status-chip" +
-              (progressTone === "danger" ? " order-page__status-chip--danger" : "")
-            }
-          >
-            {order.status_name}
-          </span>
-          <button className="btn btn--outline btn--sm" onClick={() => void loadOrder()}>
-            Обновить
-          </button>
-          <Link className="btn btn--ghost btn--sm" to={backLink}>
-            Назад
-          </Link>
-        </div>
       </div>
 
       <div className="panel order-progress">
         <div className="order-progress__header">
           <div>
             <h3>Статус заказа</h3>
-            <p className="muted">Следим за этапами и показываем только актуальное состояние.</p>
+            <p className="muted">Тут вы можете отслеживать статус вашего заказа</p>
           </div>
           <div className="order-progress__summary">
             <span className="chip chip--ghost">{getDeliveryLabel(order)}</span>
@@ -370,7 +348,6 @@ const OrderDetailsPage: React.FC = () => {
               <p className="order-page__card-kicker">Состав заказа</p>
               <h3>Ваш заказ</h3>
             </div>
-            <span className="chip chip--ghost">{order.items.length} поз.</span>
           </div>
 
           <div className="order-card__table order-card__table--details">
@@ -449,12 +426,6 @@ const OrderDetailsPage: React.FC = () => {
               <div className="order-page__info">
                 <span className="muted">Желаемое время</span>
                 <strong>{order.delivery_time}</strong>
-              </div>
-            ) : null}
-            {order.do_not_call ? (
-              <div className="order-page__info">
-                <span className="muted">Связь</span>
-                <strong>Не перезванивать</strong>
               </div>
             ) : null}
             {order.comment ? (

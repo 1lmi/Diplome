@@ -8,7 +8,6 @@ interface Props {
   onChange: (view: "menu" | "profile" | "admin") => void;
   onCartClick: () => void;
   user: User | null;
-  onLogout: () => void;
   onAuthOpen: () => void;
   categories: Category[];
   activeCategoryId?: number;
@@ -24,7 +23,6 @@ export const Header: React.FC<Props> = ({
   onChange,
   onCartClick,
   user,
-  onLogout,
   onAuthOpen,
   categories,
   activeCategoryId,
@@ -66,9 +64,6 @@ export const Header: React.FC<Props> = ({
                     onClick={() => onChange("profile")}
                   >
                     Профиль
-                  </button>
-                  <button type="button" className="link-btn" onClick={onLogout}>
-                    Выйти
                   </button>
                 </>
               ) : (

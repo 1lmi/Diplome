@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS products (
     description  TEXT,
     is_active    INTEGER NOT NULL DEFAULT 1,
     is_hidden    INTEGER NOT NULL DEFAULT 0,
+    is_deleted   INTEGER NOT NULL DEFAULT 0,
     sort_order   INTEGER NOT NULL DEFAULT 0,
     image_path   TEXT NOT NULL DEFAULT 'default.png',
     FOREIGN KEY (category_id) REFERENCES categories (id)
@@ -225,6 +226,7 @@ JOIN products p ON p.id = ps.product_id
 JOIN categories c ON c.id = p.category_id
 LEFT JOIN sizes s ON s.id = ps.size_id
 WHERE p.is_active = 1
+  AND COALESCE(p.is_deleted, 0) = 0
   AND p.is_hidden = 0
   AND ps.is_hidden = 0
   AND c.is_hidden = 0;
