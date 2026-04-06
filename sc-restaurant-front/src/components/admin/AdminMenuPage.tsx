@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   closestCenter,
   DndContext,
@@ -17,6 +17,9 @@ import { CSS } from "@dnd-kit/utilities";
 import type { AdminCategory, AdminProduct } from "../../types";
 import { focusFirstInvalidField } from "../../utils/forms";
 
+type DraftSize = { name: string; amount: string; unit: string; price: string };
+type MenuFormStepKey = "basic" | "nutrition" | "pricing";
+
 interface Props {
   categories: AdminCategory[];
   categoriesOptions: { id: number; name: string }[];
@@ -30,7 +33,7 @@ interface Props {
     protein: string;
     fat: string;
     carbs: string;
-    sizes: { name: string; amount: string; unit: string; price: string }[];
+    sizes: DraftSize[];
   };
   onNewProductChange: (field: string, value: any) => void;
   onCreateProduct: () => Promise<void>;
@@ -49,6 +52,14 @@ interface SortableRowProps {
   onDelete: (product: AdminProduct) => void;
   onEdit: (product: AdminProduct) => void;
 }
+
+const formSteps: Array<{ key: MenuFormStepKey; label: string; helper: string }> = [
+  { key: "basic", label: "Основное", helper: "Категория, название, описание, фото" },
+  { key: "nutrition", label: "КБЖУ", helper: "Необязательный шаг" },
+  { key: "pricing", label: "Цены", helper: "Размеры, вес и стоимость" },
+];
+
+const emptySize = (): DraftSize => ({ name: "", amount: "", unit: "", price: "" });
 
 const SortableProductRow: React.FC<SortableRowProps> = ({
   product,
@@ -110,7 +121,7 @@ const SortableProductRow: React.FC<SortableRowProps> = ({
 
             return (
               <span key={size.id} className="chip chip--ghost">
-                {(size.name || "Размер")} · {amountLabel} · {size.price} ₽
+                {(size.name || "Размер") + " · " + amountLabel + " · " + size.price + " ₽"}
               </span>
             );
           })}
@@ -119,6 +130,7 @@ const SortableProductRow: React.FC<SortableRowProps> = ({
 
       <div className="menu-product-row__actions">
         <button
+          type="button"
           className={"btn btn--outline btn--sm" + (busy ? " btn--loading" : "")}
           onClick={() => onToggle(product)}
           disabled={busy}
@@ -134,10 +146,10 @@ const SortableProductRow: React.FC<SortableRowProps> = ({
             "Скрыть"
           )}
         </button>
-        <button className="btn btn--ghost btn--sm" onClick={() => onDelete(product)} disabled={busy}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => onDelete(product)} disabled={busy}>
           Удалить
         </button>
-        <button className="btn btn--primary btn--sm" onClick={() => onEdit(product)} disabled={busy}>
+        <button type="button" className="btn btn--primary btn--sm" onClick={() => onEdit(product)} disabled={busy}>
           Редактировать
         </button>
       </div>
@@ -156,13 +168,14 @@ const AdminMenuPage: React.FC<Props> = ({
   onDelete,
   onEdit,
   saving,
-  onRefresh,
 }) => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [deleteTarget, setDeleteTarget] = useState<AdminProduct | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [busyProductId, setBusyProductId] = useState<number | null>(null);
   const [reorderingCategoryId, setReorderingCategoryId] = useState<number | null>(null);
+  const [activeStep, setActiveStep] = useState<MenuFormStepKey>("basic");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -175,6 +188,19 @@ const AdminMenuPage: React.FC<Props> = ({
     [categories]
   );
 
+  const previewImageUrl = useMemo(
+    () => (newProduct.file ? URL.createObjectURL(newProduct.file) : null),
+    [newProduct.file]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (previewImageUrl) {
+        URL.revokeObjectURL(previewImageUrl);
+      }
+    };
+  }, [previewImageUrl]);
+
   const clearFieldError = (key: string) => {
     setFormErrors((prev) => {
       if (!prev[key]) return prev;
@@ -184,13 +210,16 @@ const AdminMenuPage: React.FC<Props> = ({
     });
   };
 
-  const updateSizeDraft = (
-    idx: number,
-    patch: Partial<{ name: string; amount: string; unit: string; price: string }>
-  ) => {
+  const updateSizeDraft = (idx: number, patch: Partial<DraftSize>) => {
     const next = [...newProduct.sizes];
     next[idx] = { ...next[idx], ...patch };
     onNewProductChange("sizes", next);
+  };
+
+  const getErrorStep = (errors: Record<string, string>): MenuFormStepKey => {
+    if (errors.categoryId || errors.name) return "basic";
+    if (Object.keys(errors).some((key) => key.startsWith("size-")) || errors.sizes) return "pricing";
+    return "basic";
   };
 
   const validateCreateProduct = () => {
@@ -204,16 +233,9 @@ const AdminMenuPage: React.FC<Props> = ({
       const hasName = size.name.trim().length > 0;
       const hasPrice = size.price.trim().length > 0;
 
-      if (hasName && hasPrice) {
-        validSizes += 1;
-      }
-
-      if (hasAnyValue && !hasName) {
-        errors[`size-${idx}-name`] = "Укажите название размера.";
-      }
-      if (hasAnyValue && !hasPrice) {
-        errors[`size-${idx}-price`] = "Укажите цену.";
-      }
+      if (hasName && hasPrice) validSizes += 1;
+      if (hasAnyValue && !hasName) errors[`size-${idx}-name`] = "Укажите название размера.";
+      if (hasAnyValue && !hasPrice) errors[`size-${idx}-price`] = "Укажите цену.";
     });
 
     if (validSizes === 0) {
@@ -227,6 +249,8 @@ const AdminMenuPage: React.FC<Props> = ({
     const errors = validateCreateProduct();
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
+      const errorStep = getErrorStep(errors);
+      setActiveStep(errorStep);
       window.setTimeout(() => {
         focusFirstInvalidField(
           [
@@ -243,9 +267,24 @@ const AdminMenuPage: React.FC<Props> = ({
     setFormErrors({});
     try {
       await onCreateProduct();
+      setActiveStep("basic");
+      setIsCreateModalOpen(false);
     } catch {
       // Parent handles error presentation.
     }
+  };
+
+  const openCreateModal = () => {
+    setFormErrors({});
+    setActiveStep("basic");
+    setIsCreateModalOpen(true);
+  };
+
+  const closeCreateModal = () => {
+    if (saving) return;
+    setIsCreateModalOpen(false);
+    setFormErrors({});
+    setActiveStep("basic");
   };
 
   const openDeleteModal = (product: AdminProduct) => setDeleteTarget(product);
@@ -300,53 +339,55 @@ const AdminMenuPage: React.FC<Props> = ({
     }
   };
 
-  return (
-    <div className="admin-page">
-      <div className="admin-page__header">
-        <div>
-          <p className="eyebrow">Меню</p>
-          <h2 className="admin-page__title">Товары, размеры и порядок показа</h2>
-          <p className="muted">
-            Товары сортируются перетаскиванием. Порядок больше не нужно задавать вручную числами.
-          </p>
-        </div>
-        <button className="btn btn--outline" onClick={onRefresh}>
-          Обновить
-        </button>
-      </div>
+  const activeStepIndex = formSteps.findIndex((step) => step.key === activeStep);
 
-      <div className="panel menu-form">
-        <div className="panel__header">
-          <div>
-            <h3>Новый товар</h3>
-            <p className="muted">Заполните карточку, добавьте хотя бы один размер и сохраните.</p>
-          </div>
-          <button
-            className={"btn btn--primary" + (saving ? " btn--loading" : "")}
-            onClick={handleCreateClick}
-            disabled={saving}
-          >
-            {saving ? (
-              <>
-                <span className="btn__spinner" />
-                Добавляем
-              </>
-            ) : (
-              "Добавить товар"
-            )}
-          </button>
-        </div>
+  const goToPrevStep = () => {
+    if (activeStepIndex <= 0) return;
+    setActiveStep(formSteps[activeStepIndex - 1].key);
+  };
 
-        <div className="form-feedback">
-          {Object.keys(formErrors).length > 0 ? (
-            <div className="alert alert--error form-feedback__summary">
-              Проверьте обязательные поля товара перед добавлением.
-            </div>
-          ) : null}
+  const goToNextStep = () => {
+    if (activeStepIndex >= formSteps.length - 1) return;
+    setActiveStep(formSteps[activeStepIndex + 1].key);
+  };
 
-          <div className="menu-form__grid">
-            <div className="menu-form__section">
-              <div className="menu-form__section-title">Основное</div>
+  const getStepState = (stepKey: MenuFormStepKey) => {
+    if (formErrors.categoryId || formErrors.name) {
+      if (stepKey === "basic") return "error";
+    }
+    if (Object.keys(formErrors).some((key) => key.startsWith("size-")) || formErrors.sizes) {
+      if (stepKey === "pricing") return "error";
+    }
+    if (stepKey === activeStep) return "active";
+    return "idle";
+  };
+
+  const renderFormStep = () => {
+    if (activeStep === "basic") {
+      return (
+        <div className="menu-form__step-card">
+          <div className="menu-form__section">
+            <div className="menu-form__section-title">Основное</div>
+            <div className="menu-form__basic-layout">
+              <div className="menu-form__image-panel">
+                <div className="menu-form__image-preview">
+                  {previewImageUrl ? (
+                    <img src={previewImageUrl} alt={newProduct.name || "Предпросмотр фото"} />
+                  ) : (
+                    <div className="menu-form__image-placeholder">Фото товара</div>
+                  )}
+                </div>
+                <label className="field">
+                  <span>Фото</span>
+                  <input
+                    className="input input--file"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => onNewProductChange("file", e.target.files?.[0])}
+                  />
+                </label>
+              </div>
+
               <div className="menu-form__fields">
                 <label className="field">
                   <span>Категория</span>
@@ -361,9 +402,9 @@ const AdminMenuPage: React.FC<Props> = ({
                     }}
                   >
                     <option value="">Выберите категорию</option>
-                    {categoriesOptions.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
+                    {categoriesOptions.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
                       </option>
                     ))}
                   </select>
@@ -388,67 +429,70 @@ const AdminMenuPage: React.FC<Props> = ({
                   {formErrors.name ? <p className="field-note field-note--error">{formErrors.name}</p> : null}
                 </label>
 
-                <label className="field">
+                <label className="field menu-form__field--full">
                   <span>Описание</span>
-                  <input
-                    className="input"
-                    placeholder="Краткое описание"
+                  <textarea
+                    className="textarea"
+                    rows={5}
+                    placeholder="Кратко опишите товар"
                     value={newProduct.description}
                     onChange={(e) => onNewProductChange("description", e.target.value)}
                   />
                 </label>
-
-                <label className="field">
-                  <span>Фото</span>
-                  <input
-                    className="input input--file"
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => onNewProductChange("file", e.target.files?.[0])}
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="menu-form__section">
-              <div className="menu-form__section-title">КБЖУ (на 100 г)</div>
-              <div className="menu-form__nutrition">
-                <input
-                  className="input input--sm"
-                  type="number"
-                  placeholder="Ккал"
-                  value={newProduct.calories}
-                  onChange={(e) => onNewProductChange("calories", e.target.value)}
-                />
-                <input
-                  className="input input--sm"
-                  type="number"
-                  placeholder="Белки"
-                  value={newProduct.protein}
-                  onChange={(e) => onNewProductChange("protein", e.target.value)}
-                />
-                <input
-                  className="input input--sm"
-                  type="number"
-                  placeholder="Жиры"
-                  value={newProduct.fat}
-                  onChange={(e) => onNewProductChange("fat", e.target.value)}
-                />
-                <input
-                  className="input input--sm"
-                  type="number"
-                  placeholder="Углеводы"
-                  value={newProduct.carbs}
-                  onChange={(e) => onNewProductChange("carbs", e.target.value)}
-                />
               </div>
             </div>
           </div>
+        </div>
+      );
+    }
+
+    if (activeStep === "nutrition") {
+      return (
+        <div className="menu-form__step-card">
+          <div className="menu-form__section">
+            <div className="menu-form__section-title">КБЖУ на 100 г</div>
+            <div className="menu-form__nutrition">
+              <input
+                className="input input--sm"
+                type="number"
+                placeholder="Ккал"
+                value={newProduct.calories}
+                onChange={(e) => onNewProductChange("calories", e.target.value)}
+              />
+              <input
+                className="input input--sm"
+                type="number"
+                placeholder="Белки"
+                value={newProduct.protein}
+                onChange={(e) => onNewProductChange("protein", e.target.value)}
+              />
+              <input
+                className="input input--sm"
+                type="number"
+                placeholder="Жиры"
+                value={newProduct.fat}
+                onChange={(e) => onNewProductChange("fat", e.target.value)}
+              />
+              <input
+                className="input input--sm"
+                type="number"
+                placeholder="Углеводы"
+                value={newProduct.carbs}
+                onChange={(e) => onNewProductChange("carbs", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="menu-form__step-card">
+        <div className="menu-form__section">
+          <div className="menu-form__section-title">Цены</div>
+          {formErrors.sizes ? <div className="alert alert--error">{formErrors.sizes}</div> : null}
 
           <div className="menu-form__sizes">
-            <div className="menu-form__section-title">Размеры и цены</div>
-            {formErrors.sizes ? <div className="alert alert--error">{formErrors.sizes}</div> : null}
-
             {newProduct.sizes.map((size, idx) => (
               <div key={idx} className="menu-size-row">
                 <div className="menu-size-row__fields">
@@ -516,6 +560,7 @@ const AdminMenuPage: React.FC<Props> = ({
                 <div className="menu-size-row__actions">
                   {newProduct.sizes.length > 1 ? (
                     <button
+                      type="button"
                       className="btn btn--ghost btn--sm"
                       onClick={() =>
                         onNewProductChange(
@@ -530,11 +575,12 @@ const AdminMenuPage: React.FC<Props> = ({
 
                   {idx === newProduct.sizes.length - 1 ? (
                     <button
+                      type="button"
                       className="btn btn--outline btn--sm"
                       onClick={() =>
                         onNewProductChange("sizes", [
                           ...newProduct.sizes,
-                          { name: "", amount: "", unit: "", price: "" },
+                          emptySize(),
                         ])
                       }
                     >
@@ -547,6 +593,114 @@ const AdminMenuPage: React.FC<Props> = ({
           </div>
         </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="admin-page">
+      <div className="admin-page__header">
+        <div>
+          <p className="eyebrow">Меню</p>
+          <h2 className="admin-page__title">Товары, размеры и порядок показа</h2>
+          <p className="muted">
+            Добавление товара теперь открывается в отдельном окне, чтобы основная страница меню оставалась чище.
+          </p>
+        </div>
+      </div>
+
+      <div className="menu-form__launcher-row">
+        <button type="button" className="btn btn--primary" onClick={openCreateModal}>
+          Добавить товар
+        </button>
+      </div>
+
+      {isCreateModalOpen ? (
+        <div className="modal-backdrop" onClick={closeCreateModal}>
+          <div className="modal admin-modal menu-form-modal" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="modal__close" onClick={closeCreateModal} disabled={saving}>
+              ×
+            </button>
+
+            <div className="panel menu-form menu-form--modal">
+              <div className="panel__header">
+                <div>
+                  <h3>Новый товар</h3>
+                  <p className="muted">Заполните шаги по порядку и сохраните товар на последнем экране.</p>
+                </div>
+              </div>
+
+              <div className="form-feedback">
+                {Object.keys(formErrors).length > 0 ? (
+                  <div className="alert alert--error form-feedback__summary">
+                    Проверьте обязательные поля перед добавлением товара.
+                  </div>
+                ) : null}
+
+                <div className="menu-form__steps" role="tablist" aria-label="Шаги добавления товара">
+                  {formSteps.map((step, index) => {
+                    const stepState = getStepState(step.key);
+                    return (
+                      <button
+                        key={step.key}
+                        type="button"
+                        className={
+                          "menu-form__step" +
+                          (stepState === "active" ? " menu-form__step--active" : "") +
+                          (stepState === "error" ? " menu-form__step--error" : "")
+                        }
+                        onClick={() => setActiveStep(step.key)}
+                      >
+                        <span className="menu-form__step-index">{index + 1}</span>
+                        <span className="menu-form__step-copy">
+                          <span className="menu-form__step-label">{step.label}</span>
+                          <span className="menu-form__step-helper">{step.helper}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {renderFormStep()}
+
+                <div className="menu-form__nav">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={goToPrevStep}
+                    disabled={activeStepIndex === 0 || saving}
+                  >
+                    Назад
+                  </button>
+
+                  <div className="menu-form__nav-spacer" />
+
+                  {activeStep !== "pricing" ? (
+                    <button type="button" className="btn btn--primary" onClick={goToNextStep} disabled={saving}>
+                      Далее
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={"btn btn--primary" + (saving ? " btn--loading" : "")}
+                      onClick={handleCreateClick}
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <>
+                          <span className="btn__spinner" />
+                          Добавляем
+                        </>
+                      ) : (
+                        "Добавить товар"
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="menu-categories">
         {sortedCategories.map((category) => (
@@ -591,26 +745,27 @@ const AdminMenuPage: React.FC<Props> = ({
             ) : (
               <div className="profile-empty-state">
                 <strong>Товаров пока нет</strong>
-                <p>Добавьте первую позицию в эту категорию через форму выше.</p>
+                <p>Добавьте первую позицию в эту категорию через кнопку выше.</p>
               </div>
             )}
           </div>
         ))}
       </div>
 
-      {deleteTarget && (
+      {deleteTarget ? (
         <div className="modal-backdrop" onClick={closeDeleteModal}>
           <div className="modal admin-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal__close" onClick={closeDeleteModal} disabled={deleting}>
+            <button type="button" className="modal__close" onClick={closeDeleteModal} disabled={deleting}>
               ×
             </button>
             <div className="admin-modal__content">
               <h3 className="admin-modal__title">Удалить товар?</h3>
               <p className="admin-modal__text">
-                Товар "{deleteTarget.name}" будет удалён из списка и скроется из меню.
+                Товар "{deleteTarget.name}" будет удален из списка и скрыт из меню.
               </p>
               <div className="admin-modal__actions">
                 <button
+                  type="button"
                   className={"btn btn--primary" + (deleting ? " btn--loading" : "")}
                   onClick={confirmDelete}
                   disabled={deleting}
@@ -624,14 +779,14 @@ const AdminMenuPage: React.FC<Props> = ({
                     "Удалить"
                   )}
                 </button>
-                <button className="btn btn--outline" onClick={closeDeleteModal} disabled={deleting}>
+                <button type="button" className="btn btn--outline" onClick={closeDeleteModal} disabled={deleting}>
                   Отмена
                 </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
