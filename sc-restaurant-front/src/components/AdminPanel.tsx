@@ -65,7 +65,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [newCategory, setNewCategory] = useState({ name: "", description: "" });
+  const [newCategory, setNewCategory] = useState({ name: "" });
   const [newProduct, setNewProduct] = useState<NewProductForm>({
     categoryId: "",
     name: "",
@@ -171,10 +171,9 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     try {
       const created = await api.createCategory({
         name: newCategory.name.trim(),
-        description: newCategory.description || undefined,
         sort_order: menu.length,
       });
-      setNewCategory({ name: "", description: "" });
+      setNewCategory({ name: "" });
       setMenu((prev) => [
         ...prev,
         {

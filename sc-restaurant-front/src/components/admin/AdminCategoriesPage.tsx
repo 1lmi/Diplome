@@ -19,8 +19,8 @@ import { focusFirstInvalidField } from "../../utils/forms";
 
 interface Props {
   categories: AdminCategory[];
-  newCategory: { name: string; description: string };
-  onNewCategoryChange: (field: "name" | "description", value: string) => void;
+  newCategory: { name: string };
+  onNewCategoryChange: (field: "name", value: string) => void;
   onCreateCategory: () => Promise<void> | void;
   onUpdateCategory: (id: number, payload: Partial<Category>) => Promise<void>;
   onDeleteCategory: (id: number, deleteProducts: boolean) => Promise<void>;
@@ -93,14 +93,6 @@ const SortableCategoryCard: React.FC<SortableCardProps> = ({
           />
           {error ? <p className="field-note field-note--error">{error}</p> : null}
         </label>
-        <label className="field">
-          <span>Описание</span>
-          <input
-            className="input"
-            value={draft.description || ""}
-            onChange={(e) => onDraftChange(category.id, "description", e.target.value)}
-          />
-        </label>
       </div>
 
       <div className="category-card__side">
@@ -170,7 +162,7 @@ const AdminCategoriesPage: React.FC<Props> = ({
       map[cat.id] = {
         id: cat.id,
         name: cat.name,
-        description: cat.description,
+        description: null,
         sort_order: cat.sort_order,
         is_hidden: cat.is_hidden,
       };
@@ -232,7 +224,7 @@ const AdminCategoriesPage: React.FC<Props> = ({
     try {
       await onUpdateCategory(id, {
         name: draft.name.trim(),
-        description: draft.description || null,
+        description: null,
         is_hidden: draft.is_hidden,
       });
     } catch {
@@ -334,15 +326,6 @@ const AdminCategoriesPage: React.FC<Props> = ({
                   setNewCategoryError(null);
                   onNewCategoryChange("name", e.target.value);
                 }}
-              />
-            </label>
-            <label className="field">
-              <span>Описание</span>
-              <input
-                className="input"
-                placeholder="Короткое описание категории"
-                value={newCategory.description}
-                onChange={(e) => onNewCategoryChange("description", e.target.value)}
               />
             </label>
           </div>

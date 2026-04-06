@@ -18,8 +18,9 @@ copy .env.example .env
 
 В `.env` задайте `EXPO_PUBLIC_API_BASE_URL`:
 
-- Android emulator: `http://10.0.2.2:8000`
-- Expo Go в одной Wi-Fi сети с ПК: `http://<IP_компьютера>:8000`
+- production server: `https://sc-delivery.ru/api`
+- Android emulator for local backend: `http://10.0.2.2:8000`
+- device in one Wi-Fi with your PC: `http://<IP_компьютера>:8000`
 
 3. Запуск:
 

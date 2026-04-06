@@ -708,7 +708,6 @@ const AdminMenuPage: React.FC<Props> = ({
             <div className="menu-category__header">
               <div>
                 <h3>{category.name}</h3>
-                {category.description ? <p className="muted">{category.description}</p> : null}
               </div>
               <div className="menu-category__meta">
                 <span className="chip chip--soft">{category.products.length} позиций</span>

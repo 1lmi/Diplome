@@ -1,56 +1,20 @@
-import Constants from "expo-constants";
-import { Platform } from "react-native";
-
+const DEFAULT_REMOTE_API_BASE = "https://sc-delivery.ru/api";
 const rawApiBase = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
-const expoHostUri =
-  Constants.expoConfig?.hostUri ||
-  Constants.platform?.hostUri ||
-  Constants.linkingUri ||
-  Constants.experienceUrl ||
-  "";
 
-function parseHost(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-
-  const normalized = trimmed.includes("://") ? trimmed : `exp://${trimmed}`;
-  try {
-    return new URL(normalized).hostname || "";
-  } catch {
-    const match = trimmed.match(/^(?:\w+:\/\/)?([^/:]+)/);
-    return match?.[1] || "";
-  }
+function normalizeApiBase(value: string) {
+  return value.replace(/\/+$/, "");
 }
 
-function deriveExpoApiBase() {
-  const host = parseHost(expoHostUri);
-  if (host) {
-    return `http://${host}:8000`;
-  }
-  if (Platform.OS === "web") {
-    return "http://localhost:8000";
-  }
-  return "http://127.0.0.1:8000";
-}
-
-function normalizeApiBase() {
-  const derived = deriveExpoApiBase();
+function resolveApiBase() {
   if (!rawApiBase) {
-    return derived;
-  }
-
-  if (
-    Platform.OS !== "web" &&
-    /localhost|127\.0\.0\.1/i.test(rawApiBase) &&
-    parseHost(expoHostUri)
-  ) {
-    return derived;
+    return DEFAULT_REMOTE_API_BASE;
   }
 
   return rawApiBase;
 }
 
-export const API_BASE = normalizeApiBase().replace(/\/+$/, "");
+export const API_BASE = normalizeApiBase(resolveApiBase());
+export const PUBLIC_BASE = API_BASE.replace(/\/api$/i, "");
 
 let authToken: string | null = null;
 
@@ -59,9 +23,9 @@ export function setApiToken(token: string | null) {
 }
 
 export function resolveAssetUrl(url?: string | null) {
-  if (!url) return `${API_BASE}/static/default.png`;
+  if (!url) return `${PUBLIC_BASE}/static/default.png`;
   if (/^https?:\/\//i.test(url)) return url;
-  return `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`;
+  return `${PUBLIC_BASE}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
 function extractErrorMessage(payload: unknown, fallback: string) {
