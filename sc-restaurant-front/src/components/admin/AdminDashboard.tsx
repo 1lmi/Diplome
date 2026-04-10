@@ -1,5 +1,4 @@
 import React, { useMemo } from "react";
-import { Link } from "react-router-dom";
 import type { AdminOrder, SettingsMap } from "../../types";
 import AdminBannerSettings from "./AdminBannerSettings";
 import { formatTime, isSameDay, terminalStatuses } from "./utils";
@@ -116,27 +115,6 @@ const AdminDashboard: React.FC<Props> = ({
         />
       </div>
 
-      <div className="dashboard-panel">
-        <div className="dashboard-panel__header">
-          <div>
-            <h3 className="dashboard-panel__title">Быстрые разделы</h3>
-            <p className="dashboard-panel__meta">
-              Переходите к аналитике, активным заказам или истории без лишних кликов.
-            </p>
-          </div>
-        </div>
-        <div className="admin-quick-links">
-          <Link className="btn btn--outline" to="/admin/stats">
-            Открыть статистику
-          </Link>
-          <Link className="btn btn--outline" to="/admin/orders/current">
-            Текущие заказы
-          </Link>
-          <Link className="btn btn--outline" to="/admin/orders/history">
-            История заказов
-          </Link>
-        </div>
-      </div>
 
       <div className="dashboard-panel dashboard-panel--accent">
         <div className="dashboard-panel__header">

@@ -3521,3 +3521,49 @@
     grid-template-columns: 1fr;
   }
 }
+
+.admin-shell {
+  grid-template-columns: 246px 1fr;
+  gap: 16px;
+}
+
+.admin-sidebar {
+  padding: 17px;
+  gap: 15px;
+}
+
+.logo-sm {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  font-size: 14px;
+}
+
+.admin-brand__title {
+  font-size: 16px;
+}
+
+.admin-brand__subtitle {
+  font-size: 12px;
+}
+
+.admin-nav {
+  gap: 7px;
+}
+
+.admin-nav__item {
+  min-height: 44px;
+  padding: 0 13px;
+  border-radius: 14px;
+  font-size: 15px;
+}
+
+@media (max-width: 1100px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    position: static;
+  }
+}
