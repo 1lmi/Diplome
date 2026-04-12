@@ -50,6 +50,12 @@ function extractErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
+function isNetworkRequestError(error: unknown) {
+  if (!error) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  return /network request failed|fetch failed|networkerror/i.test(message);
+}
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
 
@@ -61,10 +67,20 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     headers.set("Authorization", `Bearer ${authToken}`);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    if (isNetworkRequestError(error)) {
+      throw new Error(
+        `Не удалось подключиться к ${API_BASE}. Проверьте интернет, доступность сервера и настройки API.`
+      );
+    }
+    throw error;
+  }
 
   if (response.status === 204) {
     return null as T;

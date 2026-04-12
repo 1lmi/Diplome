@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import * as Notifications from "expo-notifications";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 import { mobileApi } from "@/src/api/mobile-api";
@@ -74,7 +74,11 @@ export function NotificationController() {
           return;
         }
 
-        if (!freshToken) return;
+        if (!freshToken) {
+          setExpoPushToken(null);
+          await saveStoredPushToken(null);
+          return;
+        }
 
         setExpoPushToken(freshToken);
         await saveStoredPushToken(freshToken);

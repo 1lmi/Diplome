@@ -78,14 +78,12 @@ export default function SignInScreen() {
     <Screen keyboard>
       <PageHeader
         showBack
-        subtitle="Войдите, чтобы сохранить адреса и видеть свои заказы"
         title="Вход"
       />
 
       <View style={styles.intro}>
-        <Text style={styles.introTitle}>Добро пожаловать</Text>
         <Text style={styles.introCopy}>
-          Один аккаунт для заказов, адресов и быстрого повторного оформления.
+          Войдите в аккаунт, чтобы сохранить адреса и видеть свои заказы.
         </Text>
       </View>
 

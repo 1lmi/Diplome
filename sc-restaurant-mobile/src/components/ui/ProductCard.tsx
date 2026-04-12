@@ -54,7 +54,7 @@ export function ProductCard({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    gap: spacing.xs,
+    gap: spacing.sm,
     paddingTop: spacing.xs,
     paddingBottom: spacing.xs,
   },
