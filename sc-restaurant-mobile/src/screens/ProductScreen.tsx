@@ -196,6 +196,7 @@ export default function ProductScreen() {
         : [],
     [selectedVariant]
   );
+  const hasVariantPicker = (product?.variants.length || 0) > 1;
 
   const handleClose = () => {
     if (closingRef.current) return;
@@ -289,11 +290,10 @@ export default function ProductScreen() {
         <ScrollView
           alwaysBounceVertical={false}
           bounces={false}
-          style={styles.sheetScroll}
           contentContainerStyle={[
             styles.sheetScrollContent,
             {
-              paddingBottom: 15,
+              paddingBottom: Math.max(insets.bottom, spacing.lg) + 88,
             },
           ]}
           overScrollMode="never"
@@ -339,7 +339,12 @@ export default function ProductScreen() {
           ) : null}
 
           {nutritionItems.length ? (
-            <View style={styles.nutritionSection}>
+            <View
+              style={[
+                styles.nutritionSection,
+                !hasVariantPicker ? styles.nutritionSectionSingle : null,
+              ]}
+            >
               <View style={styles.nutritionHeader}>
                 <Text style={styles.nutritionTitle}>Энергетическая ценность</Text>
                 <View collapsable={false} ref={nutritionInfoAnchorRef}>
@@ -419,9 +424,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     backgroundColor: colors.surface,
     overflow: "hidden",
-  },
-  sheetScroll: {
-    flex: 1,
   },
   sheetScrollContent: {
     flexGrow: 1,
@@ -536,11 +538,14 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   nutritionSection: {
-    marginTop: "auto",
+    marginTop: spacing.sm,
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.line,
     alignItems: "center",
+  },
+  nutritionSectionSingle: {
+    marginTop: "auto",
   },
   nutritionHeader: {
     flexDirection: "row",
@@ -603,6 +608,10 @@ const styles = StyleSheet.create({
     fontWeight: typography.semibold,
   },
   footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
