@@ -42,7 +42,7 @@ const toneStyles = StyleSheet.create({
     backgroundColor: "rgba(210, 74, 67, 0.1)",
   },
   muted: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceTint,
   },
 });
 

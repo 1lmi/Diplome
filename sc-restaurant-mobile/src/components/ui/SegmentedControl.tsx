@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: "transparent",
+    borderColor: colors.line,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -118,10 +118,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   segmentActive: {
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   segmentActiveAccent: {
     backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   segmentStrongActive: {
     backgroundColor: colors.accentSoft,

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { colors, radii, spacing } from "@/src/theme/tokens";
+import { colors, radii, shadows, spacing } from "@/src/theme/tokens";
 
 export function SurfacePanel({
   children,
@@ -27,6 +27,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     padding: spacing.lg,
     gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadows.soft,
   },
   compact: {
     padding: spacing.md,
@@ -36,7 +39,7 @@ const styles = StyleSheet.create({
 
 const toneStyles = StyleSheet.create({
   default: {
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surface,
   },
   tint: {
     backgroundColor: colors.surfaceTint,

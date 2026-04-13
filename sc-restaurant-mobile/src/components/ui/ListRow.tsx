@@ -54,6 +54,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     backgroundColor: colors.surfaceTint,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   rowSurface: {
     backgroundColor: colors.surfaceStrong,

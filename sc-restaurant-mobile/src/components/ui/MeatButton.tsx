@@ -105,8 +105,8 @@ const variantStyles = StyleSheet.create({
     borderColor: colors.accent,
   },
   secondary: {
-    backgroundColor: colors.surfaceStrong,
-    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   ghost: {
     backgroundColor: "transparent",

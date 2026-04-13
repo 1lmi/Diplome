@@ -79,8 +79,8 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surfaceTint,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
     flexDirection: "row",
     alignItems: "center",
@@ -92,8 +92,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   fieldFocused: {
-    borderColor: "rgba(230, 122, 46, 0.38)",
-    backgroundColor: colors.surfaceStrong,
+    borderColor: "rgba(230, 122, 46, 0.4)",
+    backgroundColor: colors.surface,
   },
   fieldError: {
     borderColor: "rgba(210, 74, 67, 0.4)",

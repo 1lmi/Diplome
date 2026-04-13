@@ -16,7 +16,7 @@ const toneStyle = {
     text: colors.text,
   },
   future: {
-    dotBg: colors.surfaceStrong,
+    dotBg: colors.surfaceMuted,
     line: colors.line,
     text: colors.muted,
   },

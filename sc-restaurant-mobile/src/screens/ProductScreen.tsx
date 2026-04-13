@@ -133,6 +133,7 @@ export default function ProductScreen() {
   const sheetTranslateY = useRef(new Animated.Value(44)).current;
   const closingRef = useRef(false);
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
+  const [nutritionOpen, setNutritionOpen] = useState(false);
 
   const product = useMemo(
     () => findProduct(menuQuery.data || [], Number(id)),
@@ -159,6 +160,10 @@ export default function ProductScreen() {
     if (product.variants.some((variant) => variant.id === selectedVariantId)) return;
     setSelectedVariantId(product.variants[0].id);
   }, [product, selectedVariantId]);
+
+  useEffect(() => {
+    setNutritionOpen(false);
+  }, [selectedVariantId]);
 
   const selectedVariant =
     product?.variants.find((variant) => variant.id === selectedVariantId) || product?.variants[0];
@@ -291,14 +296,33 @@ export default function ProductScreen() {
 
           {nutritionItems.length ? (
             <View style={styles.nutritionSection}>
-              <Text style={styles.nutritionTitle}>Энергетическая ценность</Text>
-              <View style={styles.nutritionGrid}>
-                {nutritionItems.map((item) => (
-                  <View key={item.label} style={styles.nutritionCard}>
-                    <Text style={styles.nutritionValue}>{item.value}</Text>
-                    <Text style={styles.nutritionName}>{item.label}</Text>
+              <View style={styles.nutritionAnchor}>
+                <View style={styles.nutritionHeader}>
+                  <Text style={styles.nutritionTitle}>Энергетическая ценность</Text>
+                  <Pressable
+                    accessibilityHint="Открывает подробности о КБЖУ"
+                    accessibilityLabel="Подробности о пищевой ценности"
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: nutritionOpen }}
+                    onPress={() => setNutritionOpen((value) => !value)}
+                    style={styles.nutritionInfoButton}
+                  >
+                    <Feather color={colors.muted} name="info" size={14} />
+                  </Pressable>
+                </View>
+                {nutritionOpen ? (
+                  <View pointerEvents="box-none" style={styles.nutritionPopoverSlot}>
+                    <View style={styles.nutritionPopover}>
+                      <Text style={styles.nutritionPopoverCaption}>На выбранную порцию</Text>
+                      {nutritionItems.map((item) => (
+                        <View key={item.label} style={styles.nutritionPopoverRow}>
+                          <Text style={styles.nutritionPopoverName}>{item.label}</Text>
+                          <Text style={styles.nutritionPopoverValue}>{item.value}</Text>
+                        </View>
+                      ))}
+                    </View>
                   </View>
-                ))}
+                ) : null}
               </View>
             </View>
           ) : null}
@@ -345,7 +369,7 @@ const styles = StyleSheet.create({
   sheetScrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    gap: spacing.md,
+    gap: spacing.lg,
   },
   sheetTop: {
     gap: spacing.md,
@@ -355,7 +379,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 4,
     borderRadius: radii.pill,
-    backgroundColor: "rgba(111, 99, 88, 0.24)",
+    backgroundColor: "rgba(148, 163, 184, 0.34)",
   },
   sheetHeader: {
     flexDirection: "row",
@@ -382,18 +406,20 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   imageWrap: {
-    height: 230,
-    borderRadius: radii.xl,
-    backgroundColor: colors.surfaceStrong,
+    height: 280,
+    borderRadius: radii.lg,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
   image: {
-    width: "88%",
-    height: "88%",
+    width: "98%",
+    height: "98%",
   },
   description: {
     color: colors.muted,
@@ -415,7 +441,9 @@ const styles = StyleSheet.create({
     gap: 2,
     padding: 3,
     borderRadius: radii.pill,
-    backgroundColor: "rgba(111, 99, 88, 0.26)",
+    backgroundColor: colors.bgSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   sizeSliderThumb: {
@@ -424,7 +452,9 @@ const styles = StyleSheet.create({
     bottom: 3,
     left: 0,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
     shadowColor: colors.shadow,
     shadowOpacity: 1,
     shadowRadius: 8,
@@ -440,7 +470,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   sizeSliderLabel: {
-    color: colors.surfaceStrong,
+    color: colors.muted,
     fontSize: typography.bodySm,
     fontWeight: typography.semibold,
   },
@@ -453,33 +483,77 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.line,
+    alignItems: "center",
+  },
+  nutritionAnchor: {
+    width: "100%",
+    alignItems: "center",
+  },
+  nutritionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
   },
   nutritionTitle: {
     color: colors.muted,
     fontSize: typography.caption,
     fontWeight: typography.medium,
+    textAlign: "center",
   },
-  nutritionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
+  nutritionInfoButton: {
+    width: 20,
+    height: 20,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
   },
-  nutritionCard: {
-    minWidth: 72,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+  nutritionPopoverSlot: {
+    position: "absolute",
+    top: 28,
+    left: 0,
+    right: 0,
+    zIndex: 12,
+    alignItems: "center",
+  },
+  nutritionPopover: {
+    width: "100%",
+    maxWidth: 280,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     backgroundColor: colors.surfaceTint,
-    gap: 2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: spacing.sm,
+    shadowColor: colors.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
   },
-  nutritionValue: {
+  nutritionPopoverCaption: {
+    color: colors.muted,
+    fontSize: typography.caption,
+    textAlign: "center",
+  },
+  nutritionPopoverRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  nutritionPopoverName: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+  },
+  nutritionPopoverValue: {
     color: colors.text,
     fontSize: typography.bodySm,
     fontWeight: typography.semibold,
-  },
-  nutritionName: {
-    color: colors.muted,
-    fontSize: typography.caption,
   },
   footer: {
     position: "absolute",
@@ -491,7 +565,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: "rgba(234, 223, 211, 0.58)",
+    borderTopColor: colors.line,
   },
   emptyWrap: {
     paddingHorizontal: spacing.lg,

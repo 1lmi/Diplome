@@ -5,7 +5,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { ProductDisplay } from "@/src/api/types";
 import { formatPrice, getDisplayImage } from "@/src/lib/format";
-import { colors, radii, spacing, typography } from "@/src/theme/tokens";
+import { colors, radii, shadows, spacing, typography } from "@/src/theme/tokens";
+
+const FROM_PRICE_LABEL = "\u043e\u0442";
 
 export function ProductCard({
   product,
@@ -34,7 +36,7 @@ export function ProductCard({
 
       <View style={styles.control}>
         <Text style={styles.price}>
-          {product.variants.length > 1 ? `от ${formatPrice(product.minPrice)}` : formatPrice(product.minPrice)}
+          {product.variants.length > 1 ? `${FROM_PRICE_LABEL} ${formatPrice(product.minPrice)}` : formatPrice(product.minPrice)}
         </Text>
         <Pressable
           hitSlop={8}
@@ -55,37 +57,40 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     gap: spacing.sm,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.xs,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   cardPressed: {
     opacity: 0.96,
   },
   imageWrap: {
-    height: 152,
-    borderRadius: radii.xl,
-    backgroundColor: colors.surface,
+    height: 164,
+    borderRadius: radii.lg,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
   image: {
-    width: "90%",
-    height: "90%",
+    width: "98%",
+    height: "98%",
   },
   body: {
     paddingHorizontal: spacing.xs,
-    minHeight: 34,
+    height: 40,
+    justifyContent: "flex-start",
   },
   name: {
     color: colors.text,
-    fontSize: typography.body,
-    lineHeight: 20,
+    fontSize: typography.bodySm,
+    lineHeight: 18,
     fontWeight: typography.medium,
   },
   control: {
-    minHeight: 38,
+    minHeight: 36,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surfaceTint,
+    borderWidth: 1,
+    borderColor: colors.line,
     paddingLeft: spacing.md,
     paddingRight: spacing.xs,
     flexDirection: "row",
@@ -99,12 +104,15 @@ const styles = StyleSheet.create({
     fontWeight: typography.semibold,
   },
   addButton: {
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.soft,
   },
   addButtonPressed: {
     opacity: 0.88,
