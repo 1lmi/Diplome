@@ -293,7 +293,7 @@ export default function ProductScreen() {
           contentContainerStyle={[
             styles.sheetScrollContent,
             {
-              paddingBottom: Math.max(insets.bottom, spacing.lg) + 88,
+              paddingBottom: Math.max(insets.bottom, spacing.lg) + 76,
             },
           ]}
           overScrollMode="never"
