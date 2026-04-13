@@ -289,9 +289,12 @@ export default function ProductScreen() {
         <ScrollView
           alwaysBounceVertical={false}
           bounces={false}
+          style={styles.sheetScroll}
           contentContainerStyle={[
             styles.sheetScrollContent,
-            { paddingBottom: Math.max(insets.bottom, spacing.lg) + 112 },
+            {
+              paddingBottom: 15,
+            },
           ]}
           overScrollMode="never"
           showsVerticalScrollIndicator={false}
@@ -417,7 +420,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     overflow: "hidden",
   },
+  sheetScroll: {
+    flex: 1,
+  },
   sheetScrollContent: {
+    flexGrow: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     gap: spacing.lg,
@@ -529,7 +536,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   nutritionSection: {
-    marginTop: spacing.sm,
+    marginTop: "auto",
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.line,
@@ -596,10 +603,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.semibold,
   },
   footer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,

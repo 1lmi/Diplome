@@ -733,7 +733,7 @@ export default function HomeScreen() {
                       tempMethod === "pickup" ? styles.sheetMethodLabelActive : null,
                     ]}
                   >
-                    В пиццерии
+                    В заведении
                   </Text>
                 </Pressable>
               </View>
