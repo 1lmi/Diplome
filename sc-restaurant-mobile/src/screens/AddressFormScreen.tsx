@@ -46,7 +46,6 @@ type DetailsState = {
   intercom: string;
   floor: string;
   apartment: string;
-  comment: string;
 };
 
 const emptyDetails: DetailsState = {
@@ -54,7 +53,6 @@ const emptyDetails: DetailsState = {
   intercom: "",
   floor: "",
   apartment: "",
-  comment: "",
 };
 
 const addressLabelOptions: {
@@ -93,8 +91,7 @@ function formatResolvedAddress(address?: Location.LocationGeocodedAddress | null
 }
 
 function parseStoredAddress(value: string) {
-  const [baseLine = "", detailLine = "", ...extraLines] = value.split(/\r?\n/);
-  const extraBlob = extraLines.join(" ").trim();
+  const [baseLine = "", detailLine = ""] = value.split(/\r?\n/);
 
   return {
     baseAddress: baseLine.trim(),
@@ -103,7 +100,6 @@ function parseStoredAddress(value: string) {
       intercom: detailLine.match(/домофон\s+([^,]+)/i)?.[1]?.trim() || "",
       floor: detailLine.match(/этаж\s+([^,]+)/i)?.[1]?.trim() || "",
       apartment: detailLine.match(/квартира\s+([^,]+)/i)?.[1]?.trim() || "",
-      comment: extraBlob.match(/комментарий\s+(.+)/i)?.[1]?.trim() || "",
     } satisfies DetailsState,
   };
 }
@@ -120,9 +116,6 @@ function buildStoredAddress(baseAddress: string, details: DetailsState) {
   const lines = [normalizedBase];
   if (detailParts.length) {
     lines.push(detailParts.join(", "));
-  }
-  if (details.comment.trim()) {
-    lines.push(`комментарий ${details.comment.trim()}`);
   }
 
   return lines.filter(Boolean).join("\n");
@@ -156,6 +149,7 @@ export function AddressFormScreen({
   const insets = useSafeAreaInsets();
   const isEditing = typeof addressId === "number" && addressId > 0;
   const mapRef = useRef<MapView | null>(null);
+  const mapRegionRef = useRef<Region>(DEFAULT_REGION);
   const searchModeRef = useRef(false);
   const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -278,7 +272,9 @@ export function AddressFormScreen({
       }
 
       if (cancelled) return;
+      mapRegionRef.current = nextRegion;
       setMapRegion(nextRegion);
+      mapRef.current?.animateToRegion(nextRegion, 0);
 
       if (!editingAddress?.address && permission.granted) {
         await resolveAddressAt(nextRegion.latitude, nextRegion.longitude, cancelled);
@@ -344,11 +340,12 @@ export function AddressFormScreen({
   }
 
   const scheduleAddressResolve = (nextRegion: Region) => {
-    setMapRegion(nextRegion);
+    mapRegionRef.current = nextRegion;
     if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current);
     reverseGeocodeTimer.current = setTimeout(() => {
+      setMapRegion(nextRegion);
       void resolveAddressAt(nextRegion.latitude, nextRegion.longitude);
-    }, 320);
+    }, 450);
   };
 
   const handleLocateMe = async () => {
@@ -367,6 +364,7 @@ export function AddressFormScreen({
         accuracy: Location.Accuracy.Balanced,
       });
       const nextRegion = buildRegion(current.coords.latitude, current.coords.longitude);
+      mapRegionRef.current = nextRegion;
       setMapRegion(nextRegion);
       mapRef.current?.animateToRegion(nextRegion, motion.normal);
       await resolveAddressAt(nextRegion.latitude, nextRegion.longitude);
@@ -392,12 +390,22 @@ export function AddressFormScreen({
   };
 
   const handleSelectSuggestion = (suggestion: Suggestion) => {
+    const nextRegion: Region = {
+      latitude: suggestion.region.latitude,
+      longitude: suggestion.region.longitude,
+      latitudeDelta:
+        mapRegionRef.current.latitudeDelta || DEFAULT_REGION.latitudeDelta,
+      longitudeDelta:
+        mapRegionRef.current.longitudeDelta || DEFAULT_REGION.longitudeDelta,
+    };
+
     setSelectedAddress(suggestion.address);
     setSearchQuery(suggestion.address);
     setSuggestions([]);
     setSearchMode(false);
-    setMapRegion(suggestion.region);
-    mapRef.current?.animateToRegion(suggestion.region, motion.normal);
+    mapRegionRef.current = nextRegion;
+    setMapRegion(nextRegion);
+    mapRef.current?.animateToRegion(nextRegion, motion.normal);
     setError("");
   };
 
@@ -509,12 +517,12 @@ export function AddressFormScreen({
         <View style={styles.mapArea}>
           <MapView
             ref={mapRef}
+            initialRegion={mapRegion}
             loadingEnabled
-            region={mapRegion}
             showsMyLocationButton={false}
             showsUserLocation={permissionGranted === true}
             style={styles.map}
-            onRegionChangeComplete={scheduleAddressResolve}
+            onRegionChange={scheduleAddressResolve}
           />
 
           <View pointerEvents="none" style={styles.mapPinWrap}>
@@ -540,10 +548,7 @@ export function AddressFormScreen({
         <View style={styles.sheet}>
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[
-              styles.sheetContent,
-              { paddingBottom: Math.max(insets.bottom, spacing.lg) + 92 },
-            ]}
+            contentContainerStyle={styles.sheetContent}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.sheetHandle} />
@@ -620,13 +625,6 @@ export function AddressFormScreen({
               />
             </View>
 
-            <TextField
-              multiline
-              placeholder="Комментарий для курьера"
-              value={details.comment}
-              onChangeText={(value) => updateDetail("comment", value)}
-            />
-
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             {isEditing ? (
@@ -634,20 +632,19 @@ export function AddressFormScreen({
                 <Text style={styles.deleteInlineText}>Удалить адрес</Text>
               </Pressable>
             ) : null}
+            <View
+              style={[
+                styles.footer,
+                {
+                  paddingBottom: Math.max(insets.bottom, spacing.lg),
+                },
+              ]}
+            >
+              <MeatButton fullWidth disabled={submitDisabled} loading={loading} onPress={handleSave} size="cta">
+                {submitLabel}
+              </MeatButton>
+            </View>
           </ScrollView>
-
-          <View
-            style={[
-              styles.footer,
-              {
-                paddingBottom: Math.max(insets.bottom, spacing.lg),
-              },
-            ]}
-          >
-            <MeatButton fullWidth disabled={submitDisabled} loading={loading} onPress={handleSave} size="cta">
-              {submitLabel}
-            </MeatButton>
-          </View>
         </View>
 
         {searchMode ? (
@@ -748,7 +745,7 @@ const styles = StyleSheet.create({
   },
   mapArea: {
     position: "relative",
-    height: "46%",
+    flex: 1,
     minHeight: 320,
     backgroundColor: colors.surfaceMuted,
   },
@@ -814,7 +811,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.text,
   },
   sheet: {
-    flex: 1,
     marginTop: -24,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
@@ -913,15 +909,8 @@ const styles = StyleSheet.create({
     fontWeight: typography.medium,
   },
   footer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
+    paddingTop: spacing.sm,
+    marginTop: spacing.sm,
   },
   searchOverlay: {
     ...StyleSheet.absoluteFillObject,
