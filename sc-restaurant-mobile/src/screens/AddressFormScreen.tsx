@@ -156,6 +156,7 @@ export function AddressFormScreen({
   const insets = useSafeAreaInsets();
   const isEditing = typeof addressId === "number" && addressId > 0;
   const mapRef = useRef<MapView | null>(null);
+  const searchModeRef = useRef(false);
   const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -184,6 +185,10 @@ export function AddressFormScreen({
   const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    searchModeRef.current = searchMode;
+  }, [searchMode]);
 
   useEffect(() => {
     if (!user) {
@@ -218,7 +223,7 @@ export function AddressFormScreen({
       const formatted = formatResolvedAddress(resolved);
       if (formatted) {
         setSelectedAddress(formatted);
-        if (!searchMode) {
+        if (!searchModeRef.current) {
           setSearchQuery(formatted);
         }
         setError("");
@@ -232,7 +237,7 @@ export function AddressFormScreen({
         setResolvingAddress(false);
       }
     }
-  }, [searchMode]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
