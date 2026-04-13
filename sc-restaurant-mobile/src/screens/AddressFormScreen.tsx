@@ -4,9 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
-  Animated,
-  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -33,8 +32,8 @@ const DEFAULT_REGION: Region = {
   longitudeDelta: 0.012,
 };
 
-type AddressStep = "map" | "details";
 type AddressOrigin = "catalog" | "profile";
+type AddressLabelPreset = "home" | "work" | "other";
 
 type Suggestion = {
   key: string;
@@ -47,6 +46,7 @@ type DetailsState = {
   intercom: string;
   floor: string;
   apartment: string;
+  comment: string;
 };
 
 const emptyDetails: DetailsState = {
@@ -54,7 +54,18 @@ const emptyDetails: DetailsState = {
   intercom: "",
   floor: "",
   apartment: "",
+  comment: "",
 };
+
+const addressLabelOptions: {
+  value: AddressLabelPreset;
+  label: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
+}[] = [
+  { value: "home", label: "Дом", icon: "home" },
+  { value: "work", label: "Работа", icon: "briefcase" },
+  { value: "other", label: "Другое", icon: "map-pin" },
+];
 
 function buildRegion(latitude: number, longitude: number): Region {
   return {
@@ -82,20 +93,23 @@ function formatResolvedAddress(address?: Location.LocationGeocodedAddress | null
 }
 
 function parseStoredAddress(value: string) {
-  const [baseLine = "", detailLine = ""] = value.split(/\r?\n/, 2);
+  const [baseLine = "", detailLine = "", ...extraLines] = value.split(/\r?\n/);
+  const extraBlob = extraLines.join(" ").trim();
 
   return {
     baseAddress: baseLine.trim(),
     details: {
       entrance: detailLine.match(/под[ъь]езд\s+([^,]+)/i)?.[1]?.trim() || "",
+      intercom: detailLine.match(/домофон\s+([^,]+)/i)?.[1]?.trim() || "",
       floor: detailLine.match(/этаж\s+([^,]+)/i)?.[1]?.trim() || "",
       apartment: detailLine.match(/квартира\s+([^,]+)/i)?.[1]?.trim() || "",
-      intercom: detailLine.match(/домофон\s+([^,]+)/i)?.[1]?.trim() || "",
+      comment: extraBlob.match(/комментарий\s+(.+)/i)?.[1]?.trim() || "",
     } satisfies DetailsState,
   };
 }
 
 function buildStoredAddress(baseAddress: string, details: DetailsState) {
+  const normalizedBase = baseAddress.trim();
   const detailParts = [
     details.entrance.trim() ? `подъезд ${details.entrance.trim()}` : "",
     details.intercom.trim() ? `домофон ${details.intercom.trim()}` : "",
@@ -103,7 +117,28 @@ function buildStoredAddress(baseAddress: string, details: DetailsState) {
     details.apartment.trim() ? `квартира ${details.apartment.trim()}` : "",
   ].filter(Boolean);
 
-  return detailParts.length ? `${baseAddress.trim()}\n${detailParts.join(", ")}` : baseAddress.trim();
+  const lines = [normalizedBase];
+  if (detailParts.length) {
+    lines.push(detailParts.join(", "));
+  }
+  if (details.comment.trim()) {
+    lines.push(`комментарий ${details.comment.trim()}`);
+  }
+
+  return lines.filter(Boolean).join("\n");
+}
+
+function labelPresetFromValue(value?: string | null): AddressLabelPreset {
+  const normalized = (value || "").trim().toLowerCase();
+  if (normalized === "дом") return "home";
+  if (normalized === "работа") return "work";
+  return "other";
+}
+
+function labelValueFromPreset(preset: AddressLabelPreset) {
+  if (preset === "home") return "Дом";
+  if (preset === "work") return "Работа";
+  return "Другое";
 }
 
 export function AddressFormScreen({
@@ -123,6 +158,7 @@ export function AddressFormScreen({
   const mapRef = useRef<MapView | null>(null);
   const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addressesQuery = useQuery({
     queryKey: ["addresses"],
@@ -135,9 +171,7 @@ export function AddressFormScreen({
     [addressId, addressesQuery.data]
   );
 
-  const [step, setStep] = useState<AddressStep>("map");
-  const [searchMode, setSearchMode] = useState(false);
-  const [label, setLabel] = useState("");
+  const [labelPreset, setLabelPreset] = useState<AddressLabelPreset>("home");
   const [selectedAddress, setSelectedAddress] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [details, setDetails] = useState<DetailsState>(emptyDetails);
@@ -145,14 +179,12 @@ export function AddressFormScreen({
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [mapRegion, setMapRegion] = useState<Region>(DEFAULT_REGION);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [searchingSuggestions, setSearchingSuggestions] = useState(false);
   const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const stepProgress = useRef(new Animated.Value(0)).current;
-  const searchProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!user) {
@@ -164,42 +196,17 @@ export function AddressFormScreen({
     return () => {
       if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current);
       if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
+      if (searchBlurTimer.current) clearTimeout(searchBlurTimer.current);
     };
   }, []);
-
-  useEffect(() => {
-    Animated.timing(stepProgress, {
-      toValue: step === "details" ? 1 : 0,
-      duration: motion.normal,
-      useNativeDriver: true,
-    }).start();
-  }, [step, stepProgress]);
-
-  useEffect(() => {
-    Animated.timing(searchProgress, {
-      toValue: searchMode ? 1 : 0,
-      duration: motion.normal,
-      useNativeDriver: true,
-    }).start();
-  }, [searchMode, searchProgress]);
-
-  useEffect(() => {
-    if (step !== "details") return;
-
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      setStep("map");
-      return true;
-    });
-
-    return () => subscription.remove();
-  }, [step]);
 
   useEffect(() => {
     if (!editingAddress) return;
 
     const parsed = parseStoredAddress(editingAddress.address);
-    setLabel(editingAddress.label || "");
+    setLabelPreset(labelPresetFromValue(editingAddress.label));
     setSelectedAddress(parsed.baseAddress);
+    setSearchQuery(parsed.baseAddress);
     setDetails(parsed.details);
     setIsDefault(editingAddress.is_default);
   }, [editingAddress]);
@@ -259,7 +266,7 @@ export function AddressFormScreen({
 
   useEffect(() => {
     const query = searchQuery.trim();
-    if (!searchMode || !query || query.length < 3) {
+    if (!searchFocused || !query || query.length < 3 || query.toLowerCase() === selectedAddress.trim().toLowerCase()) {
       setSuggestions([]);
       setSearchingSuggestions(false);
       if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
@@ -274,7 +281,7 @@ export function AddressFormScreen({
     return () => {
       if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
     };
-  }, [permissionGranted, searchMode, searchQuery]);
+  }, [searchFocused, searchQuery, selectedAddress]);
 
   if (!user) return null;
 
@@ -319,9 +326,8 @@ export function AddressFormScreen({
       const formatted = formatResolvedAddress(resolved);
       if (formatted) {
         setSelectedAddress(formatted);
-        if (!searchMode) {
-          setSearchQuery("");
-        }
+        setSearchQuery(formatted);
+        setSuggestions([]);
         setError("");
       }
     } catch {
@@ -369,39 +375,15 @@ export function AddressFormScreen({
     }
   };
 
-  const openSearchMode = () => {
-    setSearchMode(true);
-    setSearchQuery(selectedAddress);
-    setSuggestions([]);
-    setError("");
-  };
-
-  const closeSearchMode = () => {
-    setSearchMode(false);
-    setSearchQuery("");
-    setSuggestions([]);
-  };
-
   const handleSelectSuggestion = (suggestion: Suggestion) => {
+    if (searchBlurTimer.current) clearTimeout(searchBlurTimer.current);
     setSelectedAddress(suggestion.address);
+    setSearchQuery(suggestion.address);
     setSuggestions([]);
-    setSearchQuery("");
-    setSearchMode(false);
+    setSearchFocused(false);
     setMapRegion(suggestion.region);
     mapRef.current?.animateToRegion(suggestion.region, motion.normal);
     setError("");
-  };
-
-  const handleContinue = () => {
-    if (!selectedAddress.trim()) {
-      setError("Сначала выберите адрес на карте.");
-      return;
-    }
-    if (searchMode && searchQuery.trim()) {
-      setError("Выберите адрес из списка подсказок или закройте поиск.");
-      return;
-    }
-    setStep("details");
   };
 
   const updateDetail = (key: keyof DetailsState, value: string) => {
@@ -410,9 +392,15 @@ export function AddressFormScreen({
 
   const handleSave = async () => {
     const normalizedBase = selectedAddress.trim();
+    const normalizedQuery = searchQuery.trim();
+
     if (!normalizedBase) {
       setError("Выберите адрес перед сохранением.");
-      setStep("map");
+      return;
+    }
+
+    if (normalizedQuery && normalizedQuery.toLowerCase() !== normalizedBase.toLowerCase()) {
+      setError("Выберите адрес из списка подсказок или укажите его на карте.");
       return;
     }
 
@@ -422,16 +410,17 @@ export function AddressFormScreen({
 
       const previousAddress = editingAddress?.address?.trim() || "";
       const nextAddress = buildStoredAddress(normalizedBase, details);
+      const nextLabel = labelValueFromPreset(labelPreset);
 
       if (editingAddress) {
         await mobileApi.updateAddress(editingAddress.id, {
-          label: label.trim() || null,
+          label: nextLabel,
           address: nextAddress,
           is_default: isDefault,
         });
       } else {
         await mobileApi.createAddress({
-          label: label.trim() || null,
+          label: nextLabel,
           address: nextAddress,
           is_default: isDefault,
         });
@@ -490,59 +479,11 @@ export function AddressFormScreen({
     ]);
   };
 
-  const mapLayerStyle = {
-    opacity: stepProgress.interpolate({
-      inputRange: [0, 1],
-      outputRange: [1, 0.92],
-    }),
-    transform: [
-      {
-        translateX: stepProgress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0, -26],
-        }),
-      },
-    ],
-  };
-
-  const detailsLayerStyle = {
-    opacity: stepProgress,
-    transform: [
-      {
-        translateX: stepProgress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [40, 0],
-        }),
-      },
-    ],
-  };
-
-  const searchTopStyle = {
-    opacity: searchProgress,
-    transform: [
-      {
-        translateY: searchProgress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-14, 0],
-        }),
-      },
-    ],
-  };
-
-  const bottomBarStyle = {
-    opacity: searchProgress.interpolate({
-      inputRange: [0, 1],
-      outputRange: [1, 0],
-    }),
-    transform: [
-      {
-        translateY: searchProgress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0, 22],
-        }),
-      },
-    ],
-  };
+  const submitLabel = isEditing ? "Сохранить" : "Доставить сюда";
+  const submitDisabled =
+    loading ||
+    !selectedAddress.trim() ||
+    Boolean(searchQuery.trim() && searchQuery.trim().toLowerCase() !== selectedAddress.trim().toLowerCase());
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
@@ -552,10 +493,7 @@ export function AddressFormScreen({
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 18}
       >
         <View style={styles.root}>
-          <Animated.View
-            pointerEvents={step === "map" ? "auto" : "none"}
-            style={[styles.mapStep, mapLayerStyle]}
-          >
+          <View style={styles.mapArea}>
             <MapView
               ref={mapRef}
               loadingEnabled
@@ -567,158 +505,116 @@ export function AddressFormScreen({
             />
 
             <View pointerEvents="none" style={styles.mapPinWrap}>
-              <View style={styles.mapPinStem} />
               <View style={styles.mapPinHead} />
+              <View style={styles.mapPinStem} />
             </View>
 
-            <View style={[styles.topBar, { paddingTop: insets.top + spacing.md }]}>
-              <Pressable onPress={() => router.back()} style={styles.closeButton}>
-                <Text style={styles.closeText}>Закрыть</Text>
+            <View style={[styles.mapTopBar, { paddingTop: insets.top + spacing.md }]}>
+              <Pressable onPress={() => router.back()} style={styles.topIconButton}>
+                <Feather color={colors.text} name="x" size={22} />
               </Pressable>
             </View>
 
-            <Pressable
-              onPress={handleLocateMe}
-              style={[
-                styles.locateButton,
-                {
-                  bottom: searchMode ? spacing.xxxl + 250 : spacing.xxxl + 126,
-                },
-              ]}
-            >
-              <Feather color={colors.text} name="navigation" size={18} />
+            <Pressable onPress={handleLocateMe} style={styles.locateButton}>
+              {locating ? (
+                <ActivityIndicator color={colors.text} size="small" />
+              ) : (
+                <Feather color={colors.text} name="navigation" size={18} />
+              )}
             </Pressable>
+          </View>
 
-            <Animated.View
-              pointerEvents={searchMode ? "auto" : "none"}
-              style={[styles.searchOverlay, searchTopStyle, { paddingTop: insets.top + spacing.xxl }]}
+          <View style={styles.sheet}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={[
+                styles.sheetContent,
+                { paddingBottom: Math.max(insets.bottom, spacing.lg) + 92 },
+              ]}
+              showsVerticalScrollIndicator={false}
             >
-              <View style={styles.searchPanel}>
-                <View style={styles.searchHeader}>
-                  <Text style={styles.searchTitle}>Уточнить адрес</Text>
-                  <Pressable hitSlop={10} onPress={closeSearchMode}>
-                    <Text style={styles.searchCancel}>Готово</Text>
-                  </Pressable>
-                </View>
+              <View style={styles.sheetHandle} />
 
+              <View style={styles.addressGroup}>
                 <TextField
-                  autoFocus={searchMode}
-                  placeholder="Введите город, улицу или дом"
+                  label="Город, улица и дом"
+                  placeholder="Введите адрес"
                   value={searchQuery}
+                  onBlur={() => {
+                    if (searchBlurTimer.current) clearTimeout(searchBlurTimer.current);
+                    searchBlurTimer.current = setTimeout(() => setSearchFocused(false), 120);
+                  }}
                   onChangeText={(value) => {
                     setSearchQuery(value);
                     setError("");
                   }}
+                  onFocus={() => {
+                    if (searchBlurTimer.current) clearTimeout(searchBlurTimer.current);
+                    setSearchFocused(true);
+                  }}
+                  helper={resolvingAddress ? "Определяем адрес по карте…" : undefined}
                   trailing={
-                    searchQuery ? (
+                    searchingSuggestions ? (
+                      <ActivityIndicator color={colors.accent} size="small" />
+                    ) : searchQuery ? (
                       <Pressable
                         hitSlop={8}
                         onPress={() => {
-                          setSearchQuery("");
+                          setSearchQuery(selectedAddress);
                           setSuggestions([]);
+                          setError("");
                         }}
                       >
                         <Feather color={colors.muted} name="x-circle" size={16} />
                       </Pressable>
-                    ) : null
+                    ) : (
+                      <Feather color={colors.muted} name="search" size={16} />
+                    )
                   }
                 />
 
-                {searchingSuggestions ? (
-                  <Text style={styles.searchHint}>Ищем подходящие адреса…</Text>
-                ) : null}
-
                 {suggestions.length ? (
-                  <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    style={styles.suggestionScroll}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    <View style={styles.suggestions}>
-                      {suggestions.map((item) => (
-                        <Pressable
-                          key={item.key}
-                          onPress={() => handleSelectSuggestion(item)}
-                          style={({ pressed }) => [
-                            styles.suggestionItem,
-                            pressed ? styles.suggestionItemPressed : null,
-                          ]}
-                        >
-                          <Feather color={colors.accent} name="map-pin" size={15} />
-                          <Text style={styles.suggestionText}>{item.address}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </ScrollView>
-                ) : searchQuery.trim().length >= 3 && !searchingSuggestions ? (
+                  <View style={styles.suggestionList}>
+                    {suggestions.map((item) => (
+                      <Pressable
+                        key={item.key}
+                        onPress={() => handleSelectSuggestion(item)}
+                        style={({ pressed }) => [
+                          styles.suggestionItem,
+                          pressed ? styles.suggestionItemPressed : null,
+                        ]}
+                      >
+                        <Feather color={colors.accent} name="map-pin" size={15} />
+                        <Text style={styles.suggestionText}>{item.address}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : searchFocused && searchQuery.trim().length >= 3 && !searchingSuggestions ? (
                   <Text style={styles.searchHint}>Попробуйте уточнить запрос.</Text>
                 ) : null}
               </View>
-            </Animated.View>
 
-            <Animated.View
-              pointerEvents={searchMode ? "none" : "auto"}
-              style={[styles.bottomCardWrap, bottomBarStyle, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
-            >
-              <View style={styles.bottomCard}>
-                <Pressable onPress={openSearchMode} style={styles.addressBar}>
-                  <Text style={styles.addressBarLabel}>Адрес</Text>
-                  <Text
-                    numberOfLines={2}
-                    style={[
-                      styles.addressBarValue,
-                      !selectedAddress ? styles.addressBarValueMuted : null,
-                    ]}
-                  >
-                    {resolvingAddress
-                      ? "Определяем адрес по карте…"
-                      : selectedAddress || "Передвиньте карту или уточните адрес"}
-                  </Text>
-                </Pressable>
-
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-
-                <MeatButton
-                  fullWidth
-                  disabled={!selectedAddress.trim() || locating}
-                  onPress={handleContinue}
-                  size="cta"
-                >
-                  Далее
-                </MeatButton>
+              <View style={styles.labelRow}>
+                {addressLabelOptions.map((option) => {
+                  const active = option.value === labelPreset;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => setLabelPreset(option.value)}
+                      style={[styles.labelChip, active ? styles.labelChipActive : null]}
+                    >
+                      <Feather
+                        color={active ? colors.surfaceStrong : colors.text}
+                        name={option.icon}
+                        size={15}
+                      />
+                      <Text style={[styles.labelChipText, active ? styles.labelChipTextActive : null]}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-            </Animated.View>
-          </Animated.View>
-
-          <Animated.View
-            pointerEvents={step === "details" ? "auto" : "none"}
-            style={[styles.detailsStep, detailsLayerStyle]}
-          >
-            <View style={[styles.detailsHeader, { paddingTop: insets.top + spacing.md }]}>
-              <Pressable onPress={() => setStep("map")} style={styles.backButton}>
-                <Feather color={colors.text} name="chevron-left" size={18} />
-              </Pressable>
-              <View style={styles.detailsHeaderCopy}>
-                <Text style={styles.detailsTitle}>Детали адреса</Text>
-                <Text numberOfLines={2} style={styles.detailsSubtitle}>
-                  {selectedAddress}
-                </Text>
-              </View>
-            </View>
-
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={[
-                styles.detailsContent,
-                { paddingBottom: Math.max(insets.bottom, spacing.xxxl) + 88 },
-              ]}
-              showsVerticalScrollIndicator={false}
-            >
-              <TextField
-                placeholder="Название (необязательно)"
-                value={label}
-                onChangeText={setLabel}
-              />
 
               <View style={styles.detailGrid}>
                 <TextField
@@ -750,9 +646,16 @@ export function AddressFormScreen({
                 />
               </View>
 
+              <TextField
+                multiline
+                placeholder="Комментарий для курьера"
+                value={details.comment}
+                onChangeText={(value) => updateDetail("comment", value)}
+              />
+
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
-              {editingAddress ? (
+              {isEditing ? (
                 <Pressable hitSlop={10} onPress={handleDelete} style={styles.deleteInline}>
                   <Text style={styles.deleteInlineText}>Удалить адрес</Text>
                 </Pressable>
@@ -761,17 +664,17 @@ export function AddressFormScreen({
 
             <View
               style={[
-                styles.saveBar,
+                styles.footer,
                 {
                   paddingBottom: Math.max(insets.bottom, spacing.lg),
                 },
               ]}
             >
-              <MeatButton fullWidth loading={loading} onPress={handleSave} size="cta">
-                Сохранить
+              <MeatButton fullWidth disabled={submitDisabled} loading={loading} onPress={handleSave} size="cta">
+                {submitLabel}
               </MeatButton>
             </View>
-          </Animated.View>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -790,43 +693,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  mapStep: {
-    ...StyleSheet.absoluteFillObject,
+  mapArea: {
+    position: "relative",
+    height: "46%",
+    minHeight: 320,
     backgroundColor: colors.surfaceMuted,
-  },
-  detailsStep: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.surface,
   },
   map: {
     ...StyleSheet.absoluteFillObject,
   },
-  topBar: {
+  mapTopBar: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     paddingHorizontal: spacing.lg,
   },
-  closeButton: {
-    alignSelf: "flex-start",
-    minHeight: 34,
+  topIconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.pill,
+    alignItems: "center",
     justifyContent: "center",
-  },
-  closeText: {
-    color: colors.accent,
-    fontSize: typography.titleSm,
-    fontWeight: typography.medium,
+    backgroundColor: colors.surface,
+    ...shadows.soft,
   },
   locateButton: {
     position: "absolute",
     right: spacing.lg,
-    width: 46,
-    height: 46,
+    bottom: spacing.xl,
+    width: 48,
+    height: 48,
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surface,
     ...shadows.soft,
   },
   mapPinWrap: {
@@ -837,64 +738,49 @@ const styles = StyleSheet.create({
     marginTop: -34,
     alignItems: "center",
   },
-  mapPinStem: {
-    width: 4,
-    height: 24,
-    borderRadius: radii.pill,
-    backgroundColor: colors.text,
-    marginTop: 18,
-  },
   mapPinHead: {
-    position: "absolute",
-    top: 0,
     width: 32,
     height: 32,
     borderRadius: radii.pill,
     backgroundColor: colors.accent,
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.48)",
+    borderColor: "rgba(255,255,255,0.52)",
     ...shadows.soft,
   },
-  searchOverlay: {
-    position: "absolute",
-    top: 0,
-    left: spacing.lg,
-    right: spacing.lg,
+  mapPinStem: {
+    width: 4,
+    height: 24,
+    marginTop: 18,
+    borderRadius: radii.pill,
+    backgroundColor: colors.text,
   },
-  searchPanel: {
-    maxHeight: "68%",
-    borderRadius: 26,
+  sheet: {
+    flex: 1,
+    marginTop: -24,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     backgroundColor: colors.surface,
-    padding: spacing.lg,
-    gap: spacing.md,
-    ...shadows.card,
+    overflow: "hidden",
   },
-  searchHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  sheetContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
     gap: spacing.md,
   },
-  searchTitle: {
-    color: colors.text,
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
+  sheetHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 5,
+    borderRadius: radii.pill,
+    backgroundColor: "rgba(148, 163, 184, 0.28)",
+    marginBottom: spacing.xs,
   },
-  searchCancel: {
-    color: colors.accent,
-    fontSize: typography.bodySm,
-    fontWeight: typography.medium,
+  addressGroup: {
+    gap: spacing.sm,
   },
-  searchHint: {
-    color: colors.muted,
-    fontSize: typography.caption,
-    lineHeight: 18,
-  },
-  suggestionScroll: {
-    maxHeight: 320,
-  },
-  suggestions: {
+  suggestionList: {
     gap: spacing.xs,
+    maxHeight: 220,
   },
   suggestionItem: {
     flexDirection: "row",
@@ -904,6 +790,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceTint,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   suggestionItemPressed: {
     backgroundColor: colors.accentSoft,
@@ -914,74 +802,38 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySm,
     lineHeight: 19,
   },
-  bottomCardWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: spacing.lg,
-  },
-  bottomCard: {
-    borderRadius: 28,
-    backgroundColor: colors.surface,
-    padding: spacing.lg,
-    gap: spacing.md,
-    ...shadows.card,
-  },
-  addressBar: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surfaceTint,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    gap: 4,
-  },
-  addressBarLabel: {
-    color: colors.muted,
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
-  },
-  addressBarValue: {
-    color: colors.text,
-    fontSize: typography.bodySm,
-    lineHeight: 20,
-  },
-  addressBarValueMuted: {
-    color: colors.muted,
-  },
-  detailsHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surfaceTint,
-  },
-  detailsHeaderCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  detailsTitle: {
-    color: colors.text,
-    fontSize: typography.titleSm,
-    fontWeight: typography.semibold,
-  },
-  detailsSubtitle: {
+  searchHint: {
     color: colors.muted,
     fontSize: typography.caption,
     lineHeight: 18,
   },
-  detailsContent: {
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
+  labelRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  labelChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    minHeight: 38,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceTint,
+  },
+  labelChipActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  labelChipText: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
+  },
+  labelChipTextActive: {
+    color: colors.surfaceStrong,
   },
   detailGrid: {
     flexDirection: "row",
@@ -990,27 +842,29 @@ const styles = StyleSheet.create({
   detailField: {
     flex: 1,
   },
-  saveBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  deleteInline: {
-    alignSelf: "center",
-    paddingVertical: spacing.md,
-  },
-  deleteInlineText: {
-    color: colors.muted,
-    fontSize: typography.bodySm,
-    fontWeight: typography.medium,
-  },
   error: {
     color: colors.danger,
     fontSize: typography.caption,
     lineHeight: 18,
+  },
+  deleteInline: {
+    alignSelf: "flex-start",
+    paddingVertical: spacing.xs,
+  },
+  deleteInlineText: {
+    color: colors.danger,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
+  },
+  footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
   },
 });
