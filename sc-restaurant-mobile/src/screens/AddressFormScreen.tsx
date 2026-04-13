@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -648,11 +649,17 @@ export function AddressFormScreen({
         </View>
 
         {searchMode ? (
-          <View style={styles.searchOverlay}>
+          <Modal
+            animationType="fade"
+            onRequestClose={closeSearchMode}
+            statusBarTranslucent={Platform.OS === "android"}
+            visible
+          >
+            <View style={styles.searchOverlay}>
             <KeyboardAvoidingView
               style={styles.searchOverlayFlex}
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-              keyboardVerticalOffset={insets.top}
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
             >
               <View
                 style={[
@@ -727,7 +734,8 @@ export function AddressFormScreen({
                 ) : null}
               </View>
             </KeyboardAvoidingView>
-          </View>
+            </View>
+          </Modal>
         ) : null}
       </View>
     </SafeAreaView>
@@ -913,7 +921,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   searchOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: colors.surface,
   },
   searchOverlayFlex: {
