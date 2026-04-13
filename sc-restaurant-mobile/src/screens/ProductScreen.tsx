@@ -5,11 +5,13 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -129,11 +131,17 @@ export default function ProductScreen() {
   const addProduct = useCartStore((state) => state.addProduct);
   const { pushToast } = useToast();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(44)).current;
   const closingRef = useRef(false);
+  const nutritionInfoAnchorRef = useRef<View>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [nutritionOpen, setNutritionOpen] = useState(false);
+  const [nutritionPopoverFrame, setNutritionPopoverFrame] = useState<{ left: number; top: number }>({
+    left: spacing.lg,
+    top: spacing.xl,
+  });
 
   const product = useMemo(
     () => findProduct(menuQuery.data || [], Number(id)),
@@ -165,6 +173,10 @@ export default function ProductScreen() {
     setNutritionOpen(false);
   }, [selectedVariantId]);
 
+  useEffect(() => {
+    setNutritionOpen(false);
+  }, [windowHeight, windowWidth]);
+
   const selectedVariant =
     product?.variants.find((variant) => variant.id === selectedVariantId) || product?.variants[0];
   const selectedVariantWeight = sizeCaption(
@@ -188,6 +200,7 @@ export default function ProductScreen() {
   const handleClose = () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    setNutritionOpen(false);
 
     Animated.parallel([
       Animated.timing(overlayOpacity, {
@@ -220,6 +233,34 @@ export default function ProductScreen() {
       description: `${product.name} теперь в заказе.`,
     });
     handleClose();
+  };
+
+  const toggleNutritionPopover = () => {
+    if (nutritionOpen) {
+      setNutritionOpen(false);
+      return;
+    }
+
+    const popoverWidth = Math.min(280, windowWidth - spacing.lg * 2);
+    const estimatedPopoverHeight = 48 + nutritionItems.length * 28 + spacing.sm * Math.max(nutritionItems.length - 1, 0);
+
+    nutritionInfoAnchorRef.current?.measureInWindow((x, y, width, height) => {
+      const preferredLeft = x + width / 2 - popoverWidth / 2;
+      const left = Math.min(
+        Math.max(preferredLeft, spacing.lg),
+        Math.max(spacing.lg, windowWidth - popoverWidth - spacing.lg)
+      );
+
+      const topSpace = y - spacing.md;
+      const bottomSpace = windowHeight - (y + height) - spacing.md;
+      const openAbove = topSpace >= estimatedPopoverHeight || topSpace >= bottomSpace;
+      const preferredTop = openAbove ? y - estimatedPopoverHeight - spacing.xs : y + height + spacing.sm;
+      const maxTop = windowHeight - estimatedPopoverHeight - spacing.lg;
+      const top = Math.min(Math.max(preferredTop, spacing.xl), Math.max(spacing.xl, maxTop));
+
+      setNutritionPopoverFrame({ left, top });
+      setNutritionOpen(true);
+    });
   };
 
   const renderBody = () => {
@@ -296,33 +337,20 @@ export default function ProductScreen() {
 
           {nutritionItems.length ? (
             <View style={styles.nutritionSection}>
-              <View style={styles.nutritionAnchor}>
-                <View style={styles.nutritionHeader}>
-                  <Text style={styles.nutritionTitle}>Энергетическая ценность</Text>
+              <View style={styles.nutritionHeader}>
+                <Text style={styles.nutritionTitle}>Энергетическая ценность</Text>
+                <View collapsable={false} ref={nutritionInfoAnchorRef}>
                   <Pressable
                     accessibilityHint="Открывает подробности о КБЖУ"
                     accessibilityLabel="Подробности о пищевой ценности"
                     accessibilityRole="button"
                     accessibilityState={{ expanded: nutritionOpen }}
-                    onPress={() => setNutritionOpen((value) => !value)}
+                    onPress={toggleNutritionPopover}
                     style={styles.nutritionInfoButton}
                   >
                     <Feather color={colors.muted} name="info" size={14} />
                   </Pressable>
                 </View>
-                {nutritionOpen ? (
-                  <View pointerEvents="box-none" style={styles.nutritionPopoverSlot}>
-                    <View style={styles.nutritionPopover}>
-                      <Text style={styles.nutritionPopoverCaption}>На выбранную порцию</Text>
-                      {nutritionItems.map((item) => (
-                        <View key={item.label} style={styles.nutritionPopoverRow}>
-                          <Text style={styles.nutritionPopoverName}>{item.label}</Text>
-                          <Text style={styles.nutritionPopoverValue}>{item.value}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
               </View>
             </View>
           ) : null}
@@ -345,6 +373,29 @@ export default function ProductScreen() {
       <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
         {renderBody()}
       </Animated.View>
+      <Modal animationType="fade" onRequestClose={() => setNutritionOpen(false)} transparent visible={nutritionOpen}>
+        <View style={styles.nutritionModalRoot}>
+          <Pressable onPress={() => setNutritionOpen(false)} style={StyleSheet.absoluteFillObject} />
+          <View
+            style={[
+              styles.nutritionPopover,
+              {
+                left: nutritionPopoverFrame.left,
+                top: nutritionPopoverFrame.top,
+                width: Math.min(280, windowWidth - spacing.lg * 2),
+              },
+            ]}
+          >
+            <Text style={styles.nutritionPopoverCaption}>На выбранную порцию</Text>
+            {nutritionItems.map((item) => (
+              <View key={item.label} style={styles.nutritionPopoverRow}>
+                <Text style={styles.nutritionPopoverName}>{item.label}</Text>
+                <Text style={styles.nutritionPopoverValue}>{item.value}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -479,14 +530,9 @@ const styles = StyleSheet.create({
   },
   nutritionSection: {
     marginTop: spacing.sm,
-    gap: spacing.sm,
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.line,
-    alignItems: "center",
-  },
-  nutritionAnchor: {
-    width: "100%",
     alignItems: "center",
   },
   nutritionHeader: {
@@ -511,23 +557,17 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.surface,
   },
-  nutritionPopoverSlot: {
-    position: "absolute",
-    top: 28,
-    left: 0,
-    right: 0,
-    zIndex: 12,
-    alignItems: "center",
+  nutritionModalRoot: {
+    flex: 1,
   },
   nutritionPopover: {
-    width: "100%",
-    maxWidth: 280,
+    position: "absolute",
     borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    backgroundColor: colors.surfaceTint,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.border,
     gap: spacing.sm,
     shadowColor: colors.shadow,
     shadowOpacity: 1,
