@@ -14,7 +14,7 @@ import {
   Text,
   View,
 } from "react-native";
-import MapView, { type Region } from "react-native-maps";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { mobileApi } from "@/src/api/mobile-api";
@@ -23,23 +23,62 @@ import { TextField } from "@/src/components/ui/TextField";
 import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { useCartStore } from "@/src/store/cart-store";
-import { colors, motion, radii, shadows, spacing, typography } from "@/src/theme/tokens";
+import { colors, radii, shadows, spacing, typography } from "@/src/theme/tokens";
 
-const DEFAULT_REGION: Region = {
-  latitude: 52.7189,
-  longitude: 58.6654,
-  latitudeDelta: 0.012,
-  longitudeDelta: 0.012,
+const DEFAULT_CAMERA = {
+  lat: 52.7189,
+  lng: 58.6654,
+  zoom: 16,
 };
+
+const MAP_WRAPPER_URL = "https://sc-delivery.ru/mobile-yandex-map.html";
+const DEFAULT_YANDEX_MAPS_API_KEY = "1aed26db-4993-4046-b16e-7cb6ceb0f884";
 
 type AddressOrigin = "catalog" | "profile";
 type AddressLabelPreset = "home" | "work" | "other";
 
-type Suggestion = {
+type MapCamera = {
+  lat: number;
+  lng: number;
+  zoom: number;
+};
+
+type MapSearchResult = {
   key: string;
   address: string;
-  region: Region;
+  subtitle?: string;
+  lat: number;
+  lng: number;
 };
+
+type MapCommand =
+  | {
+      type: "moveTo";
+      lat: number;
+      lng: number;
+      zoom: number;
+      preserveZoom?: boolean;
+    }
+  | {
+      type: "search";
+      query: string;
+      requestId: string;
+    }
+  | {
+      type: "selectSearchResult";
+      lat: number;
+      lng: number;
+      zoom: number;
+      preserveZoom?: boolean;
+      address: string;
+    };
+
+type MapBridgeMessage =
+  | { type: "ready" }
+  | { type: "cameraChanged"; lat: number; lng: number; zoom: number }
+  | { type: "resolvedAddress"; address: string; lat: number; lng: number; zoom: number }
+  | { type: "searchResults"; requestId?: string; items?: MapSearchResult[] }
+  | { type: "error"; message?: string };
 
 type DetailsState = {
   entrance: string;
@@ -64,31 +103,6 @@ const addressLabelOptions: {
   { value: "work", label: "Работа", icon: "briefcase" },
   { value: "other", label: "Другое", icon: "map-pin" },
 ];
-
-function buildRegion(latitude: number, longitude: number): Region {
-  return {
-    latitude,
-    longitude,
-    latitudeDelta: DEFAULT_REGION.latitudeDelta,
-    longitudeDelta: DEFAULT_REGION.longitudeDelta,
-  };
-}
-
-function formatResolvedAddress(address?: Location.LocationGeocodedAddress | null) {
-  if (!address) return "";
-
-  const locality =
-    address.city?.trim() ||
-    address.district?.trim() ||
-    address.subregion?.trim() ||
-    address.region?.trim() ||
-    "";
-  const streetLine = address.street?.trim()
-    ? [address.street.trim(), address.streetNumber?.trim()].filter(Boolean).join(", ")
-    : address.name?.trim() || "";
-
-  return [locality, streetLine].filter(Boolean).join(", ");
-}
 
 function parseStoredAddress(value: string) {
   const [baseLine = "", detailLine = ""] = value.split(/\r?\n/);
@@ -134,6 +148,31 @@ function labelValueFromPreset(preset: AddressLabelPreset) {
   return "Другое";
 }
 
+function isValidCamera(value: unknown): value is MapCamera {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<MapCamera>;
+  return (
+    typeof candidate.lat === "number" &&
+    typeof candidate.lng === "number" &&
+    typeof candidate.zoom === "number"
+  );
+}
+
+function buildMapSourceUri(camera: MapCamera, apiKey: string, cacheBust: number) {
+  const params = new URLSearchParams({
+    apikey: apiKey,
+    lat: String(camera.lat),
+    lng: String(camera.lng),
+    zoom: String(camera.zoom),
+    v: String(cacheBust),
+  });
+
+  return `${MAP_WRAPPER_URL}?${params.toString()}`;
+}
+
 export function AddressFormScreen({
   addressId,
   origin = "profile",
@@ -148,10 +187,15 @@ export function AddressFormScreen({
   const { pushToast } = useToast();
   const insets = useSafeAreaInsets();
   const isEditing = typeof addressId === "number" && addressId > 0;
-  const mapRef = useRef<MapView | null>(null);
-  const mapRegionRef = useRef<Region>(DEFAULT_REGION);
-  const searchModeRef = useRef(false);
-  const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const yandexMapsApiKey =
+    process.env.EXPO_PUBLIC_YANDEX_MAPS_API_KEY?.trim() || DEFAULT_YANDEX_MAPS_API_KEY;
+
+  const webViewRef = useRef<WebView | null>(null);
+  const mapCameraRef = useRef<MapCamera>(DEFAULT_CAMERA);
+  const commandQueueRef = useRef<MapCommand[]>([]);
+  const bootstrapAddressQueryRef = useRef<string | null>(null);
+  const activeSearchRequestIdRef = useRef<string | null>(null);
+  const activeBootstrapRequestIdRef = useRef<string | null>(null);
   const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addressesQuery = useQuery({
@@ -171,18 +215,96 @@ export function AddressFormScreen({
   const [searchQuery, setSearchQuery] = useState("");
   const [details, setDetails] = useState<DetailsState>(emptyDetails);
   const [isDefault, setIsDefault] = useState(false);
-  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
-  const [mapRegion, setMapRegion] = useState<Region>(DEFAULT_REGION);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [resolvingAddress, setResolvingAddress] = useState(false);
+  const [mapSourceCamera, setMapSourceCamera] = useState<MapCamera>(DEFAULT_CAMERA);
+  const [mapLoading, setMapLoading] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState("");
+  const [mapReloadToken, setMapReloadToken] = useState(0);
+  const [suggestions, setSuggestions] = useState<MapSearchResult[]>([]);
   const [searchingSuggestions, setSearchingSuggestions] = useState(false);
   const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    searchModeRef.current = searchMode;
-  }, [searchMode]);
+  const mapSource = useMemo(
+    () => buildMapSourceUri(mapSourceCamera, yandexMapsApiKey, mapReloadToken),
+    [mapReloadToken, mapSourceCamera, yandexMapsApiKey]
+  );
+
+  const setMapCameraState = useCallback((nextCamera: MapCamera) => {
+    mapCameraRef.current = nextCamera;
+  }, []);
+
+  const sendMapCommandNow = useCallback((command: MapCommand) => {
+    if (!webViewRef.current) {
+      return;
+    }
+
+    webViewRef.current.injectJavaScript(
+      `window.__SCMobileMapReceive && window.__SCMobileMapReceive(${JSON.stringify(command)}); true;`
+    );
+  }, []);
+
+  const queueMapCommand = useCallback(
+    (command: MapCommand) => {
+      if (!mapReady) {
+        commandQueueRef.current.push(command);
+        return;
+      }
+
+      sendMapCommandNow(command);
+    },
+    [mapReady, sendMapCommandNow]
+  );
+
+  const flushCommandQueue = useCallback(() => {
+    if (!mapReady || !commandQueueRef.current.length) {
+      return;
+    }
+
+    const queued = [...commandQueueRef.current];
+    commandQueueRef.current = [];
+    queued.forEach((command) => sendMapCommandNow(command));
+  }, [mapReady, sendMapCommandNow]);
+
+  const runBootstrapAddressLookup = useCallback(() => {
+    const query = bootstrapAddressQueryRef.current?.trim();
+    if (!query) {
+      return;
+    }
+
+    bootstrapAddressQueryRef.current = null;
+    const requestId = `bootstrap:${Date.now()}`;
+    activeBootstrapRequestIdRef.current = requestId;
+    queueMapCommand({
+      type: "search",
+      query,
+      requestId,
+    });
+  }, [queueMapCommand]);
+
+  const handleBootstrapSelection = useCallback(
+    (suggestion: MapSearchResult) => {
+      const nextCamera = {
+        lat: suggestion.lat,
+        lng: suggestion.lng,
+        zoom: DEFAULT_CAMERA.zoom,
+      };
+
+      setSelectedAddress(suggestion.address);
+      setSearchQuery(suggestion.address);
+      setMapCameraState(nextCamera);
+      queueMapCommand({
+        type: "selectSearchResult",
+        lat: suggestion.lat,
+        lng: suggestion.lng,
+        zoom: DEFAULT_CAMERA.zoom,
+        preserveZoom: false,
+        address: suggestion.address,
+      });
+    },
+    [queueMapCommand, setMapCameraState]
+  );
 
   useEffect(() => {
     if (!user) {
@@ -192,92 +314,64 @@ export function AddressFormScreen({
 
   useEffect(() => {
     return () => {
-      if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current);
-      if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
+      if (suggestionTimer.current) {
+        clearTimeout(suggestionTimer.current);
+      }
     };
   }, []);
 
   useEffect(() => {
-    if (!editingAddress) return;
+    if (!user) return;
+    if (isEditing && addressesQuery.isLoading) return;
 
-    const parsed = parseStoredAddress(editingAddress.address);
-    setLabelPreset(labelPresetFromValue(editingAddress.label));
-    setSelectedAddress(parsed.baseAddress);
-    setSearchQuery(parsed.baseAddress);
-    setDetails(parsed.details);
-    setIsDefault(editingAddress.is_default);
-  }, [editingAddress]);
-
-  const resolveAddressAt = useCallback(async (latitude: number, longitude: number, cancelled = false) => {
-    try {
-      setResolvingAddress(true);
-      const [resolved] = await Location.reverseGeocodeAsync({ latitude, longitude });
-      if (cancelled) return;
-
-      const formatted = formatResolvedAddress(resolved);
-      if (formatted) {
-        setSelectedAddress(formatted);
-        if (!searchModeRef.current) {
-          setSearchQuery(formatted);
-        }
-        setError("");
-      }
-    } catch {
-      if (!cancelled) {
-        setError("Не удалось определить адрес по карте.");
-      }
-    } finally {
-      if (!cancelled) {
-        setResolvingAddress(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
 
     const bootstrap = async () => {
-      if (!user) return;
-      if (isEditing && addressesQuery.isLoading) return;
-
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (cancelled) return;
-      setPermissionGranted(permission.granted);
-
-      let nextRegion = DEFAULT_REGION;
-
-      if (editingAddress?.address) {
+      if (editingAddress) {
         const parsed = parseStoredAddress(editingAddress.address);
-        if (parsed.baseAddress) {
-          try {
-            const matches = await Location.geocodeAsync(parsed.baseAddress);
-            if (!cancelled && matches[0]) {
-              nextRegion = buildRegion(matches[0].latitude, matches[0].longitude);
-            }
-          } catch {
-            // keep default region
-          }
-        }
-      } else if (permission.granted) {
-        try {
-          const current = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          if (!cancelled) {
-            nextRegion = buildRegion(current.coords.latitude, current.coords.longitude);
-          }
-        } catch {
-          // keep default region
-        }
+        setLabelPreset(labelPresetFromValue(editingAddress.label));
+        setSelectedAddress(parsed.baseAddress);
+        setSearchQuery(parsed.baseAddress);
+        setDetails(parsed.details);
+        setIsDefault(editingAddress.is_default);
+        bootstrapAddressQueryRef.current = parsed.baseAddress || null;
       }
 
-      if (cancelled) return;
-      mapRegionRef.current = nextRegion;
-      setMapRegion(nextRegion);
-      mapRef.current?.animateToRegion(nextRegion, 0);
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (cancelled) return;
 
-      if (!editingAddress?.address && permission.granted) {
-        await resolveAddressAt(nextRegion.latitude, nextRegion.longitude, cancelled);
+        if (editingAddress || !permission.granted) {
+          if (mapReady) {
+            runBootstrapAddressLookup();
+          }
+          return;
+        }
+
+        const current = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (cancelled) return;
+
+        const nextCamera = {
+          lat: current.coords.latitude,
+          lng: current.coords.longitude,
+          zoom: DEFAULT_CAMERA.zoom,
+        };
+
+        setMapSourceCamera(nextCamera);
+        setMapCameraState(nextCamera);
+        queueMapCommand({
+          type: "moveTo",
+          lat: nextCamera.lat,
+          lng: nextCamera.lng,
+          zoom: nextCamera.zoom,
+          preserveZoom: false,
+        });
+      } catch {
+        if (!cancelled && mapReady) {
+          runBootstrapAddressLookup();
+        }
       }
     };
 
@@ -286,88 +380,96 @@ export function AddressFormScreen({
     return () => {
       cancelled = true;
     };
-  }, [addressesQuery.isLoading, editingAddress, isEditing, resolveAddressAt, user]);
+  }, [
+    addressesQuery.isLoading,
+    editingAddress,
+    isEditing,
+    mapReady,
+    queueMapCommand,
+    runBootstrapAddressLookup,
+    setMapCameraState,
+    user,
+  ]);
 
   useEffect(() => {
-    const query = searchQuery.trim();
-    if (!searchMode || query.length < 3 || query.toLowerCase() === selectedAddress.trim().toLowerCase()) {
+    if (mapReady) {
+      flushCommandQueue();
+      runBootstrapAddressLookup();
+    }
+  }, [flushCommandQueue, mapReady, runBootstrapAddressLookup]);
+
+  useEffect(() => {
+    if (!searchMode || !mapReady) {
+      if (suggestionTimer.current) {
+        clearTimeout(suggestionTimer.current);
+      }
       setSuggestions([]);
       setSearchingSuggestions(false);
-      if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
       return;
     }
 
-    if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
+    const query = searchQuery.trim();
+    if (!query || query.length < 3 || query.toLowerCase() === selectedAddress.trim().toLowerCase()) {
+      if (suggestionTimer.current) {
+        clearTimeout(suggestionTimer.current);
+      }
+      setSuggestions([]);
+      setSearchingSuggestions(false);
+      return;
+    }
+
+    if (suggestionTimer.current) {
+      clearTimeout(suggestionTimer.current);
+    }
+
     suggestionTimer.current = setTimeout(() => {
-      void loadSuggestions(query);
+      const requestId = `search:${Date.now()}`;
+      activeSearchRequestIdRef.current = requestId;
+      setSearchingSuggestions(true);
+      queueMapCommand({
+        type: "search",
+        query,
+        requestId,
+      });
     }, 260);
 
     return () => {
-      if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
-    };
-  }, [searchMode, searchQuery, selectedAddress]);
-
-  async function loadSuggestions(query: string) {
-    try {
-      setSearchingSuggestions(true);
-      const points = await Location.geocodeAsync(query);
-      const nextSuggestions: Suggestion[] = [];
-
-      for (const point of points.slice(0, 6)) {
-        const region = buildRegion(point.latitude, point.longitude);
-        const [resolved] = await Location.reverseGeocodeAsync({
-          latitude: point.latitude,
-          longitude: point.longitude,
-        });
-        const formatted = formatResolvedAddress(resolved);
-        if (!formatted) continue;
-        if (nextSuggestions.some((item) => item.address.toLowerCase() === formatted.toLowerCase())) {
-          continue;
-        }
-        nextSuggestions.push({
-          key: `${point.latitude}:${point.longitude}:${formatted}`,
-          address: formatted,
-          region,
-        });
+      if (suggestionTimer.current) {
+        clearTimeout(suggestionTimer.current);
       }
-
-      setSuggestions(nextSuggestions);
-    } catch {
-      setSuggestions([]);
-    } finally {
-      setSearchingSuggestions(false);
-    }
-  }
-
-  const scheduleAddressResolve = (nextRegion: Region) => {
-    mapRegionRef.current = nextRegion;
-    if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current);
-    reverseGeocodeTimer.current = setTimeout(() => {
-      setMapRegion(nextRegion);
-      void resolveAddressAt(nextRegion.latitude, nextRegion.longitude);
-    }, 450);
-  };
+    };
+  }, [mapReady, queueMapCommand, searchMode, searchQuery, selectedAddress]);
 
   const handleLocateMe = async () => {
     try {
       setLocating(true);
       setError("");
+
       const permission = await Location.requestForegroundPermissionsAsync();
-      setPermissionGranted(permission.granted);
 
       if (!permission.granted) {
-        setError("Разрешите геолокацию, чтобы выбирать адрес на карте.");
+        setError("Разрешите геолокацию, чтобы выбрать адрес на карте.");
         return;
       }
 
       const current = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      const nextRegion = buildRegion(current.coords.latitude, current.coords.longitude);
-      mapRegionRef.current = nextRegion;
-      setMapRegion(nextRegion);
-      mapRef.current?.animateToRegion(nextRegion, motion.normal);
-      await resolveAddressAt(nextRegion.latitude, nextRegion.longitude);
+
+      const nextCamera = {
+        lat: current.coords.latitude,
+        lng: current.coords.longitude,
+        zoom: mapCameraRef.current.zoom || DEFAULT_CAMERA.zoom,
+      };
+
+      setMapCameraState(nextCamera);
+      queueMapCommand({
+        type: "moveTo",
+        lat: nextCamera.lat,
+        lng: nextCamera.lng,
+        zoom: nextCamera.zoom,
+        preserveZoom: true,
+      });
     } catch {
       setError("Не удалось определить текущее местоположение.");
     } finally {
@@ -376,6 +478,11 @@ export function AddressFormScreen({
   };
 
   const openSearchMode = () => {
+    if (!mapReady) {
+      setError("Карта ещё загружается. Попробуйте через пару секунд.");
+      return;
+    }
+
     setSearchQuery(selectedAddress);
     setSuggestions([]);
     setSearchMode(true);
@@ -389,23 +496,26 @@ export function AddressFormScreen({
     setSearchingSuggestions(false);
   };
 
-  const handleSelectSuggestion = (suggestion: Suggestion) => {
-    const nextRegion: Region = {
-      latitude: suggestion.region.latitude,
-      longitude: suggestion.region.longitude,
-      latitudeDelta:
-        mapRegionRef.current.latitudeDelta || DEFAULT_REGION.latitudeDelta,
-      longitudeDelta:
-        mapRegionRef.current.longitudeDelta || DEFAULT_REGION.longitudeDelta,
+  const handleSelectSuggestion = (suggestion: MapSearchResult) => {
+    const nextCamera = {
+      lat: suggestion.lat,
+      lng: suggestion.lng,
+      zoom: mapCameraRef.current.zoom || DEFAULT_CAMERA.zoom,
     };
 
     setSelectedAddress(suggestion.address);
     setSearchQuery(suggestion.address);
     setSuggestions([]);
     setSearchMode(false);
-    mapRegionRef.current = nextRegion;
-    setMapRegion(nextRegion);
-    mapRef.current?.animateToRegion(nextRegion, motion.normal);
+    setMapCameraState(nextCamera);
+    queueMapCommand({
+      type: "selectSearchResult",
+      lat: suggestion.lat,
+      lng: suggestion.lng,
+      zoom: nextCamera.zoom,
+      preserveZoom: true,
+      address: suggestion.address,
+    });
     setError("");
   };
 
@@ -506,22 +616,124 @@ export function AddressFormScreen({
     ]);
   };
 
+  const handleRetryMap = () => {
+    setMapLoading(true);
+    setMapReady(false);
+    setMapError("");
+    setSearchMode(false);
+    setSuggestions([]);
+    setSearchingSuggestions(false);
+    commandQueueRef.current = [];
+    setMapSourceCamera(mapCameraRef.current);
+    setMapReloadToken((current) => current + 1);
+  };
+
+  const handleWebMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      let payload: MapBridgeMessage | null = null;
+
+      try {
+        payload = JSON.parse(event.nativeEvent.data) as MapBridgeMessage;
+      } catch {
+        return;
+      }
+
+      if (!payload) {
+        return;
+      }
+
+      if (payload.type === "ready") {
+        setMapLoading(false);
+        setMapReady(true);
+        setMapError("");
+        return;
+      }
+
+      if (payload.type === "cameraChanged" && isValidCamera(payload)) {
+        setMapCameraState(payload);
+        return;
+      }
+
+      if (payload.type === "resolvedAddress" && isValidCamera(payload)) {
+        setMapCameraState(payload);
+        if (payload.address?.trim()) {
+          setSelectedAddress(payload.address.trim());
+          if (!searchMode) {
+            setSearchQuery(payload.address.trim());
+          }
+          setError("");
+        }
+        return;
+      }
+
+      if (payload.type === "searchResults") {
+        const items = Array.isArray(payload.items) ? payload.items : [];
+
+        if (payload.requestId && payload.requestId === activeBootstrapRequestIdRef.current) {
+          activeBootstrapRequestIdRef.current = null;
+          if (items.length) {
+            handleBootstrapSelection(items[0]);
+          }
+          return;
+        }
+
+        if (payload.requestId && activeSearchRequestIdRef.current !== payload.requestId) {
+          return;
+        }
+
+        setSearchingSuggestions(false);
+        setSuggestions(items);
+        return;
+      }
+
+      if (payload.type === "error") {
+        const message = payload.message?.trim() || "Не удалось загрузить карту.";
+
+        if (!mapReady) {
+          setMapLoading(false);
+          setMapError(message);
+        } else {
+          setSearchingSuggestions(false);
+          setError(message);
+        }
+      }
+    },
+    [handleBootstrapSelection, mapReady, searchMode, setMapCameraState]
+  );
+
   const submitLabel = isEditing ? "Сохранить" : "Доставить сюда";
   const submitDisabled = loading || !selectedAddress.trim();
+
   if (!user) return null;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
       <View style={styles.root}>
         <View style={styles.mapArea}>
-          <MapView
-            ref={mapRef}
-            initialRegion={mapRegion}
-            loadingEnabled
-            showsMyLocationButton={false}
-            showsUserLocation={permissionGranted === true}
+          <WebView
+            ref={(instance) => {
+              webViewRef.current = instance;
+            }}
+            key={`yandex-map:${mapReloadToken}`}
+            bounces={false}
+            cacheEnabled={false}
+            domStorageEnabled
+            javaScriptEnabled
+            onError={() => {
+              setMapLoading(false);
+              setMapReady(false);
+              setMapError("Не удалось загрузить карту. Проверьте соединение и повторите попытку.");
+            }}
+            onHttpError={() => {
+              setMapLoading(false);
+              setMapReady(false);
+              setMapError("Не удалось открыть карту с сервера.");
+            }}
+            onMessage={handleWebMessage}
+            originWhitelist={["*"]}
+            setSupportMultipleWindows={false}
+            source={{ uri: mapSource }}
             style={styles.map}
-            onRegionChange={scheduleAddressResolve}
           />
 
           <View pointerEvents="none" style={styles.mapPinWrap}>
@@ -542,6 +754,30 @@ export function AddressFormScreen({
               <Feather color={colors.text} name="navigation" size={18} />
             )}
           </Pressable>
+
+          {mapLoading ? (
+            <View style={styles.mapOverlay}>
+              <ActivityIndicator color={colors.accent} size="small" />
+              <Text style={styles.mapOverlayText}>Загружаем карту…</Text>
+            </View>
+          ) : null}
+
+          {mapError ? (
+            <View style={styles.mapOverlay}>
+              <View style={styles.mapErrorCard}>
+                <Text style={styles.mapErrorTitle}>Карта не загрузилась</Text>
+                <Text style={styles.mapErrorText}>{mapError}</Text>
+                <View style={styles.mapErrorActions}>
+                  <MeatButton onPress={handleRetryMap} variant="primary">
+                    Повторить
+                  </MeatButton>
+                  <MeatButton onPress={() => router.back()} variant="secondary">
+                    Назад
+                  </MeatButton>
+                </View>
+              </View>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.sheet}>
@@ -565,7 +801,7 @@ export function AddressFormScreen({
                   {selectedAddress || "Передвиньте карту или найдите адрес"}
                 </Text>
               </View>
-              {resolvingAddress ? (
+              {mapLoading ? (
                 <ActivityIndicator color={colors.accent} size="small" />
               ) : (
                 <Feather color={colors.muted} name="search" size={18} />
@@ -631,6 +867,7 @@ export function AddressFormScreen({
                 <Text style={styles.deleteInlineText}>Удалить адрес</Text>
               </Pressable>
             ) : null}
+
             <View
               style={[
                 styles.footer,
@@ -719,7 +956,12 @@ export function AddressFormScreen({
                           ]}
                         >
                           <Feather color={colors.accent} name="map-pin" size={15} />
-                          <Text style={styles.suggestionText}>{item.address}</Text>
+                          <View style={styles.suggestionCopy}>
+                            <Text style={styles.suggestionText}>{item.address}</Text>
+                            {item.subtitle ? (
+                              <Text style={styles.suggestionSubtitle}>{item.subtitle}</Text>
+                            ) : null}
+                          </View>
                         </Pressable>
                       ))}
                     </View>
@@ -811,6 +1053,43 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: radii.pill,
     backgroundColor: colors.text,
+  },
+  mapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    paddingHorizontal: spacing.xl,
+  },
+  mapOverlayText: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
+  },
+  mapErrorCard: {
+    width: "100%",
+    maxWidth: 320,
+    borderRadius: radii.xl,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    gap: spacing.md,
+    ...shadows.card,
+  },
+  mapErrorTitle: {
+    color: colors.text,
+    fontSize: typography.titleSm,
+    fontWeight: typography.semibold,
+  },
+  mapErrorText: {
+    color: colors.muted,
+    fontSize: typography.bodySm,
+    lineHeight: 21,
+  },
+  mapErrorActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
   },
   sheet: {
     marginTop: -24,
@@ -953,7 +1232,7 @@ const styles = StyleSheet.create({
   },
   suggestionItem: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing.sm,
     borderRadius: radii.lg,
     backgroundColor: colors.surfaceTint,
@@ -965,10 +1244,18 @@ const styles = StyleSheet.create({
   suggestionItemPressed: {
     backgroundColor: colors.accentSoft,
   },
-  suggestionText: {
+  suggestionCopy: {
     flex: 1,
+    gap: 2,
+  },
+  suggestionText: {
     color: colors.text,
     fontSize: typography.bodySm,
     lineHeight: 19,
+  },
+  suggestionSubtitle: {
+    color: colors.muted,
+    fontSize: typography.caption,
+    lineHeight: 17,
   },
 });

@@ -3,7 +3,8 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://sc-delivery.ru/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://sc-delivery.ru/api",
+        "EXPO_PUBLIC_YANDEX_MAPS_API_KEY": "1aed26db-4993-4046-b16e-7cb6ceb0f884"
       },
       "android": {
         "buildType": "apk"
@@ -11,7 +12,8 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://sc-delivery.ru/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://sc-delivery.ru/api",
+        "EXPO_PUBLIC_YANDEX_MAPS_API_KEY": "1aed26db-4993-4046-b16e-7cb6ceb0f884"
       }
     }
   }

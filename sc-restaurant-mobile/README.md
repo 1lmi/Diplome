@@ -46,3 +46,14 @@ npm run export:android
 - `@react-native-async-storage/async-storage`
 - `react-native-reanimated`
 - `moti`
+
+## EAS Android build
+
+For Android APK builds with the address map screen, use these environment variables:
+
+- `EXPO_PUBLIC_API_BASE_URL=https://sc-delivery.ru/api`
+- `EXPO_PUBLIC_YANDEX_MAPS_API_KEY=1aed26db-4993-4046-b16e-7cb6ceb0f884`
+
+The mobile address screen now uses a hosted Yandex Maps wrapper page:
+
+- `https://sc-delivery.ru/mobile-yandex-map.html`

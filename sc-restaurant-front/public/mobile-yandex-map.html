@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
+    />
+    <title>SC restaurant map</title>
+    <style>
+      html,
+      body,
+      #map {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        overflow: hidden;
+        background: #f3f5f7;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #status {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        color: #667085;
+        font-size: 14px;
+        line-height: 1.5;
+        text-align: center;
+        background: #f3f5f7;
+        z-index: 10;
+      }
+
+      #status[data-hidden="true"] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="status">Загружаем карту…</div>
+
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const apiKey = params.get("apikey") || "";
+        const initialLat = Number(params.get("lat")) || 52.7189;
+        const initialLng = Number(params.get("lng")) || 58.6654;
+        const initialZoom = Number(params.get("zoom")) || 16;
+
+        const statusNode = document.getElementById("status");
+        let map = null;
+        let reverseSeq = 0;
+        let searchSeq = 0;
+
+        function showStatus(message) {
+          statusNode.textContent = message;
+          statusNode.dataset.hidden = "false";
+        }
+
+        function hideStatus() {
+          statusNode.dataset.hidden = "true";
+        }
+
+        function send(type, payload) {
+          if (!window.ReactNativeWebView || !window.ReactNativeWebView.postMessage) {
+            return;
+          }
+
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({
+              type,
+              ...(payload || {}),
+            })
+          );
+        }
+
+        function compactAddress(value) {
+          const parts = String(value || "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .filter(
+              (item) =>
+                !/^Россия$/i.test(item) &&
+                !/^Республика Башкортостан$/i.test(item) &&
+                !/^Башкортостан$/i.test(item)
+            );
+
+          if (!parts.length) {
+            return "";
+          }
+
+          return parts.length > 3 ? parts.slice(-3).join(", ") : parts.join(", ");
+        }
+
+        function normalizeAddressQuery(value) {
+          return String(value || "")
+            .replace(/\s+/g, " ")
+            .replace(/\s*,\s*/g, ", ")
+            .trim();
+        }
+
+        function buildAddressQueries(value) {
+          const normalized = normalizeAddressQuery(value);
+          const queries = new Set();
+
+          if (!normalized) {
+            return [];
+          }
+
+          queries.add(normalized);
+
+          if (!normalized.includes(",")) {
+            queries.add(normalized.replace(/\s+/g, ", "));
+          }
+
+          const hasStreetType =
+            /\b(улица|ул\.|проспект|пр-т|переулок|пер\.|бульвар|бул\.|площадь|пл\.|микрорайон|мкр\.|шоссе)\b/i.test(
+              normalized
+            );
+
+          const hasSibay = /\bсибай\b/i.test(normalized);
+
+          if (!hasStreetType) {
+            if (hasSibay) {
+              const withStreet = normalized.replace(/\b(сибай)\b/i, "$1, улица");
+              queries.add(normalizeAddressQuery(withStreet));
+            } else {
+              queries.add(`Сибай, ${normalized}`);
+              queries.add(`Сибай, улица ${normalized}`);
+            }
+          } else if (!hasSibay) {
+            queries.add(`Сибай, ${normalized}`);
+          }
+
+          return Array.from(queries).filter(Boolean);
+        }
+
+        function parseGeoObject(geoObject) {
+          const coords = geoObject.geometry.getCoordinates();
+          const meta = geoObject.properties.get("metaDataProperty.GeocoderMetaData") || {};
+          const rawText =
+            (typeof geoObject.getAddressLine === "function" && geoObject.getAddressLine()) ||
+            meta.text ||
+            "";
+          const name = geoObject.properties.get("name") || "";
+          const description = geoObject.properties.get("description") || "";
+          const address = compactAddress(rawText || [description, name].filter(Boolean).join(", "));
+          const subtitle =
+            rawText && compactAddress(rawText) !== rawText
+              ? rawText
+              : description || "";
+
+          return {
+            key: `${coords[0]}:${coords[1]}:${address}`,
+            address,
+            subtitle,
+            lat: coords[0],
+            lng: coords[1],
+          };
+        }
+
+        function sendCameraChanged() {
+          if (!map) {
+            return;
+          }
+
+          const center = map.getCenter();
+          send("cameraChanged", {
+            lat: center[0],
+            lng: center[1],
+            zoom: map.getZoom(),
+          });
+        }
+
+        function resolveAddress(coords) {
+          if (!window.ymaps) {
+            return;
+          }
+
+          const requestId = ++reverseSeq;
+
+          window.ymaps
+            .geocode(coords, { kind: "house", results: 1 })
+            .then((result) => {
+              if (requestId !== reverseSeq || !map) {
+                return;
+              }
+
+              const first = result.geoObjects.get(0);
+              const parsed = first ? parseGeoObject(first) : null;
+              send("resolvedAddress", {
+                address: parsed?.address || "",
+                lat: coords[0],
+                lng: coords[1],
+                zoom: map.getZoom(),
+              });
+            })
+            .catch(() => {
+              send("error", {
+                message: "Не удалось определить адрес по карте.",
+              });
+            });
+        }
+
+        function runSearch(query, requestId) {
+          if (!window.ymaps) {
+            send("searchResults", { requestId, items: [] });
+            return;
+          }
+
+          const queries = buildAddressQueries(query);
+          const currentSearchId = ++searchSeq;
+
+          if (!queries.length) {
+            send("searchResults", { requestId, items: [] });
+            return;
+          }
+
+          Promise.all(queries.map((item) => window.ymaps.geocode(item, { results: 8 })))
+            .then((responses) => {
+              if (currentSearchId !== searchSeq) {
+                return;
+              }
+
+              const unique = new Map();
+              responses.forEach((response) => {
+                response.geoObjects.each((geoObject) => {
+                  const parsed = parseGeoObject(geoObject);
+                  const dedupeKey = `${parsed.address.toLowerCase()}::${parsed.lat.toFixed(6)}::${parsed.lng.toFixed(6)}`;
+                  if (!unique.has(dedupeKey) && parsed.address) {
+                    unique.set(dedupeKey, parsed);
+                  }
+                });
+              });
+
+              send("searchResults", {
+                requestId,
+                items: Array.from(unique.values()).slice(0, 8),
+              });
+            })
+            .catch(() => {
+              if (currentSearchId !== searchSeq) {
+                return;
+              }
+
+              send("searchResults", { requestId, items: [] });
+            });
+        }
+
+        function moveTo(payload) {
+          if (!map) {
+            return;
+          }
+
+          const nextZoom =
+            payload && payload.preserveZoom
+              ? map.getZoom()
+              : typeof payload.zoom === "number"
+                ? payload.zoom
+                : map.getZoom();
+
+          map.setCenter([payload.lat, payload.lng], nextZoom, {
+            duration: 180,
+          });
+        }
+
+        window.__SCMobileMapReceive = function (payload) {
+          if (!map || !payload || typeof payload !== "object") {
+            return;
+          }
+
+          if (payload.type === "moveTo") {
+            moveTo(payload);
+            return;
+          }
+
+          if (payload.type === "selectSearchResult") {
+            moveTo(payload);
+            return;
+          }
+
+          if (payload.type === "search") {
+            runSearch(payload.query || "", payload.requestId || "");
+          }
+        };
+
+        function initMap() {
+          window.ymaps.ready(() => {
+            map = new window.ymaps.Map(
+              "map",
+              {
+                center: [initialLat, initialLng],
+                zoom: initialZoom,
+                controls: [],
+              },
+              {
+                suppressMapOpenBlock: true,
+                yandexMapDisablePoiInteractivity: true,
+              }
+            );
+
+            map.behaviors.enable("drag");
+            map.behaviors.enable("multiTouch");
+            map.behaviors.enable("dblClickZoom");
+            map.behaviors.enable("pinchZoom");
+
+            map.events.add("actionend", () => {
+              const center = map.getCenter();
+              sendCameraChanged();
+              resolveAddress(center);
+            });
+
+            hideStatus();
+            send("ready");
+            sendCameraChanged();
+            resolveAddress(map.getCenter());
+          });
+        }
+
+        function loadApi() {
+          if (!apiKey) {
+            showStatus("Не настроен ключ Яндекс Карт.");
+            send("error", { message: "Не настроен ключ Яндекс Карт." });
+            return;
+          }
+
+          const script = document.createElement("script");
+          script.src =
+            "https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=" +
+            encodeURIComponent(apiKey);
+          script.async = true;
+          script.onload = initMap;
+          script.onerror = function () {
+            showStatus("Не удалось загрузить Яндекс Карту.");
+            send("error", { message: "Не удалось загрузить Яндекс Карту." });
+          };
+          document.head.appendChild(script);
+        }
+
+        loadApi();
+      })();
+    </script>
+  </body>
+</html>
