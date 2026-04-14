@@ -6,7 +6,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -509,7 +508,6 @@ export function AddressFormScreen({
 
   const submitLabel = isEditing ? "Сохранить" : "Доставить сюда";
   const submitDisabled = loading || !selectedAddress.trim();
-
   if (!user) return null;
 
   return (
@@ -656,15 +654,12 @@ export function AddressFormScreen({
             visible
           >
             <View style={styles.searchOverlay}>
-            <KeyboardAvoidingView
-              style={styles.searchOverlayFlex}
-              behavior={Platform.OS === "ios" ? "padding" : "height"}
-              keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
-            >
               <View
                 style={[
                   styles.searchOverlayContent,
-                  { paddingTop: insets.top + spacing.md },
+                  {
+                    paddingTop: insets.top + spacing.md,
+                  },
                 ]}
               >
                 <View style={styles.searchHeader}>
@@ -733,7 +728,6 @@ export function AddressFormScreen({
                   <Text style={styles.searchHint}>Попробуйте уточнить запрос.</Text>
                 ) : null}
               </View>
-            </KeyboardAvoidingView>
             </View>
           </Modal>
         ) : null}
@@ -923,13 +917,10 @@ const styles = StyleSheet.create({
   searchOverlay: {
     flex: 1,
     backgroundColor: colors.surface,
-  },
-  searchOverlayFlex: {
-    flex: 1,
+    paddingHorizontal: spacing.lg,
   },
   searchOverlayContent: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
   searchHeader: {
