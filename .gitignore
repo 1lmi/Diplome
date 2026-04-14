@@ -28,6 +28,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!sc-restaurant-mobile/src/lib/
+!sc-restaurant-mobile/src/lib/**
 lib64/
 parts/
 sdist/
