@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -13,6 +14,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -191,12 +193,19 @@ export function AddressFormScreen({
     process.env.EXPO_PUBLIC_YANDEX_MAPS_API_KEY?.trim() || DEFAULT_YANDEX_MAPS_API_KEY;
 
   const webViewRef = useRef<WebView | null>(null);
+  const sheetScrollRef = useRef<ScrollView | null>(null);
   const mapCameraRef = useRef<MapCamera>(DEFAULT_CAMERA);
   const commandQueueRef = useRef<MapCommand[]>([]);
   const bootstrapAddressQueryRef = useRef<string | null>(null);
   const activeSearchRequestIdRef = useRef<string | null>(null);
   const activeBootstrapRequestIdRef = useRef<string | null>(null);
   const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fieldOffsetsRef = useRef<Record<keyof DetailsState, number>>({
+    entrance: 0,
+    intercom: 0,
+    floor: 0,
+    apartment: 0,
+  });
 
   const addressesQuery = useQuery({
     queryKey: ["addresses"],
@@ -225,6 +234,7 @@ export function AddressFormScreen({
   const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const mapSource = useMemo(
     () => buildMapSourceUri(mapSourceCamera, yandexMapsApiKey, mapReloadToken),
@@ -313,10 +323,22 @@ export function AddressFormScreen({
   }, [user]);
 
   useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
     return () => {
       if (suggestionTimer.current) {
         clearTimeout(suggestionTimer.current);
       }
+      showSubscription.remove();
+      hideSubscription.remove();
     };
   }, []);
 
@@ -522,6 +544,25 @@ export function AddressFormScreen({
   const updateDetail = (key: keyof DetailsState, value: string) => {
     setDetails((current) => ({ ...current, [key]: value }));
   };
+
+  const registerFieldOffset =
+    (key: keyof DetailsState) =>
+    (event: LayoutChangeEvent) => {
+      fieldOffsetsRef.current[key] = event.nativeEvent.layout.y;
+    };
+
+  const focusField =
+    (key: keyof DetailsState) =>
+    () => {
+      const nextY = Math.max(0, fieldOffsetsRef.current[key] - spacing.lg);
+
+      setTimeout(() => {
+        sheetScrollRef.current?.scrollTo({
+          y: nextY,
+          animated: true,
+        });
+      }, 120);
+    };
 
   const handleSave = async () => {
     const normalizedBase = selectedAddress.trim();
@@ -780,8 +821,20 @@ export function AddressFormScreen({
           ) : null}
         </View>
 
-        <View style={styles.sheet}>
+        <View
+          style={[
+            styles.sheet,
+            keyboardHeight > 0
+              ? {
+                  marginBottom: Math.max(0, keyboardHeight - insets.bottom),
+                }
+              : null,
+          ]}
+        >
           <ScrollView
+            ref={(instance) => {
+              sheetScrollRef.current = instance;
+            }}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.sheetContent}
             showsVerticalScrollIndicator={false}
@@ -831,33 +884,45 @@ export function AddressFormScreen({
             </View>
 
             <View style={styles.detailGrid}>
-              <TextField
-                containerStyle={styles.detailField}
-                placeholder="Подъезд"
-                value={details.entrance}
-                onChangeText={(value) => updateDetail("entrance", value)}
-              />
-              <TextField
-                containerStyle={styles.detailField}
-                placeholder="Домофон"
-                value={details.intercom}
-                onChangeText={(value) => updateDetail("intercom", value)}
-              />
+              <View onLayout={registerFieldOffset("entrance")} style={styles.detailField}>
+                <TextField
+                  containerStyle={styles.detailFieldInner}
+                  onFocus={focusField("entrance")}
+                  placeholder="Подъезд"
+                  value={details.entrance}
+                  onChangeText={(value) => updateDetail("entrance", value)}
+                />
+              </View>
+              <View onLayout={registerFieldOffset("intercom")} style={styles.detailField}>
+                <TextField
+                  containerStyle={styles.detailFieldInner}
+                  onFocus={focusField("intercom")}
+                  placeholder="Домофон"
+                  value={details.intercom}
+                  onChangeText={(value) => updateDetail("intercom", value)}
+                />
+              </View>
             </View>
 
             <View style={styles.detailGrid}>
-              <TextField
-                containerStyle={styles.detailField}
-                placeholder="Этаж"
-                value={details.floor}
-                onChangeText={(value) => updateDetail("floor", value)}
-              />
-              <TextField
-                containerStyle={styles.detailField}
-                placeholder="Квартира"
-                value={details.apartment}
-                onChangeText={(value) => updateDetail("apartment", value)}
-              />
+              <View onLayout={registerFieldOffset("floor")} style={styles.detailField}>
+                <TextField
+                  containerStyle={styles.detailFieldInner}
+                  onFocus={focusField("floor")}
+                  placeholder="Этаж"
+                  value={details.floor}
+                  onChangeText={(value) => updateDetail("floor", value)}
+                />
+              </View>
+              <View onLayout={registerFieldOffset("apartment")} style={styles.detailField}>
+                <TextField
+                  containerStyle={styles.detailFieldInner}
+                  onFocus={focusField("apartment")}
+                  placeholder="Квартира"
+                  value={details.apartment}
+                  onChangeText={(value) => updateDetail("apartment", value)}
+                />
+              </View>
             </View>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -872,7 +937,10 @@ export function AddressFormScreen({
               style={[
                 styles.footer,
                 {
-                  paddingBottom: Math.max(insets.bottom, spacing.lg),
+                  paddingBottom: Math.max(
+                    insets.bottom,
+                    keyboardHeight > 0 ? spacing.sm : spacing.lg
+                  ),
                 },
               ]}
             >
@@ -896,6 +964,7 @@ export function AddressFormScreen({
                   styles.searchOverlayContent,
                   {
                     paddingTop: insets.top + spacing.md,
+                    paddingBottom: Math.max(insets.bottom, keyboardHeight),
                   },
                 ]}
               >
@@ -1173,6 +1242,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   detailField: {
+    flex: 1,
+  },
+  detailFieldInner: {
     flex: 1,
   },
   error: {
