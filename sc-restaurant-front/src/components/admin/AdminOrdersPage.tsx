@@ -53,6 +53,14 @@ const formatOrderAge = (value: string) => {
   })} · ${formatTime(value)}`;
 };
 
+const formatReadyAge = (value?: string | null) => {
+  if (!value) return null;
+  const readyAt = new Date(value).getTime();
+  const diffMinutes = Math.max(0, Math.floor((Date.now() - readyAt) / 60000));
+  if (diffMinutes < 60) return `готов ${Math.max(diffMinutes, 1)} мин`;
+  return `готов ${Math.floor(diffMinutes / 60)} ч`;
+};
+
 const formatFullDateTime = (value: string) =>
   new Date(value).toLocaleString("ru-RU", {
     day: "numeric",
@@ -156,6 +164,12 @@ const AdminOrdersPage: React.FC<Props> = ({
       }
     }
 
+    lanes.ready.sort((a, b) => {
+      const timeA = new Date(a.ready_at || a.created_at).getTime();
+      const timeB = new Date(b.ready_at || b.created_at).getTime();
+      return timeA - timeB;
+    });
+
     return { lanes, other };
   }, [filteredOrders, isHistoryView]);
 
@@ -190,9 +204,13 @@ const AdminOrdersPage: React.FC<Props> = ({
 
   const renderCurrentOrderCard = (order: AdminOrder) => {
     const nextStatus = getNextStatus(order);
-    const nextActionLabel = getNextActionLabel(order);
+    const nextActionLabel =
+      order.status.toLowerCase() === "on_way" && nextStatus === "done"
+        ? "Завершить вручную"
+        : getNextActionLabel(order);
     const canCancelOrder = canCancel(order);
     const serviceMeta = getServiceMeta(order);
+    const readyAge = order.status.toLowerCase() === "ready" ? formatReadyAge(order.ready_at) : null;
     const isPending = pendingAction?.orderId === order.id;
     const isBusy = submittingOrderId === order.id;
     const pendingLabel =
@@ -231,6 +249,13 @@ const AdminOrdersPage: React.FC<Props> = ({
           <span className="current-order-card__customer-phone">{order.customer_phone || "—"}</span>
         </div>
 
+        {order.courier_name ? (
+          <div className="current-order-card__service">
+            Курьер: {order.courier_name}
+            {order.courier_phone ? ` · ${order.courier_phone}` : ""}
+          </div>
+        ) : null}
+
         <div className="current-order-card__facts">
           <div className="current-order-card__fact">
             <span>Тип</span>
@@ -243,6 +268,7 @@ const AdminOrdersPage: React.FC<Props> = ({
         </div>
 
         {serviceMeta ? <div className="current-order-card__service">{serviceMeta}</div> : null}
+        {readyAge ? <div className="current-order-card__service">{readyAge}</div> : null}
 
         <div className="current-order-card__items-box">
           <div className="current-order-card__items-label">Состав</div>

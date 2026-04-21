@@ -434,6 +434,39 @@ const OrderDetailsPage: React.FC = () => {
                 <strong>{order.comment}</strong>
               </div>
             ) : null}
+            {order.courier_name ? (
+              <div className="order-page__info">
+                <span className="muted">Курьер</span>
+                <strong>
+                  {order.courier_name}
+                  {order.courier_phone ? ` · ${order.courier_phone}` : ""}
+                </strong>
+              </div>
+            ) : null}
+            {order.ready_at ? (
+              <div className="order-page__info">
+                <span className="muted">Готов с</span>
+                <strong>{formatDateTime(order.ready_at)}</strong>
+              </div>
+            ) : null}
+            {order.claimed_at ? (
+              <div className="order-page__info">
+                <span className="muted">Взят курьером</span>
+                <strong>{formatDateTime(order.claimed_at)}</strong>
+              </div>
+            ) : null}
+            {order.started_delivery_at ? (
+              <div className="order-page__info">
+                <span className="muted">Доставка начата</span>
+                <strong>{formatDateTime(order.started_delivery_at)}</strong>
+              </div>
+            ) : null}
+            {order.delivered_at ? (
+              <div className="order-page__info">
+                <span className="muted">Доставлено</span>
+                <strong>{formatDateTime(order.delivered_at)}</strong>
+              </div>
+            ) : null}
           </div>
         </article>
       </div>

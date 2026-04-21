@@ -1,0 +1,55 @@
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect } from 'react';
+import 'react-native-reanimated';
+
+import { AppProviders } from '@/src/providers/AppProviders';
+import { useAuthStore } from '@/src/store/auth-store';
+import { colors } from '@/src/theme/tokens';
+
+void SplashScreen.preventAutoHideAsync();
+
+function RootNavigator() {
+  const hydrated = useAuthStore((state) => state.hydrated);
+  const bootstrap = useAuthStore((state) => state.bootstrap);
+
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
+
+  useEffect(() => {
+    if (hydrated) {
+      void SplashScreen.hideAsync();
+    }
+  }, [hydrated]);
+
+  if (!hydrated) return null;
+
+  return (
+    <>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'simple_push',
+          contentStyle: { backgroundColor: colors.bg },
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="auth/sign-in" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="orders/index" />
+        <Stack.Screen name="orders/checklist/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="orders/delivery/[id]" options={{ animation: 'slide_from_right' }} />
+      </Stack>
+      <StatusBar style="dark" />
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AppProviders>
+      <RootNavigator />
+    </AppProviders>
+  );
+}

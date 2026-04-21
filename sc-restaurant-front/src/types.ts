@@ -147,8 +147,24 @@ export interface Order {
   payment_method?: "cash" | "card" | null;
   cash_change_from?: number | null;
   do_not_call?: boolean | null;
+  courier_id?: number | null;
+  courier_name?: string | null;
+  courier_phone?: string | null;
+  ready_at?: string | null;
+  claimed_at?: string | null;
+  started_delivery_at?: string | null;
+  delivered_at?: string | null;
   items: OrderLine[];
   history: OrderHistoryItem[];
+}
+
+export interface CourierProfile {
+  display_name: string;
+  phone?: string | null;
+  is_active: boolean;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface User {
@@ -161,6 +177,8 @@ export interface User {
   birth_date?: string | null;
   gender?: string | null;
   is_admin: boolean;
+  is_courier: boolean;
+  courier_profile?: CourierProfile | null;
 }
 
 export interface UserAddress {
@@ -191,6 +209,20 @@ export interface AuthResponse {
 export interface StatusOption {
   code: string;
   name: string;
+}
+
+export interface AdminCourier {
+  id: number;
+  login: string;
+  display_name: string;
+  phone?: string | null;
+  is_active: boolean;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  active_order_id?: number | null;
+  active_order_status?: string | null;
+  active_order_status_name?: string | null;
 }
 
 export interface SettingsMap {

@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 DB_PATH = Path("sc-restaurant.db")
+SCHEMA_PATH = Path("schema.sql")
 UPLOAD_DIR = Path("uploads")
 TOKEN_TTL_DAYS = 30
 DEFAULT_IMAGE_NAME = "default.png"
@@ -230,6 +231,23 @@ def get_allowed_status_transitions(current_status: Optional[str], delivery_metho
     return {"canceled"}
 
 
+def get_admin_allowed_status_transitions(
+    current_status: Optional[str], delivery_method: str
+) -> set[str]:
+    normalized = (current_status or "").strip().lower()
+    if normalized in TERMINAL_ORDER_STATUSES:
+        return set()
+    if normalized == "new":
+        return {"cooking", "canceled"}
+    if normalized == "cooking":
+        return {"ready", "canceled"}
+    if normalized == "ready":
+        return {"done", "canceled"} if delivery_method == "pickup" else {"canceled"}
+    if normalized == "on_way":
+        return {"done", "canceled"}
+    return {"canceled"}
+
+
 def ensure_sort_order(conn: sqlite3.Connection, table: str) -> None:
     rows = conn.execute(f"SELECT id, sort_order FROM {table} ORDER BY id").fetchall()
     if rows and all(r["sort_order"] == 0 for r in rows):
@@ -245,6 +263,16 @@ def apply_migrations() -> None:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
 
+    required_tables = {"categories", "orders", "order_statuses", "products", "product_sizes"}
+    existing_tables = {
+        row["name"]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    if not required_tables.issubset(existing_tables):
+        conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -258,6 +286,7 @@ def apply_migrations() -> None:
             gender TEXT,
             password_hash TEXT NOT NULL,
             is_admin INTEGER NOT NULL DEFAULT 0,
+            is_courier INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         """
@@ -284,6 +313,21 @@ def apply_migrations() -> None:
             address TEXT NOT NULL,
             is_default INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS courier_profiles (
+            user_id INTEGER PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            phone TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            notes TEXT,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
         """
@@ -346,11 +390,17 @@ def apply_migrations() -> None:
     ensure_column(conn, "orders", "payment_method", "TEXT")
     ensure_column(conn, "orders", "cash_change_from", "INTEGER")
     ensure_column(conn, "orders", "do_not_call", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "orders", "courier_id", "INTEGER REFERENCES users(id)")
+    ensure_column(conn, "orders", "ready_at", "DATETIME")
+    ensure_column(conn, "orders", "claimed_at", "DATETIME")
+    ensure_column(conn, "orders", "started_delivery_at", "DATETIME")
+    ensure_column(conn, "orders", "delivered_at", "DATETIME")
     ensure_column(conn, "users", "first_name", "TEXT")
     ensure_column(conn, "users", "last_name", "TEXT")
     ensure_column(conn, "users", "login", "TEXT")
     ensure_column(conn, "users", "birth_date", "TEXT")
     ensure_column(conn, "users", "gender", "TEXT")
+    ensure_column(conn, "users", "is_courier", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "sizes", "amount", "INTEGER")
     ensure_column(conn, "sizes", "unit", "TEXT")
     conn.execute(
@@ -395,6 +445,12 @@ def apply_migrations() -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_push_devices_user_id ON push_devices(user_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_orders_courier_id ON orders(courier_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_orders_ready_at ON orders(ready_at)"
     )
     conn.execute(
         """
@@ -585,6 +641,31 @@ def require_admin(user: sqlite3.Row = Depends(get_current_user)) -> sqlite3.Row:
     return user
 
 
+def fetch_courier_profile_row(
+    db: sqlite3.Connection, user_id: int
+) -> Optional[sqlite3.Row]:
+    return db.execute(
+        """
+        SELECT user_id, display_name, phone, is_active, notes, created_at, updated_at
+        FROM courier_profiles
+        WHERE user_id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+
+
+def require_courier(
+    user: sqlite3.Row = Depends(get_current_user),
+    db: sqlite3.Connection = Depends(get_db),
+) -> sqlite3.Row:
+    if not bool(user["is_courier"]):
+        raise HTTPException(status_code=403, detail="Требуется доступ курьера")
+    profile = fetch_courier_profile_row(db, user["id"])
+    if profile is None or not bool(profile["is_active"]):
+        raise HTTPException(status_code=403, detail="Курьерский доступ отключён")
+    return user
+
+
 # --- Pydantic models ---------------------------------------------------------
 
 class Category(BaseModel):
@@ -667,6 +748,15 @@ class OrderHistoryItem(BaseModel):
     comment: Optional[str] = None
 
 
+class CourierProfileOut(BaseModel):
+    display_name: str
+    phone: Optional[str] = None
+    is_active: bool
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class OrderOut(BaseModel):
     id: int
     status: str
@@ -682,6 +772,13 @@ class OrderOut(BaseModel):
     payment_method: Optional[str]
     cash_change_from: Optional[int]
     do_not_call: bool = False
+    courier_id: Optional[int] = None
+    courier_name: Optional[str] = None
+    courier_phone: Optional[str] = None
+    ready_at: Optional[datetime] = None
+    claimed_at: Optional[datetime] = None
+    started_delivery_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
     items: List[OrderItemOut]
     history: List[OrderHistoryItem] = []
 
@@ -720,6 +817,8 @@ class UserOut(BaseModel):
     birth_date: Optional[str] = None
     gender: Optional[str] = None
     is_admin: bool
+    is_courier: bool
+    courier_profile: Optional[CourierProfileOut] = None
 
 
 class AuthResponse(BaseModel):
@@ -844,6 +943,42 @@ class OrderShort(BaseModel):
     customer_name: Optional[str]
     customer_phone: Optional[str]
 
+
+class AdminCourierCreate(BaseModel):
+    display_name: str = Field(min_length=1)
+    phone: str = Field(min_length=1)
+    password: str = Field(min_length=6)
+    is_active: bool = True
+    notes: Optional[str] = None
+
+
+class AdminCourierUpdate(BaseModel):
+    display_name: Optional[str] = None
+    phone: Optional[str] = None
+    password: Optional[str] = Field(default=None, min_length=6)
+    is_active: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class AdminCourierOut(BaseModel):
+    id: int
+    login: str
+    display_name: str
+    phone: Optional[str] = None
+    is_active: bool
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    active_order_id: Optional[int] = None
+    active_order_status: Optional[str] = None
+    active_order_status_name: Optional[str] = None
+
+
+class CourierBoardOut(BaseModel):
+    cooking: List[OrderOut]
+    ready: List[OrderOut]
+    my_active: Optional[OrderOut] = None
+
 # --- helpers -----------------------------------------------------------------
 
 def serialize_user(row: sqlite3.Row) -> Dict[str, Any]:
@@ -871,7 +1006,29 @@ def serialize_user(row: sqlite3.Row) -> Dict[str, Any]:
         "birth_date": birth_date,
         "gender": gender,
         "is_admin": bool(row["is_admin"]),
+        "is_courier": bool(row["is_courier"]),
     }
+
+
+def serialize_courier_profile(row: sqlite3.Row) -> CourierProfileOut:
+    return CourierProfileOut(
+        display_name=(row["display_name"] or "").strip(),
+        phone=normalize_optional_text(row["phone"]),
+        is_active=bool(row["is_active"]),
+        notes=normalize_optional_text(row["notes"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+    )
+
+
+def build_user_out(db: sqlite3.Connection, row: sqlite3.Row) -> UserOut:
+    data = serialize_user(row)
+    courier_profile = None
+    if data["is_courier"]:
+        profile_row = fetch_courier_profile_row(db, row["id"])
+        if profile_row is not None:
+            courier_profile = serialize_courier_profile(profile_row)
+    return UserOut(**data, courier_profile=courier_profile)
 
 
 def normalize_optional_text(value: Optional[str]) -> Optional[str]:
@@ -1189,6 +1346,53 @@ def record_status_history(
     )
 
 
+def get_status_row_or_500(db: sqlite3.Connection, code: str) -> sqlite3.Row:
+    row = db.execute(
+        "SELECT id, code, name FROM order_statuses WHERE code = ?",
+        (code,),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=500, detail=f"Статус {code} не найден")
+    return row
+
+
+def get_active_courier_order_id(
+    db: sqlite3.Connection, courier_id: int
+) -> Optional[int]:
+    row = db.execute(
+        """
+        SELECT o.id
+        FROM orders o
+        JOIN order_statuses os ON os.id = o.status_id
+        WHERE o.courier_id = ?
+          AND os.code IN ('ready', 'on_way')
+        ORDER BY
+            CASE os.code
+                WHEN 'on_way' THEN 1
+                WHEN 'ready' THEN 2
+                ELSE 999
+            END,
+            COALESCE(o.started_delivery_at, o.claimed_at, o.created_at) ASC,
+            o.id ASC
+        LIMIT 1
+        """,
+        (courier_id,),
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def is_delivery_scope_clause() -> str:
+    return """
+        (
+            LOWER(COALESCE(o.delivery_method, '')) = 'delivery'
+            OR (
+                TRIM(COALESCE(o.delivery_method, '')) = ''
+                AND TRIM(COALESCE(c.address, '')) != ''
+            )
+        )
+    """
+
+
 def fetch_order(
     db: sqlite3.Connection,
     order_id: int,
@@ -1202,6 +1406,11 @@ def fetch_order(
                o.total_price,
                o.created_at,
                o.user_id,
+               o.courier_id,
+               o.ready_at,
+               o.claimed_at,
+               o.started_delivery_at,
+               o.delivered_at,
                o.delivery_method,
                o.delivery_time,
                o.payment_method,
@@ -1211,10 +1420,13 @@ def fetch_order(
                os.name AS status_name,
                c.name  AS customer_name,
                c.phone AS customer_phone,
-               c.address AS customer_address
+               c.address AS customer_address,
+               cp.display_name AS courier_name,
+               cp.phone AS courier_phone
         FROM orders o
         JOIN order_statuses os ON os.id = o.status_id
         LEFT JOIN customers c ON c.id = o.customer_id
+        LEFT JOIN courier_profiles cp ON cp.user_id = o.courier_id
         WHERE o.id = ?
         """,
         (order_id,),
@@ -1307,6 +1519,15 @@ def fetch_order(
         payment_method=payment_method,
         cash_change_from=row["cash_change_from"],
         do_not_call=bool(row["do_not_call"]),
+        courier_id=row["courier_id"],
+        courier_name=row["courier_name"],
+        courier_phone=row["courier_phone"],
+        ready_at=datetime.fromisoformat(row["ready_at"]) if row["ready_at"] else None,
+        claimed_at=datetime.fromisoformat(row["claimed_at"]) if row["claimed_at"] else None,
+        started_delivery_at=datetime.fromisoformat(row["started_delivery_at"])
+        if row["started_delivery_at"]
+        else None,
+        delivered_at=datetime.fromisoformat(row["delivered_at"]) if row["delivered_at"] else None,
         items=items,
         history=history,
     )
@@ -1900,14 +2121,25 @@ def update_order_status(
         order_row["delivery_method"], order_row["customer_address"]
     )
     allowed_statuses = get_allowed_status_transitions(order_row["status"], delivery_method)
+    allowed_statuses = get_admin_allowed_status_transitions(
+        order_row["status"], delivery_method
+    )
     if target_status not in allowed_statuses:
         raise HTTPException(status_code=400, detail="Недопустимый переход статуса")
     if status_row is None:
         raise HTTPException(status_code=400, detail="Неизвестный статус")
 
+    update_fields = ["status_id = ?"]
+    params: list[Any] = [status_row["id"]]
+    if target_status == "ready":
+        update_fields.append("ready_at = CURRENT_TIMESTAMP")
+    if target_status == "done" and order_row["status"] == "on_way":
+        update_fields.append("delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)")
+
+    params.append(order_id)
     cur.execute(
-        "UPDATE orders SET status_id = ? WHERE id = ?",
-        (status_row["id"], order_id),
+        f"UPDATE orders SET {', '.join(update_fields)} WHERE id = ?",
+        params,
     )
     if cur.rowcount == 0:
         raise HTTPException(status_code=404, detail="Заказ не найден")
@@ -1926,6 +2158,438 @@ def update_order_status(
     )
     _, out = fetch_order(db, order_id, request=request)
     return out
+
+
+def serialize_admin_courier(row: sqlite3.Row) -> AdminCourierOut:
+    return AdminCourierOut(
+        id=row["id"],
+        login=(row["login"] or row["phone"] or "").strip(),
+        display_name=(row["display_name"] or "").strip(),
+        phone=normalize_optional_text(row["phone"]),
+        is_active=bool(row["is_active"]),
+        notes=normalize_optional_text(row["notes"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        active_order_id=row["active_order_id"],
+        active_order_status=row["active_order_status"],
+        active_order_status_name=row["active_order_status_name"],
+    )
+
+
+@app.get("/admin/couriers", response_model=List[AdminCourierOut])
+def admin_couriers(
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    rows = db.execute(
+        """
+        SELECT
+            u.id,
+            u.login,
+            cp.display_name,
+            cp.phone,
+            cp.is_active,
+            cp.notes,
+            cp.created_at,
+            cp.updated_at,
+            ao.id AS active_order_id,
+            aos.code AS active_order_status,
+            aos.name AS active_order_status_name
+        FROM users u
+        JOIN courier_profiles cp ON cp.user_id = u.id
+        LEFT JOIN orders ao
+            ON ao.courier_id = u.id
+           AND ao.id = (
+                SELECT o2.id
+                FROM orders o2
+                JOIN order_statuses os2 ON os2.id = o2.status_id
+                WHERE o2.courier_id = u.id
+                  AND os2.code IN ('ready', 'on_way')
+                ORDER BY
+                    CASE os2.code
+                        WHEN 'on_way' THEN 1
+                        WHEN 'ready' THEN 2
+                        ELSE 999
+                    END,
+                    COALESCE(o2.started_delivery_at, o2.claimed_at, o2.created_at) ASC,
+                    o2.id ASC
+                LIMIT 1
+           )
+        LEFT JOIN order_statuses aos ON aos.id = ao.status_id
+        WHERE u.is_courier = 1
+        ORDER BY cp.is_active DESC, cp.display_name COLLATE NOCASE, u.id
+        """
+    ).fetchall()
+    return [serialize_admin_courier(row) for row in rows]
+
+
+@app.post("/admin/couriers", response_model=AdminCourierOut, status_code=201)
+def create_admin_courier(
+    body: AdminCourierCreate,
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    display_name = normalize_required_text(body.display_name, "Имя курьера обязательно")
+    phone = normalize_phone_login(body.phone)
+    validate_password_strength(body.password)
+    notes = normalize_optional_text(body.notes)
+
+    existing = db.execute(
+        "SELECT id FROM users WHERE login = ? OR phone = ?",
+        (phone, phone),
+    ).fetchone()
+    if existing is not None:
+        raise HTTPException(status_code=400, detail="Такой номер телефона уже занят.")
+
+    password_hash = hash_password(body.password)
+    cur = db.execute(
+        """
+        INSERT INTO users(
+            name, first_name, last_name, login, phone, password_hash, is_admin, is_courier
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 0, 1)
+        """,
+        (display_name, display_name, None, phone, phone, password_hash),
+    )
+    user_id = cur.lastrowid
+    db.execute(
+        """
+        INSERT INTO courier_profiles(user_id, display_name, phone, is_active, notes)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (user_id, display_name, phone, 1 if body.is_active else 0, notes),
+    )
+    db.commit()
+
+    row = db.execute(
+        """
+        SELECT
+            u.id,
+            u.login,
+            cp.display_name,
+            cp.phone,
+            cp.is_active,
+            cp.notes,
+            cp.created_at,
+            cp.updated_at,
+            NULL AS active_order_id,
+            NULL AS active_order_status,
+            NULL AS active_order_status_name
+        FROM users u
+        JOIN courier_profiles cp ON cp.user_id = u.id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    return serialize_admin_courier(row)
+
+
+@app.patch("/admin/couriers/{courier_id}", response_model=AdminCourierOut)
+def update_admin_courier(
+    courier_id: int,
+    body: AdminCourierUpdate,
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    courier = db.execute(
+        """
+        SELECT u.id, u.login, u.phone, u.is_courier, cp.user_id
+        FROM users u
+        LEFT JOIN courier_profiles cp ON cp.user_id = u.id
+        WHERE u.id = ?
+        """,
+        (courier_id,),
+    ).fetchone()
+    if courier is None or not bool(courier["is_courier"]) or courier["user_id"] is None:
+        raise HTTPException(status_code=404, detail="Курьер не найден")
+
+    fields_user: list[str] = []
+    user_params: list[Any] = []
+    fields_profile: list[str] = []
+    profile_params: list[Any] = []
+
+    if body.phone is not None:
+        phone = normalize_phone_login(body.phone)
+        existing = db.execute(
+            "SELECT id FROM users WHERE (login = ? OR phone = ?) AND id != ?",
+            (phone, phone, courier_id),
+        ).fetchone()
+        if existing is not None:
+            raise HTTPException(status_code=400, detail="Такой номер телефона уже занят.")
+        fields_user.extend(["login = ?", "phone = ?"])
+        user_params.extend([phone, phone])
+        fields_profile.append("phone = ?")
+        profile_params.append(phone)
+
+    if body.display_name is not None:
+        display_name = normalize_required_text(body.display_name, "Имя курьера обязательно")
+        fields_user.extend(["name = ?", "first_name = ?", "last_name = ?"])
+        user_params.extend([display_name, display_name, None])
+        fields_profile.append("display_name = ?")
+        profile_params.append(display_name)
+
+    if body.password is not None:
+        validate_password_strength(body.password)
+        fields_user.append("password_hash = ?")
+        user_params.append(hash_password(body.password))
+
+    if body.is_active is not None:
+        fields_profile.append("is_active = ?")
+        profile_params.append(1 if body.is_active else 0)
+
+    if body.notes is not None:
+        fields_profile.append("notes = ?")
+        profile_params.append(normalize_optional_text(body.notes))
+
+    if fields_user:
+        user_params.append(courier_id)
+        db.execute(
+            f"UPDATE users SET {', '.join(fields_user)} WHERE id = ?",
+            user_params,
+        )
+
+    if fields_profile:
+        profile_params.append(courier_id)
+        db.execute(
+            f"""
+            UPDATE courier_profiles
+            SET {', '.join(fields_profile)}, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+            """,
+            profile_params,
+        )
+
+    db.commit()
+
+    row = db.execute(
+        """
+        SELECT
+            u.id,
+            u.login,
+            cp.display_name,
+            cp.phone,
+            cp.is_active,
+            cp.notes,
+            cp.created_at,
+            cp.updated_at,
+            ao.id AS active_order_id,
+            aos.code AS active_order_status,
+            aos.name AS active_order_status_name
+        FROM users u
+        JOIN courier_profiles cp ON cp.user_id = u.id
+        LEFT JOIN orders ao
+            ON ao.courier_id = u.id
+           AND ao.id = (
+                SELECT o2.id
+                FROM orders o2
+                JOIN order_statuses os2 ON os2.id = o2.status_id
+                WHERE o2.courier_id = u.id
+                  AND os2.code IN ('ready', 'on_way')
+                ORDER BY
+                    CASE os2.code
+                        WHEN 'on_way' THEN 1
+                        WHEN 'ready' THEN 2
+                        ELSE 999
+                    END,
+                    COALESCE(o2.started_delivery_at, o2.claimed_at, o2.created_at) ASC,
+                    o2.id ASC
+                LIMIT 1
+           )
+        LEFT JOIN order_statuses aos ON aos.id = ao.status_id
+        WHERE u.id = ?
+        """,
+        (courier_id,),
+    ).fetchone()
+    return serialize_admin_courier(row)
+
+
+@app.get("/courier/orders", response_model=CourierBoardOut)
+def courier_orders_board(
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_courier),
+):
+    delivery_clause = is_delivery_scope_clause()
+    cooking_ids = [
+        row["id"]
+        for row in db.execute(
+            f"""
+            SELECT o.id
+            FROM orders o
+            JOIN order_statuses os ON os.id = o.status_id
+            LEFT JOIN customers c ON c.id = o.customer_id
+            WHERE os.code = 'cooking'
+              AND {delivery_clause}
+            ORDER BY o.created_at ASC, o.id ASC
+            """
+        ).fetchall()
+    ]
+    ready_ids = [
+        row["id"]
+        for row in db.execute(
+            f"""
+            SELECT o.id
+            FROM orders o
+            JOIN order_statuses os ON os.id = o.status_id
+            LEFT JOIN customers c ON c.id = o.customer_id
+            WHERE os.code = 'ready'
+              AND {delivery_clause}
+              AND o.courier_id IS NULL
+            ORDER BY COALESCE(o.ready_at, o.created_at) ASC, o.id ASC
+            """
+        ).fetchall()
+    ]
+    my_active_id = get_active_courier_order_id(db, current_user["id"])
+
+    cooking_orders = [fetch_order(db, order_id, request=request)[1] for order_id in cooking_ids]
+    ready_orders = [fetch_order(db, order_id, request=request)[1] for order_id in ready_ids]
+    my_active = fetch_order(db, my_active_id, request=request)[1] if my_active_id else None
+
+    return CourierBoardOut(cooking=cooking_orders, ready=ready_orders, my_active=my_active)
+
+
+@app.get("/courier/orders/{order_id}", response_model=OrderOut)
+def courier_order_details(
+    order_id: int,
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_courier),
+):
+    raw, out = fetch_order(db, order_id, request=request)
+    delivery_method = get_effective_delivery_method(
+        raw["delivery_method"], raw["customer_address"]
+    )
+    if delivery_method != "delivery":
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    if raw["status"] not in {"cooking", "ready", "on_way"}:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    if raw["courier_id"] not in (None, current_user["id"]):
+        raise HTTPException(status_code=403, detail="Заказ уже закреплён за другим курьером")
+    return out
+
+
+@app.post("/courier/orders/{order_id}/claim", response_model=OrderOut)
+def claim_courier_order(
+    order_id: int,
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_courier),
+):
+    active_order_id = get_active_courier_order_id(db, current_user["id"])
+    if active_order_id is not None and active_order_id != order_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Сначала завершите или начните доставку текущего заказа.",
+        )
+
+    ready_status = get_status_row_or_500(db, "ready")
+    raw, _ = fetch_order(db, order_id, request=request)
+    delivery_method = get_effective_delivery_method(
+        raw["delivery_method"], raw["customer_address"]
+    )
+    if delivery_method != "delivery" or raw["status"] != "ready":
+        raise HTTPException(status_code=400, detail="Заказ нельзя взять в доставку")
+    if raw["courier_id"] == current_user["id"]:
+        _, out = fetch_order(db, order_id, request=request)
+        return out
+
+    cur = db.execute(
+        """
+        UPDATE orders
+        SET courier_id = ?, claimed_at = COALESCE(claimed_at, CURRENT_TIMESTAMP)
+        WHERE id = ?
+          AND courier_id IS NULL
+          AND status_id = ?
+        """,
+        (current_user["id"], order_id, ready_status["id"]),
+    )
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Этот заказ уже взял другой курьер")
+
+    db.commit()
+    _, out = fetch_order(db, order_id, request=request)
+    return out
+
+
+@app.post("/courier/orders/{order_id}/start-delivery", response_model=OrderOut)
+def start_courier_delivery(
+    order_id: int,
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_courier),
+):
+    ready_status = get_status_row_or_500(db, "ready")
+    on_way_status = get_status_row_or_500(db, "on_way")
+    raw, _ = fetch_order(db, order_id, request=request)
+    delivery_method = get_effective_delivery_method(
+        raw["delivery_method"], raw["customer_address"]
+    )
+    if delivery_method != "delivery":
+        raise HTTPException(status_code=400, detail="Только delivery-заказ можно отправить в путь")
+    if raw["courier_id"] != current_user["id"] or raw["status"] != "ready":
+        raise HTTPException(status_code=400, detail="Заказ ещё не закреплён за этим курьером")
+
+    cur = db.execute(
+        """
+        UPDATE orders
+        SET status_id = ?,
+            started_delivery_at = COALESCE(started_delivery_at, CURRENT_TIMESTAMP)
+        WHERE id = ? AND courier_id = ? AND status_id = ?
+        """,
+        (on_way_status["id"], order_id, current_user["id"], ready_status["id"]),
+    )
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Не удалось начать доставку")
+
+    record_status_history(db, order_id, on_way_status["id"], "Курьер начал доставку")
+    db.commit()
+    notify_order_status_change(
+        db,
+        order_id,
+        raw["user_id"],
+        on_way_status["code"],
+        on_way_status["name"],
+    )
+    _, out = fetch_order(db, order_id, request=request)
+    return out
+
+
+@app.post("/courier/orders/{order_id}/complete", response_model=OrderOut)
+def complete_courier_delivery(
+    order_id: int,
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_courier),
+):
+    on_way_status = get_status_row_or_500(db, "on_way")
+    done_status = get_status_row_or_500(db, "done")
+    raw, _ = fetch_order(db, order_id, request=request)
+    if raw["courier_id"] != current_user["id"] or raw["status"] != "on_way":
+        raise HTTPException(status_code=400, detail="Заказ нельзя завершить")
+
+    cur = db.execute(
+        """
+        UPDATE orders
+        SET status_id = ?,
+            delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
+        WHERE id = ? AND courier_id = ? AND status_id = ?
+        """,
+        (done_status["id"], order_id, current_user["id"], on_way_status["id"]),
+    )
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Не удалось завершить заказ")
+
+    record_status_history(db, order_id, done_status["id"], "Курьер подтвердил доставку")
+    db.commit()
+    notify_order_status_change(
+        db,
+        order_id,
+        raw["user_id"],
+        done_status["code"],
+        done_status["name"],
+    )
+    _, out = fetch_order(db, order_id, request=request)
+    return out
 # --- Auth --------------------------------------------------------------------
 
 def issue_token(db: sqlite3.Connection, user: sqlite3.Row) -> AuthResponse:
@@ -1936,7 +2600,7 @@ def issue_token(db: sqlite3.Connection, user: sqlite3.Row) -> AuthResponse:
         (token, user["id"], expires_at),
     )
     db.commit()
-    return AuthResponse(token=token, user=UserOut(**serialize_user(user)))
+    return AuthResponse(token=token, user=build_user_out(db, user))
 
 
 @app.post("/auth/register", response_model=AuthResponse)
@@ -1987,8 +2651,15 @@ def login(body: LoginBody, db: sqlite3.Connection = Depends(get_db)):
     return issue_token(db, user)
 
 @app.get("/auth/me", response_model=UserOut)
-def me(current_user: sqlite3.Row = Depends(get_current_user)):
-    return UserOut(**serialize_user(current_user))
+def me(
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(get_current_user),
+):
+    if bool(current_user["is_courier"]):
+        profile = fetch_courier_profile_row(db, current_user["id"])
+        if profile is None or not bool(profile["is_active"]):
+            raise HTTPException(status_code=403, detail="Курьерский доступ отключён")
+    return build_user_out(db, current_user)
 
 
 @app.put("/me", response_model=UserOut)
@@ -2023,7 +2694,7 @@ def update_me(
         db.commit()
 
     updated = db.execute("SELECT * FROM users WHERE id = ?", (current_user["id"],)).fetchone()
-    return UserOut(**serialize_user(updated))
+    return build_user_out(db, updated)
 
 @app.post("/auth/logout")
 def logout(

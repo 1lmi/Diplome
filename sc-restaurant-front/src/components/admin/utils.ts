@@ -17,7 +17,7 @@ const statusLabels: Record<string, string> = {
   cooking: "Готовится",
   ready: "Готов",
   on_way: "В пути",
-  done: "Выдан",
+  done: "Завершён",
   canceled: "Отменён",
 };
 
@@ -63,7 +63,7 @@ export const getNextStatus = (
   if (normalized === "new") return "cooking";
   if (normalized === "cooking") return "ready";
   if (normalized === "ready") {
-    return getEffectiveDeliveryKind(order) === "delivery" ? "on_way" : "done";
+    return getEffectiveDeliveryKind(order) === "delivery" ? null : "done";
   }
   if (normalized === "on_way") return "done";
   return null;

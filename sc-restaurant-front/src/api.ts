@@ -1,5 +1,6 @@
 import type {
   AdminCategory,
+  AdminCourier,
   AdminOrder,
   AdminProduct,
   AuthResponse,
@@ -366,6 +367,39 @@ export const api = {
     return request("/admin/settings", {
       method: "PUT",
       body: JSON.stringify({ values }),
+    });
+  },
+
+  adminCouriers(): Promise<AdminCourier[]> {
+    return request("/admin/couriers");
+  },
+
+  createCourier(payload: {
+    display_name: string;
+    phone: string;
+    password: string;
+    is_active?: boolean;
+    notes?: string | null;
+  }): Promise<AdminCourier> {
+    return request("/admin/couriers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateCourier(
+    courierId: number,
+    payload: {
+      display_name?: string;
+      phone?: string;
+      password?: string;
+      is_active?: boolean;
+      notes?: string | null;
+    }
+  ): Promise<AdminCourier> {
+    return request(`/admin/couriers/${courierId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     });
   },
 

@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api } from "../api";
 import type {
   AdminCategory,
+  AdminCourier,
   AdminOrder,
   AdminProduct,
   Category,
@@ -12,6 +13,7 @@ import type {
 import "../admin.css";
 import AdminDashboard from "./admin/AdminDashboard";
 import AdminCategoriesPage from "./admin/AdminCategoriesPage";
+import AdminCouriersPage from "./admin/AdminCouriersPage";
 import AdminMenuPage from "./admin/AdminMenuPage";
 import AdminOrdersPage from "./admin/AdminOrdersPage";
 import AdminProductModal from "./admin/AdminProductModal";
@@ -60,6 +62,7 @@ interface ProductUpdateDraft {
 export const AdminPanel: React.FC<Props> = ({ statuses }) => {
   const { pushToast } = useToast();
   const [menu, setMenu] = useState<AdminCategory[]>([]);
+  const [couriers, setCouriers] = useState<AdminCourier[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [settings, setSettings] = useState<SettingsMap>({});
   const [loading, setLoading] = useState(true);
@@ -124,12 +127,14 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     setLoading(true);
     setError(null);
     try {
-      const [menuData, ordersData, settingsData] = await Promise.all([
+      const [menuData, couriersData, ordersData, settingsData] = await Promise.all([
         api.adminMenu(),
+        api.adminCouriers(),
         api.adminOrders(),
         api.getSettings(),
       ]);
       setMenu(menuData);
+      setCouriers(couriersData);
       setOrders(ordersData);
       setSettings(settingsData);
     } catch (e: any) {
@@ -289,6 +294,69 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     } catch (e: any) {
       setError(e.message);
       return false;
+    }
+  };
+
+  const handleCreateCourier = async (payload: {
+    display_name: string;
+    phone: string;
+    password: string;
+    is_active: boolean;
+    notes?: string | null;
+  }) => {
+    setSaving(true);
+    try {
+      const created = await api.createCourier(payload);
+      setCouriers((prev) => [created, ...prev]);
+      pushToast({
+        tone: "success",
+        title: "Курьер создан",
+        description: created.display_name,
+      });
+    } catch (e: any) {
+      setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось создать курьера",
+        description: e.message,
+      });
+      throw e;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateCourier = async (
+    courierId: number,
+    payload: {
+      display_name?: string;
+      phone?: string;
+      password?: string;
+      is_active?: boolean;
+      notes?: string | null;
+    }
+  ) => {
+    setSaving(true);
+    try {
+      const updated = await api.updateCourier(courierId, payload);
+      setCouriers((prev) =>
+        prev.map((courier) => (courier.id === courierId ? updated : courier))
+      );
+      pushToast({
+        tone: "success",
+        title: "Курьер обновлён",
+        description: updated.display_name,
+      });
+    } catch (e: any) {
+      setError(e.message);
+      pushToast({
+        tone: "error",
+        title: "Не удалось сохранить курьера",
+        description: e.message,
+      });
+      throw e;
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -522,6 +590,14 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             Текущие заказы
           </NavLink>
           <NavLink
+            to="/admin/couriers"
+            className={({ isActive }) =>
+              "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
+            }
+          >
+            Курьеры
+          </NavLink>
+          <NavLink
             to="/admin/orders/history"
             className={({ isActive }) =>
               "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
@@ -592,6 +668,18 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             }
           />
           <Route path="orders" element={<Navigate to="current" replace />} />
+          <Route
+            path="couriers"
+            element={
+              <AdminCouriersPage
+                couriers={couriers}
+                onCreateCourier={handleCreateCourier}
+                onUpdateCourier={handleUpdateCourier}
+                onRefresh={refreshAll}
+                saving={saving}
+              />
+            }
+          />
           <Route
             path="orders/current"
             element={

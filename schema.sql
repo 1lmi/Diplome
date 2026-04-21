@@ -68,10 +68,22 @@ CREATE TABLE IF NOT EXISTS users (
     gender        TEXT,
     password_hash TEXT NOT NULL,
     is_admin      INTEGER NOT NULL DEFAULT 0,
+    is_courier    INTEGER NOT NULL DEFAULT 0,
     created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login ON users(login);
+
+CREATE TABLE IF NOT EXISTS courier_profiles (
+    user_id     INTEGER PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    phone       TEXT,
+    is_active   INTEGER NOT NULL DEFAULT 1,
+    notes       TEXT,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS user_addresses (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,8 +131,13 @@ CREATE TABLE IF NOT EXISTS orders (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id  INTEGER,
     user_id      INTEGER,
+    courier_id   INTEGER,
     status_id    INTEGER NOT NULL,
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ready_at     DATETIME,
+    claimed_at   DATETIME,
+    started_delivery_at DATETIME,
+    delivered_at DATETIME,
     comment      TEXT,
     delivery_method TEXT,
     delivery_time TEXT,
@@ -130,8 +147,12 @@ CREATE TABLE IF NOT EXISTS orders (
     total_price  INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (customer_id) REFERENCES customers (id),
     FOREIGN KEY (user_id)     REFERENCES users (id),
+    FOREIGN KEY (courier_id)  REFERENCES users (id),
     FOREIGN KEY (status_id)   REFERENCES order_statuses (id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_orders_courier_id ON orders(courier_id);
+CREATE INDEX IF NOT EXISTS idx_orders_ready_at ON orders(ready_at);
 
 CREATE TABLE IF NOT EXISTS order_status_history (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
