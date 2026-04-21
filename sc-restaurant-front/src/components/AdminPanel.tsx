@@ -4,6 +4,7 @@ import { api } from "../api";
 import type {
   AdminCategory,
   AdminCourier,
+  IntegrationJob,
   AdminOrder,
   AdminProduct,
   Category,
@@ -14,6 +15,7 @@ import "../admin.css";
 import AdminDashboard from "./admin/AdminDashboard";
 import AdminCategoriesPage from "./admin/AdminCategoriesPage";
 import AdminCouriersPage from "./admin/AdminCouriersPage";
+import AdminImportsExportsPage from "./admin/AdminImportsExportsPage";
 import AdminMenuPage from "./admin/AdminMenuPage";
 import AdminOrdersPage from "./admin/AdminOrdersPage";
 import AdminProductModal from "./admin/AdminProductModal";
@@ -65,6 +67,7 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
   const [menu, setMenu] = useState<AdminCategory[]>([]);
   const [couriers, setCouriers] = useState<AdminCourier[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [integrationJobs, setIntegrationJobs] = useState<IntegrationJob[]>([]);
   const [settings, setSettings] = useState<SettingsMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,16 +143,18 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
     setLoading(true);
     setError(null);
     try {
-      const [menuData, couriersData, ordersData, settingsData] = await Promise.all([
+      const [menuData, couriersData, ordersData, settingsData, jobsData] = await Promise.all([
         api.adminMenu(),
         api.adminCouriers(),
         api.adminOrders(),
         api.getSettings(),
+        api.integrationJobs(),
       ]);
       setMenu(menuData);
       setCouriers(couriersData);
       setOrders(ordersData);
       setSettings(settingsData);
+      setIntegrationJobs(jobsData);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -633,6 +638,14 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
             Курьеры
           </NavLink>
           <NavLink
+            to="/admin/integrations"
+            className={({ isActive }) =>
+              "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
+            }
+          >
+            Импорт / Экспорт
+          </NavLink>
+          <NavLink
             to="/admin/orders/history"
             className={({ isActive }) =>
               "admin-nav__item" + (isActive ? " admin-nav__item--active" : "")
@@ -714,6 +727,10 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
                 saving={saving}
               />
             }
+          />
+          <Route
+            path="integrations"
+            element={<AdminImportsExportsPage jobs={integrationJobs} onRefresh={refreshAll} />}
           />
           <Route
             path="orders/current"

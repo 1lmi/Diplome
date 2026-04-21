@@ -5,7 +5,9 @@ CREATE TABLE IF NOT EXISTS categories (
     name        TEXT NOT NULL UNIQUE,
     description TEXT,
     sort_order  INTEGER NOT NULL DEFAULT 0,
-    is_hidden   INTEGER NOT NULL DEFAULT 0
+    is_hidden   INTEGER NOT NULL DEFAULT 0,
+    external_id TEXT,
+    source_system TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sizes (
@@ -14,6 +16,8 @@ CREATE TABLE IF NOT EXISTS sizes (
     amount       INTEGER,
     unit         TEXT,
     gram_weight  INTEGER,
+    external_id  TEXT,
+    source_system TEXT,
     UNIQUE(name, amount, unit)
 );
 
@@ -27,6 +31,8 @@ CREATE TABLE IF NOT EXISTS products (
     is_deleted   INTEGER NOT NULL DEFAULT 0,
     sort_order   INTEGER NOT NULL DEFAULT 0,
     image_path   TEXT NOT NULL DEFAULT 'default.png',
+    external_id  TEXT,
+    source_system TEXT,
     FOREIGN KEY (category_id) REFERENCES categories (id)
         ON UPDATE CASCADE
         ON DELETE RESTRICT
@@ -42,6 +48,10 @@ CREATE TABLE IF NOT EXISTS product_sizes (
     fat        REAL,
     carbs      REAL,
     is_hidden  INTEGER NOT NULL DEFAULT 0,
+    external_id TEXT,
+    source_system TEXT,
+    sku        TEXT,
+    barcode    TEXT,
     FOREIGN KEY (product_id) REFERENCES products (id)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
@@ -54,7 +64,9 @@ CREATE TABLE IF NOT EXISTS customers (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     name     TEXT,
     phone    TEXT NOT NULL,
-    address  TEXT
+    address  TEXT,
+    external_id TEXT,
+    source_system TEXT
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -145,6 +157,9 @@ CREATE TABLE IF NOT EXISTS orders (
     cash_change_from INTEGER,
     do_not_call INTEGER NOT NULL DEFAULT 0,
     total_price  INTEGER NOT NULL DEFAULT 0,
+    external_id TEXT,
+    source_system TEXT,
+    imported_at DATETIME,
     FOREIGN KEY (customer_id) REFERENCES customers (id),
     FOREIGN KEY (user_id)     REFERENCES users (id),
     FOREIGN KEY (courier_id)  REFERENCES users (id),
@@ -182,6 +197,47 @@ CREATE TABLE IF NOT EXISTS site_settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS integration_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    direction TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    format TEXT NOT NULL,
+    profile TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    requested_by INTEGER,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    finished_at DATETIME,
+    summary_json TEXT,
+    source_filename TEXT,
+    artifact_path TEXT,
+    artifact_filename TEXT,
+    error_report_path TEXT,
+    error_report_filename TEXT,
+    FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS integration_job_errors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    row_no INTEGER,
+    entity_key TEXT,
+    error_code TEXT,
+    message TEXT NOT NULL,
+    payload_json TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES integration_jobs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_categories_external_source ON categories(source_system, external_id);
+CREATE INDEX IF NOT EXISTS idx_products_external_source ON products(source_system, external_id);
+CREATE INDEX IF NOT EXISTS idx_sizes_external_source ON sizes(source_system, external_id);
+CREATE INDEX IF NOT EXISTS idx_product_sizes_external_source ON product_sizes(source_system, external_id);
+CREATE INDEX IF NOT EXISTS idx_customers_external_source ON customers(source_system, external_id);
+CREATE INDEX IF NOT EXISTS idx_orders_external_source ON orders(source_system, external_id);
+CREATE INDEX IF NOT EXISTS idx_integration_jobs_created_at ON integration_jobs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_integration_job_errors_job_id ON integration_job_errors(job_id);
 
 CREATE VIEW IF NOT EXISTS v_menu_items AS
 SELECT

@@ -229,4 +229,33 @@ export interface SettingsMap {
   [key: string]: string;
 }
 
+export interface IntegrationJob {
+  id: number;
+  direction: "import" | "export";
+  entity_type: "products" | "customers" | "sales";
+  format: "csv" | "1c";
+  profile: string;
+  status: string;
+  requested_by?: number | null;
+  created_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  source_filename?: string | null;
+  artifact_filename?: string | null;
+  error_report_filename?: string | null;
+  artifact_url?: string | null;
+  error_report_url?: string | null;
+  summary: Record<string, unknown>;
+}
+
+export interface IntegrationJobError {
+  id: number;
+  row_no?: number | null;
+  entity_key?: string | null;
+  error_code?: string | null;
+  message: string;
+  payload?: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export type AdminOrder = Order;

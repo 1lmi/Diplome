@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 import base64
+import csv
 import hashlib
+import io
 import json
 import logging
 import mimetypes
 import re
 import secrets
 import sqlite3
+import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib import error as urllib_error
 from urllib import request as urllib_request
+from xml.etree import ElementTree as ET
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -23,9 +28,11 @@ from pydantic import BaseModel, Field
 DB_PATH = Path("sc-restaurant.db")
 SCHEMA_PATH = Path("schema.sql")
 UPLOAD_DIR = Path("uploads")
+INTEGRATION_DIR = UPLOAD_DIR / "integrations"
 TOKEN_TTL_DAYS = 30
 DEFAULT_IMAGE_NAME = "default.png"
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+DEFAULT_SOURCE_SYSTEM = "sc-restaurant"
 
 mimetypes.add_type("image/avif", ".avif")
 
@@ -104,6 +111,7 @@ def normalize_phone_login(value: str) -> str:
 
 def ensure_default_image_file() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    INTEGRATION_DIR.mkdir(parents=True, exist_ok=True)
     default_path = UPLOAD_DIR / DEFAULT_IMAGE_NAME
     if default_path.exists():
         return
@@ -371,11 +379,55 @@ def apply_migrations() -> None:
         """
     )
 
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS integration_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            direction TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            format TEXT NOT NULL,
+            profile TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            requested_by INTEGER,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            started_at DATETIME,
+            finished_at DATETIME,
+            summary_json TEXT,
+            source_filename TEXT,
+            artifact_path TEXT,
+            artifact_filename TEXT,
+            error_report_path TEXT,
+            error_report_filename TEXT,
+            FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS integration_job_errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            row_no INTEGER,
+            entity_key TEXT,
+            error_code TEXT,
+            message TEXT NOT NULL,
+            payload_json TEXT,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (job_id) REFERENCES integration_jobs(id) ON DELETE CASCADE
+        )
+        """
+    )
+
     ensure_column(conn, "categories", "sort_order", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "categories", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "categories", "external_id", "TEXT")
+    ensure_column(conn, "categories", "source_system", "TEXT")
     ensure_column(conn, "products", "sort_order", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "products", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "products", "is_deleted", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "products", "external_id", "TEXT")
+    ensure_column(conn, "products", "source_system", "TEXT")
     ensure_column(
         conn,
         "products",
@@ -384,6 +436,14 @@ def apply_migrations() -> None:
     )
     relax_products_category_nullable(conn)
     ensure_column(conn, "product_sizes", "is_hidden", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "product_sizes", "external_id", "TEXT")
+    ensure_column(conn, "product_sizes", "source_system", "TEXT")
+    ensure_column(conn, "product_sizes", "sku", "TEXT")
+    ensure_column(conn, "product_sizes", "barcode", "TEXT")
+    ensure_column(conn, "sizes", "external_id", "TEXT")
+    ensure_column(conn, "sizes", "source_system", "TEXT")
+    ensure_column(conn, "customers", "external_id", "TEXT")
+    ensure_column(conn, "customers", "source_system", "TEXT")
     ensure_column(conn, "orders", "user_id", "INTEGER REFERENCES users(id)")
     ensure_column(conn, "orders", "delivery_method", "TEXT")
     ensure_column(conn, "orders", "delivery_time", "TEXT")
@@ -395,6 +455,9 @@ def apply_migrations() -> None:
     ensure_column(conn, "orders", "claimed_at", "DATETIME")
     ensure_column(conn, "orders", "started_delivery_at", "DATETIME")
     ensure_column(conn, "orders", "delivered_at", "DATETIME")
+    ensure_column(conn, "orders", "external_id", "TEXT")
+    ensure_column(conn, "orders", "source_system", "TEXT")
+    ensure_column(conn, "orders", "imported_at", "DATETIME")
     ensure_column(conn, "users", "first_name", "TEXT")
     ensure_column(conn, "users", "last_name", "TEXT")
     ensure_column(conn, "users", "login", "TEXT")
@@ -408,6 +471,30 @@ def apply_migrations() -> None:
     )
     conn.execute(
         "UPDATE sizes SET unit = COALESCE(unit, 'грамм') WHERE unit IS NULL AND gram_weight IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_categories_external_source ON categories(source_system, external_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_products_external_source ON products(source_system, external_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sizes_external_source ON sizes(source_system, external_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_product_sizes_external_source ON product_sizes(source_system, external_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_customers_external_source ON customers(source_system, external_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_orders_external_source ON orders(source_system, external_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_integration_jobs_created_at ON integration_jobs(created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_integration_job_errors_job_id ON integration_job_errors(job_id)"
     )
 
     users_rows = conn.execute(
@@ -979,7 +1066,146 @@ class CourierBoardOut(BaseModel):
     ready: List[OrderOut]
     my_active: Optional[OrderOut] = None
 
+
+class IntegrationJobOut(BaseModel):
+    id: int
+    direction: str
+    entity_type: str
+    format: str
+    profile: str
+    status: str
+    requested_by: Optional[int] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    source_filename: Optional[str] = None
+    artifact_filename: Optional[str] = None
+    error_report_filename: Optional[str] = None
+    artifact_url: Optional[str] = None
+    error_report_url: Optional[str] = None
+    summary: Dict[str, Any] = {}
+
+
+class IntegrationJobErrorOut(BaseModel):
+    id: int
+    row_no: Optional[int] = None
+    entity_key: Optional[str] = None
+    error_code: Optional[str] = None
+    message: str
+    payload: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+
+class ExportProductsRequest(BaseModel):
+    format: str = "csv"
+    mode: str = "variants"
+
+
+class ExportCustomersRequest(BaseModel):
+    format: str = "csv"
+    scope: str = "all"
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+
+
+class ExportSalesRequest(BaseModel):
+    format: str = "csv"
+    finalized_only: bool = True
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    statuses: List[str] = []
+
 # --- helpers -----------------------------------------------------------------
+
+def normalize_integration_format(value: Optional[str]) -> str:
+    normalized = (value or "csv").strip().lower()
+    if normalized in {"csv", "tabular", "table"}:
+        return "csv"
+    if normalized in {"1c", "commerceml", "xml"}:
+        return "1c"
+    raise HTTPException(status_code=400, detail="Поддерживаются только форматы CSV и 1C CommerceML.")
+
+
+def normalize_product_exchange_mode(value: Optional[str]) -> str:
+    normalized = (value or "variants").strip().lower()
+    if normalized in {"flat", "simple", "without_sizes", "без размеров"}:
+        return "flat"
+    if normalized in {"variants", "with_sizes", "sizes", "с размерами"}:
+        return "variants"
+    raise HTTPException(status_code=400, detail="Режим товаров должен быть flat или variants.")
+
+
+def normalize_customer_scope(value: Optional[str]) -> str:
+    normalized = (value or "all").strip().lower()
+    if normalized in {"all", "with_orders", "period"}:
+        return normalized
+    raise HTTPException(status_code=400, detail="Некорректный режим выгрузки покупателей.")
+
+
+def parse_bool_form(value: Optional[str], default: bool = False) -> bool:
+    if value is None:
+        return default
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on", "да"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "нет"}:
+        return False
+    return default
+
+
+def sanitize_filename_part(value: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9._-]+", "-", value.strip().lower())
+    return normalized.strip("-._") or "artifact"
+
+
+def now_stamp() -> str:
+    return datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+
+
+def integration_artifact_path(job_id: int, filename: str) -> Path:
+    safe_name = sanitize_filename_part(filename)
+    return INTEGRATION_DIR / f"{job_id}-{safe_name}"
+
+
+def maybe_indent_xml(root: ET.Element) -> None:
+    if hasattr(ET, "indent"):
+        ET.indent(root, space="  ")
+
+
+def xml_text(parent: ET.Element, tag: str, value: Any) -> None:
+    child = ET.SubElement(parent, tag)
+    child.text = "" if value is None else str(value)
+
+
+def parse_datetime_filter(value: Optional[str], field_name: str) -> Optional[str]:
+    normalized = normalize_optional_text(value)
+    if not normalized:
+        return None
+    try:
+        if len(normalized) == 10:
+            datetime.strptime(normalized, "%Y-%m-%d")
+            return normalized
+        datetime.fromisoformat(normalized)
+        return normalized
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Некорректное значение {field_name}.") from exc
+
+
+def build_date_range_sql(
+    field_name: str, date_from: Optional[str], date_to: Optional[str]
+) -> tuple[str, list[Any]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    normalized_from = parse_datetime_filter(date_from, "date_from")
+    normalized_to = parse_datetime_filter(date_to, "date_to")
+    if normalized_from:
+        clauses.append(f"{field_name} >= ?")
+        params.append(normalized_from)
+    if normalized_to:
+        boundary = normalized_to if len(normalized_to) > 10 else f"{normalized_to} 23:59:59"
+        clauses.append(f"{field_name} <= ?")
+        params.append(boundary)
+    return (" AND ".join(clauses), params)
 
 def serialize_user(row: sqlite3.Row) -> Dict[str, Any]:
     first_name = (row["first_name"] or "").strip()
@@ -1585,6 +1811,1629 @@ def build_admin_product(
         sort_order=product_row["sort_order"],
         sizes=sizes,
     )
+
+
+def find_row_by_external_id(
+    db: sqlite3.Connection,
+    table: str,
+    external_id: Optional[str],
+    source_system: Optional[str],
+) -> Optional[sqlite3.Row]:
+    normalized_external_id = normalize_optional_text(external_id)
+    if not normalized_external_id:
+        return None
+    normalized_source = normalize_optional_text(source_system) or DEFAULT_SOURCE_SYSTEM
+    return db.execute(
+        f"SELECT * FROM {table} WHERE external_id = ? AND COALESCE(source_system, ?) = ? LIMIT 1",
+        (normalized_external_id, normalized_source, normalized_source),
+    ).fetchone()
+
+
+def ensure_row_external_identity(
+    db: sqlite3.Connection,
+    table: str,
+    row_id: int,
+    external_id: Optional[str],
+    source_system: Optional[str],
+) -> tuple[str, str]:
+    normalized_external_id = normalize_optional_text(external_id)
+    normalized_source = normalize_optional_text(source_system) or DEFAULT_SOURCE_SYSTEM
+    if normalized_external_id:
+        if normalized_source != (source_system or normalized_source):
+            db.execute(
+                f"UPDATE {table} SET source_system = ? WHERE id = ?",
+                (normalized_source, row_id),
+            )
+        return normalized_external_id, normalized_source
+
+    generated_external_id = f"{DEFAULT_SOURCE_SYSTEM}:{table}:{row_id}"
+    db.execute(
+        f"UPDATE {table} SET external_id = COALESCE(external_id, ?), source_system = COALESCE(source_system, ?) WHERE id = ?",
+        (generated_external_id, normalized_source, row_id),
+    )
+    return generated_external_id, normalized_source
+
+
+def serialize_integration_job_row(
+    row: sqlite3.Row, request: Optional[Request] = None
+) -> IntegrationJobOut:
+    artifact_url = None
+    error_report_url = None
+    if row["artifact_path"]:
+        artifact_url = f"/admin/integrations/jobs/{row['id']}/artifact"
+    if row["error_report_path"]:
+        error_report_url = f"/admin/integrations/jobs/{row['id']}/errors/report"
+    if request is not None:
+        base = str(request.base_url).rstrip("/")
+        if artifact_url:
+            artifact_url = f"{base}{artifact_url}"
+        if error_report_url:
+            error_report_url = f"{base}{error_report_url}"
+    summary = {}
+    if row["summary_json"]:
+        try:
+            summary = json.loads(row["summary_json"])
+        except json.JSONDecodeError:
+            summary = {"raw": row["summary_json"]}
+    return IntegrationJobOut(
+        id=row["id"],
+        direction=row["direction"],
+        entity_type=row["entity_type"],
+        format=row["format"],
+        profile=row["profile"],
+        status=row["status"],
+        requested_by=row["requested_by"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
+        finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+        source_filename=row["source_filename"],
+        artifact_filename=row["artifact_filename"],
+        error_report_filename=row["error_report_filename"],
+        artifact_url=artifact_url,
+        error_report_url=error_report_url,
+        summary=summary,
+    )
+
+
+def create_integration_job(
+    db: sqlite3.Connection,
+    *,
+    direction: str,
+    entity_type: str,
+    format_name: str,
+    profile: str,
+    requested_by: Optional[int],
+    source_filename: Optional[str] = None,
+) -> int:
+    cur = db.execute(
+        """
+        INSERT INTO integration_jobs(
+            direction, entity_type, format, profile, status, requested_by, started_at, source_filename
+        )
+        VALUES (?, ?, ?, ?, 'running', ?, CURRENT_TIMESTAMP, ?)
+        """,
+        (direction, entity_type, format_name, profile, requested_by, source_filename),
+    )
+    db.commit()
+    return cur.lastrowid
+
+
+def complete_integration_job(
+    db: sqlite3.Connection,
+    job_id: int,
+    *,
+    summary: Dict[str, Any],
+    artifact_path: Optional[Path] = None,
+    artifact_filename: Optional[str] = None,
+    error_report_path: Optional[Path] = None,
+    error_report_filename: Optional[str] = None,
+    status: str = "completed",
+) -> sqlite3.Row:
+    db.execute(
+        """
+        UPDATE integration_jobs
+        SET status = ?,
+            finished_at = CURRENT_TIMESTAMP,
+            summary_json = ?,
+            artifact_path = ?,
+            artifact_filename = ?,
+            error_report_path = ?,
+            error_report_filename = ?
+        WHERE id = ?
+        """,
+        (
+            status,
+            json.dumps(summary, ensure_ascii=False),
+            str(artifact_path) if artifact_path else None,
+            artifact_filename,
+            str(error_report_path) if error_report_path else None,
+            error_report_filename,
+            job_id,
+        ),
+    )
+    db.commit()
+    return db.execute("SELECT * FROM integration_jobs WHERE id = ?", (job_id,)).fetchone()
+
+
+def fail_integration_job(
+    db: sqlite3.Connection,
+    job_id: int,
+    *,
+    message: str,
+    error_report_path: Optional[Path] = None,
+    error_report_filename: Optional[str] = None,
+) -> sqlite3.Row:
+    summary = {"errors": 1, "message": message}
+    return complete_integration_job(
+        db,
+        job_id,
+        summary=summary,
+        error_report_path=error_report_path,
+        error_report_filename=error_report_filename,
+        status="failed",
+    )
+
+
+def store_job_errors(
+    db: sqlite3.Connection, job_id: int, errors: List[Dict[str, Any]]
+) -> None:
+    for error_item in errors:
+        db.execute(
+            """
+            INSERT INTO integration_job_errors(job_id, row_no, entity_key, error_code, message, payload_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                error_item.get("row_no"),
+                error_item.get("entity_key"),
+                error_item.get("error_code"),
+                error_item.get("message") or "Неизвестная ошибка",
+                json.dumps(error_item.get("payload"), ensure_ascii=False)
+                if error_item.get("payload") is not None
+                else None,
+            ),
+        )
+
+
+def build_error_report_bytes(errors: List[Dict[str, Any]]) -> bytes:
+    buffer = io.StringIO()
+    writer = csv.DictWriter(
+        buffer,
+        fieldnames=["row_no", "entity_key", "error_code", "message", "payload"],
+    )
+    writer.writeheader()
+    for error_item in errors:
+        writer.writerow(
+            {
+                "row_no": error_item.get("row_no"),
+                "entity_key": error_item.get("entity_key"),
+                "error_code": error_item.get("error_code"),
+                "message": error_item.get("message"),
+                "payload": json.dumps(error_item.get("payload"), ensure_ascii=False)
+                if error_item.get("payload") is not None
+                else "",
+            }
+        )
+    return buffer.getvalue().encode("utf-8")
+
+
+def write_artifact_bytes(job_id: int, filename: str, content: bytes) -> Path:
+    path = integration_artifact_path(job_id, filename)
+    path.write_bytes(content)
+    return path
+
+
+def build_csv_bytes(fieldnames: List[str], rows: List[Dict[str, Any]]) -> bytes:
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({key: row.get(key, "") for key in fieldnames})
+    return buffer.getvalue().encode("utf-8")
+
+
+def build_zip_bytes(files: Dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for filename, content in files.items():
+            archive.writestr(filename, content)
+    return buffer.getvalue()
+
+
+def build_xml_bytes(root: ET.Element) -> bytes:
+    maybe_indent_xml(root)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def fetch_or_create_category_for_import(
+    db: sqlite3.Connection,
+    *,
+    name: Optional[str],
+    external_id: Optional[str],
+    source_system: Optional[str],
+) -> int:
+    existing = find_row_by_external_id(db, "categories", external_id, source_system)
+    normalized_name = normalize_required_text(name, "Для товара требуется категория.")
+    if existing is None:
+        existing = db.execute(
+            "SELECT * FROM categories WHERE LOWER(name) = LOWER(?) LIMIT 1",
+            (normalized_name,),
+        ).fetchone()
+    if existing is not None:
+        ensure_row_external_identity(
+            db, "categories", existing["id"], existing["external_id"], existing["source_system"]
+        )
+        return existing["id"]
+
+    sort_order_row = db.execute("SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM categories").fetchone()
+    cur = db.execute(
+        """
+        INSERT INTO categories(name, sort_order, external_id, source_system)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            normalized_name,
+            int(sort_order_row["max_sort"]) + 1,
+            normalize_optional_text(external_id),
+            normalize_optional_text(source_system) or DEFAULT_SOURCE_SYSTEM,
+        ),
+    )
+    category_id = cur.lastrowid
+    ensure_row_external_identity(db, "categories", category_id, external_id, source_system)
+    return category_id
+
+
+def fetch_or_create_hidden_import_category(db: sqlite3.Connection) -> int:
+    row = db.execute(
+        "SELECT * FROM categories WHERE name = 'Импортированные продажи' LIMIT 1"
+    ).fetchone()
+    if row is not None:
+        return row["id"]
+    sort_order_row = db.execute("SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM categories").fetchone()
+    cur = db.execute(
+        """
+        INSERT INTO categories(name, description, sort_order, is_hidden, external_id, source_system)
+        VALUES (?, ?, ?, 1, ?, ?)
+        """,
+        (
+            "Импортированные продажи",
+            "Служебная категория для исторического импорта продаж.",
+            int(sort_order_row["max_sort"]) + 1,
+            f"{DEFAULT_SOURCE_SYSTEM}:categories:imported-sales",
+            DEFAULT_SOURCE_SYSTEM,
+        ),
+    )
+    return cur.lastrowid
+
+
+def fetch_or_create_customer_for_import(
+    db: sqlite3.Connection,
+    *,
+    external_id: Optional[str],
+    source_system: Optional[str],
+    name: Optional[str],
+    phone: Optional[str],
+    address: Optional[str],
+    fallback_phone: bool = False,
+) -> int:
+    existing = find_row_by_external_id(db, "customers", external_id, source_system)
+    normalized_phone = normalize_optional_text(phone)
+    if existing is None and fallback_phone and normalized_phone:
+        existing = db.execute(
+            "SELECT * FROM customers WHERE phone = ? ORDER BY id LIMIT 1",
+            (normalized_phone,),
+        ).fetchone()
+
+    payload_name = normalize_optional_text(name)
+    payload_address = normalize_optional_text(address)
+    if existing is not None:
+        updates = {
+            "name": payload_name if payload_name is not None else existing["name"],
+            "phone": normalized_phone if normalized_phone is not None else existing["phone"],
+            "address": payload_address if payload_address is not None else existing["address"],
+        }
+        db.execute(
+            """
+            UPDATE customers
+            SET name = ?, phone = ?, address = ?, external_id = COALESCE(external_id, ?), source_system = COALESCE(source_system, ?)
+            WHERE id = ?
+            """,
+            (
+                updates["name"],
+                updates["phone"] or existing["phone"] or f"{DEFAULT_SOURCE_SYSTEM}:customers:{existing['id']}",
+                updates["address"],
+                normalize_optional_text(external_id),
+                normalize_optional_text(source_system) or DEFAULT_SOURCE_SYSTEM,
+                existing["id"],
+            ),
+        )
+        ensure_row_external_identity(
+            db, "customers", existing["id"], existing["external_id"], existing["source_system"]
+        )
+        return existing["id"]
+
+    safe_phone = normalized_phone or (
+        f"{normalize_optional_text(source_system) or DEFAULT_SOURCE_SYSTEM}:{normalize_optional_text(external_id) or secrets.token_hex(4)}"
+    )
+    cur = db.execute(
+        """
+        INSERT INTO customers(name, phone, address, external_id, source_system)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            payload_name,
+            safe_phone,
+            payload_address,
+            normalize_optional_text(external_id),
+            normalize_optional_text(source_system) or DEFAULT_SOURCE_SYSTEM,
+        ),
+    )
+    customer_id = cur.lastrowid
+    ensure_row_external_identity(db, "customers", customer_id, external_id, source_system)
+    return customer_id
+
+
+def fetch_or_create_product_for_import(
+    db: sqlite3.Connection,
+    *,
+    category_id: int,
+    external_id: Optional[str],
+    source_system: Optional[str],
+    name: str,
+    description: Optional[str],
+    is_active: bool,
+    is_hidden: bool,
+    image_path: Optional[str] = None,
+) -> tuple[int, bool]:
+    existing = find_row_by_external_id(db, "products", external_id, source_system)
+    if existing is None:
+        existing = db.execute(
+            """
+            SELECT * FROM products
+            WHERE LOWER(name) = LOWER(?)
+              AND category_id IS ?
+              AND COALESCE(is_deleted, 0) = 0
+            LIMIT 1
+            """,
+            (name.strip(), category_id),
+        ).fetchone()
+    if existing is not None:
+        db.execute(
+            """
+            UPDATE products
+            SET category_id = ?, name = ?, description = ?, is_active = ?, is_hidden = ?, image_path = COALESCE(?, image_path),
+                external_id = COALESCE(external_id, ?), source_system = COALESCE(source_system, ?)
+            WHERE id = ?
+            """,
+            (
+                category_id,
+                name.strip(),
+                normalize_optional_text(description),
+                int(is_active),
+                int(is_hidden),
+                image_path,
+                normalize_optional_text(external_id),
+                normalize_optional_text(source_system) or DEFAULT_SOURCE_SYSTEM,
+                existing["id"],
+            ),
+        )
+        ensure_row_external_identity(
+            db, "products", existing["id"], existing["external_id"], existing["source_system"]
+        )
+        return existing["id"], False
+
+    sort_order_row = db.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM products WHERE category_id IS ?",
+        (category_id,),
+    ).fetchone()
+    cur = db.execute(
+        """
+        INSERT INTO products(category_id, name, description, is_active, is_hidden, image_path, sort_order, external_id, source_system)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            category_id,
+            name.strip(),
+            normalize_optional_text(description),
+            int(is_active),
+            int(is_hidden),
+            image_path or DEFAULT_IMAGE_NAME,
+            int(sort_order_row["max_sort"]) + 1,
+            normalize_optional_text(external_id),
+            normalize_optional_text(source_system) or DEFAULT_SOURCE_SYSTEM,
+        ),
+    )
+    product_id = cur.lastrowid
+    ensure_row_external_identity(db, "products", product_id, external_id, source_system)
+    return product_id, True
+
+
+def fetch_or_create_product_variant_for_import(
+    db: sqlite3.Connection,
+    *,
+    product_id: int,
+    variant_external_id: Optional[str],
+    variant_source_system: Optional[str],
+    size_name: Optional[str],
+    size_amount: Optional[int],
+    size_unit: Optional[str],
+    price: int,
+    sku: Optional[str],
+    barcode: Optional[str],
+    is_hidden: bool,
+    calories: Optional[float] = None,
+    protein: Optional[float] = None,
+    fat: Optional[float] = None,
+    carbs: Optional[float] = None,
+) -> tuple[int, bool]:
+    existing = find_row_by_external_id(
+        db, "product_sizes", variant_external_id, variant_source_system
+    )
+    size_id = ensure_size(db, size_name, size_amount, size_unit)
+    if existing is None and size_id is not None:
+        existing = db.execute(
+            """
+            SELECT * FROM product_sizes
+            WHERE product_id = ? AND size_id IS ?
+            LIMIT 1
+            """,
+            (product_id, size_id),
+        ).fetchone()
+    if existing is not None:
+        db.execute(
+            """
+            UPDATE product_sizes
+            SET size_id = ?, price = ?, calories = ?, protein = ?, fat = ?, carbs = ?, is_hidden = ?,
+                sku = COALESCE(?, sku), barcode = COALESCE(?, barcode),
+                external_id = COALESCE(external_id, ?), source_system = COALESCE(source_system, ?)
+            WHERE id = ?
+            """,
+            (
+                size_id,
+                price,
+                calories,
+                protein,
+                fat,
+                carbs,
+                int(is_hidden),
+                normalize_optional_text(sku),
+                normalize_optional_text(barcode),
+                normalize_optional_text(variant_external_id),
+                normalize_optional_text(variant_source_system) or DEFAULT_SOURCE_SYSTEM,
+                existing["id"],
+            ),
+        )
+        ensure_row_external_identity(
+            db,
+            "product_sizes",
+            existing["id"],
+            existing["external_id"],
+            existing["source_system"],
+        )
+        return existing["id"], False
+
+    cur = db.execute(
+        """
+        INSERT INTO product_sizes(
+            product_id, size_id, price, calories, protein, fat, carbs, is_hidden, sku, barcode, external_id, source_system
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            product_id,
+            size_id,
+            price,
+            calories,
+            protein,
+            fat,
+            carbs,
+            int(is_hidden),
+            normalize_optional_text(sku),
+            normalize_optional_text(barcode),
+            normalize_optional_text(variant_external_id),
+            normalize_optional_text(variant_source_system) or DEFAULT_SOURCE_SYSTEM,
+        ),
+    )
+    variant_id = cur.lastrowid
+    ensure_row_external_identity(
+        db, "product_sizes", variant_id, variant_external_id, variant_source_system
+    )
+    return variant_id, True
+
+
+def collect_product_export_rows(db: sqlite3.Connection, mode: str) -> List[Dict[str, Any]]:
+    rows = db.execute(
+        """
+        SELECT
+            c.id AS category_id,
+            c.name AS category_name,
+            c.external_id AS category_external_id,
+            c.source_system AS category_source_system,
+            p.id AS product_id,
+            p.name AS product_name,
+            p.description AS product_description,
+            p.is_active,
+            p.is_hidden AS product_is_hidden,
+            p.external_id AS product_external_id,
+            p.source_system AS product_source_system,
+            ps.id AS variant_id,
+            ps.external_id AS variant_external_id,
+            ps.source_system AS variant_source_system,
+            ps.sku,
+            ps.barcode,
+            ps.price,
+            ps.is_hidden AS variant_is_hidden,
+            ps.calories,
+            ps.protein,
+            ps.fat,
+            ps.carbs,
+            s.id AS size_id,
+            s.name AS size_name,
+            COALESCE(s.amount, s.gram_weight) AS size_amount,
+            s.unit AS size_unit
+        FROM products p
+        LEFT JOIN categories c ON c.id = p.category_id
+        LEFT JOIN product_sizes ps ON ps.product_id = p.id
+        LEFT JOIN sizes s ON s.id = ps.size_id
+        WHERE COALESCE(p.is_deleted, 0) = 0
+        ORDER BY c.sort_order, c.id, p.sort_order, p.id, ps.id
+        """
+    ).fetchall()
+
+    product_groups: Dict[int, Dict[str, Any]] = {}
+    variant_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        category_external_id, category_source_system = ensure_row_external_identity(
+            db,
+            "categories",
+            row["category_id"],
+            row["category_external_id"],
+            row["category_source_system"],
+        ) if row["category_id"] else (None, None)
+        product_external_id, product_source_system = ensure_row_external_identity(
+            db,
+            "products",
+            row["product_id"],
+            row["product_external_id"],
+            row["product_source_system"],
+        )
+        product_group = product_groups.setdefault(
+            row["product_id"],
+            {
+                "category_external_id": category_external_id,
+                "category_source_system": category_source_system,
+                "category_name": row["category_name"],
+                "product_external_id": product_external_id,
+                "product_source_system": product_source_system,
+                "product_name": row["product_name"],
+                "product_description": row["product_description"],
+                "is_active": bool(row["is_active"]),
+                "is_hidden": bool(row["product_is_hidden"]),
+                "first_variant": None,
+            },
+        )
+        if row["variant_id"] is None:
+            continue
+        variant_external_id, variant_source_system = ensure_row_external_identity(
+            db,
+            "product_sizes",
+            row["variant_id"],
+            row["variant_external_id"],
+            row["variant_source_system"],
+        )
+        variant_payload = {
+            **product_group,
+            "variant_external_id": variant_external_id,
+            "variant_source_system": variant_source_system,
+            "size_name": row["size_name"],
+            "size_amount": row["size_amount"],
+            "size_unit": row["size_unit"],
+            "price": row["price"],
+            "sku": row["sku"],
+            "barcode": row["barcode"],
+            "variant_is_hidden": bool(row["variant_is_hidden"]),
+            "calories": row["calories"],
+            "protein": row["protein"],
+            "fat": row["fat"],
+            "carbs": row["carbs"],
+        }
+        variant_rows.append(variant_payload)
+        if product_group["first_variant"] is None:
+            product_group["first_variant"] = variant_payload
+
+    if mode == "flat":
+        flat_rows: List[Dict[str, Any]] = []
+        for product_group in product_groups.values():
+            first_variant = product_group.get("first_variant") or {}
+            flat_rows.append(
+                {
+                    "category_external_id": product_group["category_external_id"],
+                    "category_source_system": product_group["category_source_system"],
+                    "category_name": product_group["category_name"],
+                    "product_external_id": product_group["product_external_id"],
+                    "product_source_system": product_group["product_source_system"],
+                    "product_name": product_group["product_name"],
+                    "product_description": product_group["product_description"],
+                    "is_active": int(product_group["is_active"]),
+                    "is_hidden": int(product_group["is_hidden"]),
+                    "base_price": first_variant.get("price"),
+                    "default_size_name": first_variant.get("size_name"),
+                    "default_size_amount": first_variant.get("size_amount"),
+                    "default_size_unit": first_variant.get("size_unit"),
+                    "sku": first_variant.get("sku"),
+                    "barcode": first_variant.get("barcode"),
+                }
+            )
+        return flat_rows
+
+    return variant_rows
+
+
+def collect_customer_export_rows(
+    db: sqlite3.Connection, scope: str, date_from: Optional[str], date_to: Optional[str]
+) -> List[Dict[str, Any]]:
+    where_clauses = ["1 = 1"]
+    params: List[Any] = []
+    if scope == "with_orders":
+        where_clauses.append(
+            "EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id)"
+        )
+    elif scope == "period":
+        date_clause, date_params = build_date_range_sql("o.created_at", date_from, date_to)
+        if date_clause:
+            where_clauses.append(
+                f"EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id AND {date_clause})"
+            )
+            params.extend(date_params)
+    rows = db.execute(
+        f"""
+        SELECT
+            c.id,
+            c.name,
+            c.phone,
+            c.address,
+            c.external_id,
+            c.source_system,
+            COUNT(o.id) AS orders_count,
+            MAX(o.created_at) AS last_order_at
+        FROM customers c
+        LEFT JOIN orders o ON o.customer_id = c.id
+        WHERE {' AND '.join(where_clauses)}
+        GROUP BY c.id
+        ORDER BY c.id DESC
+        """,
+        params,
+    ).fetchall()
+    payload: List[Dict[str, Any]] = []
+    for row in rows:
+        external_id, source_system = ensure_row_external_identity(
+            db, "customers", row["id"], row["external_id"], row["source_system"]
+        )
+        payload.append(
+            {
+                "external_id": external_id,
+                "source_system": source_system,
+                "name": row["name"],
+                "phone": row["phone"],
+                "address": row["address"],
+                "orders_count": row["orders_count"],
+                "last_order_at": row["last_order_at"],
+            }
+        )
+    return payload
+
+
+def collect_sales_export_rows(
+    db: sqlite3.Connection,
+    finalized_only: bool,
+    date_from: Optional[str],
+    date_to: Optional[str],
+    statuses: List[str],
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    where_clauses = ["1 = 1"]
+    params: List[Any] = []
+    if finalized_only:
+        where_clauses.append("os.code IN ('done', 'canceled')")
+    elif statuses:
+        normalized_statuses = [status.strip().lower() for status in statuses if status.strip()]
+        if normalized_statuses:
+            placeholders = ",".join(["?"] * len(normalized_statuses))
+            where_clauses.append(f"os.code IN ({placeholders})")
+            params.extend(normalized_statuses)
+    date_clause, date_params = build_date_range_sql("o.created_at", date_from, date_to)
+    if date_clause:
+        where_clauses.append(date_clause)
+        params.extend(date_params)
+
+    rows = db.execute(
+        f"""
+        SELECT
+            o.id,
+            o.created_at,
+            o.comment,
+            o.delivery_method,
+            o.delivery_time,
+            o.payment_method,
+            o.cash_change_from,
+            o.do_not_call,
+            o.total_price,
+            o.external_id AS order_external_id,
+            o.source_system AS order_source_system,
+            c.id AS customer_id,
+            c.name AS customer_name,
+            c.phone AS customer_phone,
+            c.address AS customer_address,
+            c.external_id AS customer_external_id,
+            c.source_system AS customer_source_system,
+            os.code AS status,
+            os.name AS status_name
+        FROM orders o
+        JOIN order_statuses os ON os.id = o.status_id
+        LEFT JOIN customers c ON c.id = o.customer_id
+        WHERE {' AND '.join(where_clauses)}
+        ORDER BY o.created_at DESC, o.id DESC
+        """,
+        params,
+    ).fetchall()
+
+    headers: List[Dict[str, Any]] = []
+    lines: List[Dict[str, Any]] = []
+    for row in rows:
+        order_external_id, order_source_system = ensure_row_external_identity(
+            db, "orders", row["id"], row["order_external_id"], row["order_source_system"]
+        )
+        customer_external_id = None
+        customer_source_system = None
+        if row["customer_id"]:
+            customer_external_id, customer_source_system = ensure_row_external_identity(
+                db,
+                "customers",
+                row["customer_id"],
+                row["customer_external_id"],
+                row["customer_source_system"],
+            )
+        headers.append(
+            {
+                "order_external_id": order_external_id,
+                "source_system": order_source_system,
+                "created_at": row["created_at"],
+                "status": row["status"],
+                "status_name": row["status_name"],
+                "customer_external_id": customer_external_id,
+                "customer_source_system": customer_source_system,
+                "customer_name": row["customer_name"],
+                "customer_phone": row["customer_phone"],
+                "customer_address": row["customer_address"],
+                "delivery_method": row["delivery_method"],
+                "delivery_time": row["delivery_time"],
+                "payment_method": row["payment_method"],
+                "cash_change_from": row["cash_change_from"],
+                "do_not_call": int(bool(row["do_not_call"])),
+                "total_price": row["total_price"],
+                "comment": row["comment"],
+            }
+        )
+        item_rows = db.execute(
+            """
+            SELECT
+                oi.id,
+                oi.quantity,
+                oi.price,
+                p.id AS product_id,
+                p.name AS product_name,
+                p.external_id AS product_external_id,
+                p.source_system AS product_source_system,
+                ps.id AS variant_id,
+                ps.external_id AS variant_external_id,
+                ps.source_system AS variant_source_system,
+                s.name AS size_name,
+                COALESCE(s.amount, s.gram_weight) AS size_amount,
+                s.unit AS size_unit
+            FROM order_items oi
+            JOIN product_sizes ps ON ps.id = oi.product_size_id
+            JOIN products p ON p.id = ps.product_id
+            LEFT JOIN sizes s ON s.id = ps.size_id
+            WHERE oi.order_id = ?
+            ORDER BY oi.id
+            """,
+            (row["id"],),
+        ).fetchall()
+        for idx, item_row in enumerate(item_rows, start=1):
+            product_external_id, product_source_system = ensure_row_external_identity(
+                db,
+                "products",
+                item_row["product_id"],
+                item_row["product_external_id"],
+                item_row["product_source_system"],
+            )
+            variant_external_id, variant_source_system = ensure_row_external_identity(
+                db,
+                "product_sizes",
+                item_row["variant_id"],
+                item_row["variant_external_id"],
+                item_row["variant_source_system"],
+            )
+            line_total = item_row["quantity"] * item_row["price"]
+            lines.append(
+                {
+                    "order_external_id": order_external_id,
+                    "source_system": order_source_system,
+                    "line_no": idx,
+                    "product_external_id": product_external_id,
+                    "product_source_system": product_source_system,
+                    "product_name": item_row["product_name"],
+                    "variant_external_id": variant_external_id,
+                    "variant_source_system": variant_source_system,
+                    "size_name": item_row["size_name"],
+                    "size_amount": item_row["size_amount"],
+                    "size_unit": item_row["size_unit"],
+                    "quantity": item_row["quantity"],
+                    "price": item_row["price"],
+                    "line_total": line_total,
+                }
+            )
+    return headers, lines
+
+
+def build_products_csv_artifact(db: sqlite3.Connection, mode: str) -> tuple[bytes, str, Dict[str, Any]]:
+    rows = collect_product_export_rows(db, mode)
+    if mode == "flat":
+        fieldnames = [
+            "category_external_id",
+            "category_source_system",
+            "category_name",
+            "product_external_id",
+            "product_source_system",
+            "product_name",
+            "product_description",
+            "is_active",
+            "is_hidden",
+            "base_price",
+            "default_size_name",
+            "default_size_amount",
+            "default_size_unit",
+            "sku",
+            "barcode",
+        ]
+    else:
+        fieldnames = [
+            "category_external_id",
+            "category_source_system",
+            "category_name",
+            "product_external_id",
+            "product_source_system",
+            "product_name",
+            "product_description",
+            "is_active",
+            "is_hidden",
+            "variant_external_id",
+            "variant_source_system",
+            "size_name",
+            "size_amount",
+            "size_unit",
+            "price",
+            "sku",
+            "barcode",
+            "variant_is_hidden",
+            "calories",
+            "protein",
+            "fat",
+            "carbs",
+        ]
+    return (
+        build_csv_bytes(fieldnames, rows),
+        f"products-{mode}-{now_stamp()}.csv",
+        {"total": len(rows), "mode": mode},
+    )
+
+
+def build_products_1c_artifact(db: sqlite3.Connection, mode: str) -> tuple[bytes, str, Dict[str, Any]]:
+    rows = collect_product_export_rows(db, mode)
+    root = ET.Element("КоммерческаяИнформация", ВерсияСхемы="2.10", Формат="SC-Restaurant")
+    catalog = ET.SubElement(root, "Каталог")
+    xml_text(catalog, "Ид", f"{DEFAULT_SOURCE_SYSTEM}:catalog")
+    xml_text(catalog, "Наименование", "Каталог ресторана")
+    groups = ET.SubElement(catalog, "Группы")
+    seen_groups: set[tuple[Optional[str], Optional[str], Optional[str]]] = set()
+    for row in rows:
+        group_key = (
+            row.get("category_external_id"),
+            row.get("category_source_system"),
+            row.get("category_name"),
+        )
+        if group_key in seen_groups:
+            continue
+        seen_groups.add(group_key)
+        group = ET.SubElement(groups, "Группа")
+        xml_text(group, "Ид", row.get("category_external_id") or row.get("category_name"))
+        xml_text(group, "Источник", row.get("category_source_system") or DEFAULT_SOURCE_SYSTEM)
+        xml_text(group, "Наименование", row.get("category_name"))
+
+    products_node = ET.SubElement(catalog, "Товары")
+    offers_package = ET.SubElement(root, "ПакетПредложений")
+    xml_text(offers_package, "Ид", f"{DEFAULT_SOURCE_SYSTEM}:offers")
+    offers_node = ET.SubElement(offers_package, "Предложения")
+    product_seen: set[str] = set()
+    for row in rows:
+        product_id = row["product_external_id"]
+        if product_id not in product_seen:
+            product_seen.add(product_id)
+            product = ET.SubElement(products_node, "Товар")
+            xml_text(product, "Ид", product_id)
+            xml_text(product, "Источник", row["product_source_system"])
+            xml_text(product, "Наименование", row["product_name"])
+            xml_text(product, "Описание", row.get("product_description"))
+            xml_text(product, "ГруппаИд", row.get("category_external_id"))
+            xml_text(product, "Активен", int(bool(row.get("is_active"))))
+            xml_text(product, "Скрыт", int(bool(row.get("is_hidden"))))
+        offer = ET.SubElement(offers_node, "Предложение")
+        offer_id = row.get("variant_external_id") or f"{product_id}:default"
+        xml_text(offer, "Ид", offer_id)
+        xml_text(offer, "Источник", row.get("variant_source_system") or row["product_source_system"])
+        xml_text(offer, "ТоварИд", product_id)
+        xml_text(offer, "Размер", row.get("size_name"))
+        xml_text(offer, "Количество", row.get("size_amount"))
+        xml_text(offer, "Единица", row.get("size_unit"))
+        xml_text(offer, "Цена", row.get("price") or row.get("base_price"))
+        xml_text(offer, "Артикул", row.get("sku"))
+        xml_text(offer, "Штрихкод", row.get("barcode"))
+        xml_text(offer, "Скрыт", int(bool(row.get("variant_is_hidden", False))))
+    return (
+        build_xml_bytes(root),
+        f"products-{mode}-{now_stamp()}.xml",
+        {"total": len(rows), "mode": mode},
+    )
+
+
+def build_customers_csv_artifact(
+    db: sqlite3.Connection, scope: str, date_from: Optional[str], date_to: Optional[str]
+) -> tuple[bytes, str, Dict[str, Any]]:
+    rows = collect_customer_export_rows(db, scope, date_from, date_to)
+    fieldnames = [
+        "external_id",
+        "source_system",
+        "name",
+        "phone",
+        "address",
+        "orders_count",
+        "last_order_at",
+    ]
+    return (
+        build_csv_bytes(fieldnames, rows),
+        f"customers-{scope}-{now_stamp()}.csv",
+        {"total": len(rows), "scope": scope},
+    )
+
+
+def build_customers_1c_artifact(
+    db: sqlite3.Connection, scope: str, date_from: Optional[str], date_to: Optional[str]
+) -> tuple[bytes, str, Dict[str, Any]]:
+    rows = collect_customer_export_rows(db, scope, date_from, date_to)
+    root = ET.Element("КоммерческаяИнформация", ВерсияСхемы="2.10", Формат="SC-Restaurant")
+    counterparties = ET.SubElement(root, "Контрагенты")
+    for row in rows:
+        customer = ET.SubElement(counterparties, "Контрагент")
+        xml_text(customer, "Ид", row["external_id"])
+        xml_text(customer, "Источник", row["source_system"])
+        xml_text(customer, "Наименование", row.get("name"))
+        xml_text(customer, "Телефон", row.get("phone"))
+        xml_text(customer, "Адрес", row.get("address"))
+        xml_text(customer, "КоличествоЗаказов", row.get("orders_count"))
+        xml_text(customer, "ДатаПоследнегоЗаказа", row.get("last_order_at"))
+    return (
+        build_xml_bytes(root),
+        f"customers-{scope}-{now_stamp()}.xml",
+        {"total": len(rows), "scope": scope},
+    )
+
+
+def build_sales_csv_artifact(
+    db: sqlite3.Connection,
+    finalized_only: bool,
+    date_from: Optional[str],
+    date_to: Optional[str],
+    statuses: List[str],
+) -> tuple[bytes, str, Dict[str, Any]]:
+    headers, lines = collect_sales_export_rows(db, finalized_only, date_from, date_to, statuses)
+    sales_csv = build_csv_bytes(
+        [
+            "order_external_id",
+            "source_system",
+            "created_at",
+            "status",
+            "status_name",
+            "customer_external_id",
+            "customer_source_system",
+            "customer_name",
+            "customer_phone",
+            "customer_address",
+            "delivery_method",
+            "delivery_time",
+            "payment_method",
+            "cash_change_from",
+            "do_not_call",
+            "total_price",
+            "comment",
+        ],
+        headers,
+    )
+    lines_csv = build_csv_bytes(
+        [
+            "order_external_id",
+            "source_system",
+            "line_no",
+            "product_external_id",
+            "product_source_system",
+            "product_name",
+            "variant_external_id",
+            "variant_source_system",
+            "size_name",
+            "size_amount",
+            "size_unit",
+            "quantity",
+            "price",
+            "line_total",
+        ],
+        lines,
+    )
+    return (
+        build_zip_bytes(
+            {
+                "sales.csv": sales_csv,
+                "sales_lines.csv": lines_csv,
+            }
+        ),
+        f"sales-{now_stamp()}.zip",
+        {"orders": len(headers), "lines": len(lines)},
+    )
+
+
+def build_sales_1c_artifact(
+    db: sqlite3.Connection,
+    finalized_only: bool,
+    date_from: Optional[str],
+    date_to: Optional[str],
+    statuses: List[str],
+) -> tuple[bytes, str, Dict[str, Any]]:
+    headers, lines = collect_sales_export_rows(db, finalized_only, date_from, date_to, statuses)
+    lines_by_order: Dict[tuple[str, str], List[Dict[str, Any]]] = {}
+    for line in lines:
+        key = (line["order_external_id"], line["source_system"])
+        lines_by_order.setdefault(key, []).append(line)
+    root = ET.Element("КоммерческаяИнформация", ВерсияСхемы="2.10", Формат="SC-Restaurant")
+    documents = ET.SubElement(root, "Документы")
+    for header in headers:
+        document = ET.SubElement(documents, "Документ")
+        xml_text(document, "Ид", header["order_external_id"])
+        xml_text(document, "Источник", header["source_system"])
+        xml_text(document, "Дата", header["created_at"])
+        xml_text(document, "Статус", header["status"])
+        xml_text(document, "Комментарий", header["comment"])
+        xml_text(document, "Сумма", header["total_price"])
+        customer = ET.SubElement(document, "Контрагент")
+        xml_text(customer, "Ид", header.get("customer_external_id"))
+        xml_text(customer, "Источник", header.get("customer_source_system"))
+        xml_text(customer, "Наименование", header.get("customer_name"))
+        xml_text(customer, "Телефон", header.get("customer_phone"))
+        xml_text(customer, "Адрес", header.get("customer_address"))
+        goods = ET.SubElement(document, "Товары")
+        for line in lines_by_order.get((header["order_external_id"], header["source_system"]), []):
+            item = ET.SubElement(goods, "Товар")
+            xml_text(item, "Ид", line["variant_external_id"] or line["product_external_id"])
+            xml_text(item, "ТоварИд", line["product_external_id"])
+            xml_text(item, "Наименование", line["product_name"])
+            xml_text(item, "Размер", line.get("size_name"))
+            xml_text(item, "Количество", line["quantity"])
+            xml_text(item, "Цена", line["price"])
+            xml_text(item, "Сумма", line["line_total"])
+    return (
+        build_xml_bytes(root),
+        f"sales-{now_stamp()}.xml",
+        {"orders": len(headers), "lines": len(lines)},
+    )
+
+
+def parse_csv_bytes(content: bytes) -> List[Dict[str, str]]:
+    text = content.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+    return [{key: value for key, value in row.items()} for row in reader]
+
+
+def parse_sales_zip_bytes(content: bytes) -> tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+    with zipfile.ZipFile(io.BytesIO(content), "r") as archive:
+        names = {name.lower(): name for name in archive.namelist()}
+        sales_name = names.get("sales.csv")
+        lines_name = names.get("sales_lines.csv")
+        if not sales_name or not lines_name:
+            raise HTTPException(
+                status_code=400,
+                detail="Архив продаж должен содержать файлы sales.csv и sales_lines.csv.",
+            )
+        headers = parse_csv_bytes(archive.read(sales_name))
+        lines = parse_csv_bytes(archive.read(lines_name))
+    return headers, lines
+
+
+def parse_1c_xml(content: bytes) -> ET.Element:
+    try:
+        return ET.fromstring(content)
+    except ET.ParseError as exc:
+        raise HTTPException(status_code=400, detail="Некорректный XML файла 1C CommerceML.") from exc
+
+
+def parse_optional_int(value: Any) -> Optional[int]:
+    normalized = normalize_optional_text(str(value)) if value is not None else None
+    if not normalized:
+        return None
+    return int(float(normalized))
+
+
+def parse_required_int(value: Any, detail: str) -> int:
+    parsed = parse_optional_int(value)
+    if parsed is None:
+        raise ValueError(detail)
+    return parsed
+
+
+def parse_optional_float(value: Any) -> Optional[float]:
+    normalized = normalize_optional_text(str(value)) if value is not None else None
+    if not normalized:
+        return None
+    return float(normalized)
+
+
+def parse_bool_value(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return parse_bool_form(str(value), default=default)
+
+
+def extract_products_import_records(
+    format_name: str, mode: str, content: bytes
+) -> List[Dict[str, Any]]:
+    if format_name == "csv":
+        return parse_csv_bytes(content)
+
+    root = parse_1c_xml(content)
+    products = []
+    group_map: Dict[str, Dict[str, Optional[str]]] = {}
+    for group in root.findall(".//Каталог/Группы/Группа"):
+        group_id = normalize_optional_text(group.findtext("Ид"))
+        if not group_id:
+            continue
+        group_map[group_id] = {
+            "category_name": group.findtext("Наименование"),
+            "category_source_system": group.findtext("Источник") or DEFAULT_SOURCE_SYSTEM,
+        }
+    product_nodes = root.findall(".//Каталог/Товары/Товар")
+    offers = root.findall(".//ПакетПредложений/Предложения/Предложение")
+    offers_by_product: Dict[str, List[ET.Element]] = {}
+    for offer in offers:
+        product_id = normalize_optional_text(offer.findtext("ТоварИд"))
+        if product_id:
+            offers_by_product.setdefault(product_id, []).append(offer)
+    for product in product_nodes:
+        base = {
+            "product_external_id": product.findtext("Ид"),
+            "product_source_system": product.findtext("Источник") or DEFAULT_SOURCE_SYSTEM,
+            "product_name": product.findtext("Наименование"),
+            "product_description": product.findtext("Описание"),
+            "category_external_id": product.findtext("ГруппаИд"),
+            "is_active": product.findtext("Активен") or "1",
+            "is_hidden": product.findtext("Скрыт") or "0",
+            "category_source_system": group_map.get(normalize_optional_text(product.findtext("ГруппаИд")) or "", {}).get("category_source_system")
+            or DEFAULT_SOURCE_SYSTEM,
+            "category_name": group_map.get(normalize_optional_text(product.findtext("ГруппаИд")) or "", {}).get("category_name"),
+        }
+        matched_offers = offers_by_product.get(base["product_external_id"] or "", [])
+        if mode == "flat" or not matched_offers:
+            first_offer = matched_offers[0] if matched_offers else None
+            products.append(
+                {
+                    **base,
+                    "base_price": first_offer.findtext("Цена") if first_offer is not None else None,
+                    "default_size_name": first_offer.findtext("Размер") if first_offer is not None else None,
+                    "default_size_amount": first_offer.findtext("Количество") if first_offer is not None else None,
+                    "default_size_unit": first_offer.findtext("Единица") if first_offer is not None else None,
+                    "sku": first_offer.findtext("Артикул") if first_offer is not None else None,
+                    "barcode": first_offer.findtext("Штрихкод") if first_offer is not None else None,
+                }
+            )
+            continue
+        for offer in matched_offers:
+            products.append(
+                {
+                    **base,
+                    "variant_external_id": offer.findtext("Ид"),
+                    "variant_source_system": offer.findtext("Источник") or base["product_source_system"],
+                    "size_name": offer.findtext("Размер"),
+                    "size_amount": offer.findtext("Количество"),
+                    "size_unit": offer.findtext("Единица"),
+                    "price": offer.findtext("Цена"),
+                    "sku": offer.findtext("Артикул"),
+                    "barcode": offer.findtext("Штрихкод"),
+                    "variant_is_hidden": offer.findtext("Скрыт") or "0",
+                }
+            )
+    return products
+
+
+def extract_customer_import_records(format_name: str, content: bytes) -> List[Dict[str, Any]]:
+    if format_name == "csv":
+        return parse_csv_bytes(content)
+
+    root = parse_1c_xml(content)
+    customers = []
+    for customer in root.findall(".//Контрагенты/Контрагент"):
+        customers.append(
+            {
+                "external_id": customer.findtext("Ид"),
+                "source_system": customer.findtext("Источник") or DEFAULT_SOURCE_SYSTEM,
+                "name": customer.findtext("Наименование"),
+                "phone": customer.findtext("Телефон"),
+                "address": customer.findtext("Адрес"),
+            }
+        )
+    return customers
+
+
+def extract_sales_import_records(
+    format_name: str, content: bytes
+) -> tuple[List[Dict[str, Any]], Dict[tuple[str, str], List[Dict[str, Any]]]]:
+    if format_name == "csv":
+        headers, lines = parse_sales_zip_bytes(content)
+    else:
+        root = parse_1c_xml(content)
+        headers = []
+        lines = []
+        for document in root.findall(".//Документы/Документ"):
+            customer = document.find("Контрагент")
+            header = {
+                "order_external_id": document.findtext("Ид"),
+                "source_system": document.findtext("Источник") or DEFAULT_SOURCE_SYSTEM,
+                "created_at": document.findtext("Дата"),
+                "status": document.findtext("Статус"),
+                "customer_external_id": customer.findtext("Ид") if customer is not None else None,
+                "customer_source_system": customer.findtext("Источник") if customer is not None else None,
+                "customer_name": customer.findtext("Наименование") if customer is not None else None,
+                "customer_phone": customer.findtext("Телефон") if customer is not None else None,
+                "customer_address": customer.findtext("Адрес") if customer is not None else None,
+                "comment": document.findtext("Комментарий"),
+                "total_price": document.findtext("Сумма"),
+                "delivery_method": None,
+                "delivery_time": None,
+                "payment_method": None,
+                "cash_change_from": None,
+                "do_not_call": "0",
+            }
+            headers.append(header)
+            for idx, item in enumerate(document.findall("./Товары/Товар"), start=1):
+                lines.append(
+                    {
+                        "order_external_id": header["order_external_id"],
+                        "source_system": header["source_system"],
+                        "line_no": idx,
+                        "product_external_id": item.findtext("ТоварИд"),
+                        "product_source_system": header["source_system"],
+                        "product_name": item.findtext("Наименование"),
+                        "variant_external_id": item.findtext("Ид"),
+                        "variant_source_system": header["source_system"],
+                        "size_name": item.findtext("Размер"),
+                        "size_amount": None,
+                        "size_unit": None,
+                        "quantity": item.findtext("Количество"),
+                        "price": item.findtext("Цена"),
+                        "line_total": item.findtext("Сумма"),
+                    }
+                )
+
+    lines_by_order: Dict[tuple[str, str], List[Dict[str, Any]]] = {}
+    for line in lines:
+        key = (
+            normalize_optional_text(line.get("order_external_id")) or "",
+            normalize_optional_text(line.get("source_system")) or DEFAULT_SOURCE_SYSTEM,
+        )
+        lines_by_order.setdefault(key, []).append(line)
+    return headers, lines_by_order
+
+
+def import_products_records(
+    db: sqlite3.Connection,
+    *,
+    records: List[Dict[str, Any]],
+    mode: str,
+    dry_run: bool,
+    allow_price_updates: bool,
+    preserve_existing_sizes: bool,
+) -> Dict[str, Any]:
+    summary = {"total": len(records), "created": 0, "updated": 0, "skipped": 0, "errors": 0}
+    errors: List[Dict[str, Any]] = []
+    for idx, record in enumerate(records, start=1):
+        try:
+            category_id = fetch_or_create_category_for_import(
+                db,
+                name=record.get("category_name") or "Без категории",
+                external_id=record.get("category_external_id"),
+                source_system=record.get("category_source_system"),
+            )
+            product_id, product_created = fetch_or_create_product_for_import(
+                db,
+                category_id=category_id,
+                external_id=record.get("product_external_id"),
+                source_system=record.get("product_source_system"),
+                name=normalize_required_text(record.get("product_name"), "У товара должно быть имя."),
+                description=record.get("product_description"),
+                is_active=parse_bool_value(record.get("is_active"), default=True),
+                is_hidden=parse_bool_value(record.get("is_hidden"), default=False),
+            )
+            if mode == "flat":
+                existing_variant = db.execute(
+                    "SELECT * FROM product_sizes WHERE product_id = ? ORDER BY id LIMIT 1",
+                    (product_id,),
+                ).fetchone()
+                if existing_variant is not None and preserve_existing_sizes:
+                    summary["updated" if not product_created else "created"] += 1
+                    continue
+                if not allow_price_updates and existing_variant is not None:
+                    summary["skipped"] += 1
+                    continue
+                fetch_or_create_product_variant_for_import(
+                    db,
+                    product_id=product_id,
+                    variant_external_id=record.get("variant_external_id")
+                    or f"{record.get('product_external_id') or f'{DEFAULT_SOURCE_SYSTEM}:products:{product_id}'}:default",
+                    variant_source_system=record.get("variant_source_system") or record.get("product_source_system"),
+                    size_name=record.get("default_size_name"),
+                    size_amount=parse_optional_int(record.get("default_size_amount")),
+                    size_unit=record.get("default_size_unit"),
+                    price=parse_required_int(record.get("base_price"), "Для товара без размеров требуется цена."),
+                    sku=record.get("sku"),
+                    barcode=record.get("barcode"),
+                    is_hidden=parse_bool_value(record.get("is_hidden"), default=False),
+                )
+            else:
+                if not allow_price_updates and record.get("price") not in (None, ""):
+                    existing = find_row_by_external_id(
+                        db,
+                        "product_sizes",
+                        record.get("variant_external_id"),
+                        record.get("variant_source_system"),
+                    )
+                    if existing is not None:
+                        summary["skipped"] += 1
+                        continue
+                fetch_or_create_product_variant_for_import(
+                    db,
+                    product_id=product_id,
+                    variant_external_id=record.get("variant_external_id"),
+                    variant_source_system=record.get("variant_source_system") or record.get("product_source_system"),
+                    size_name=record.get("size_name"),
+                    size_amount=parse_optional_int(record.get("size_amount")),
+                    size_unit=record.get("size_unit"),
+                    price=parse_required_int(record.get("price"), "Для варианта товара требуется цена."),
+                    sku=record.get("sku"),
+                    barcode=record.get("barcode"),
+                    is_hidden=parse_bool_value(record.get("variant_is_hidden"), default=False),
+                    calories=parse_optional_float(record.get("calories")),
+                    protein=parse_optional_float(record.get("protein")),
+                    fat=parse_optional_float(record.get("fat")),
+                    carbs=parse_optional_float(record.get("carbs")),
+                )
+            summary["created" if product_created else "updated"] += 1
+        except Exception as exc:  # noqa: BLE001
+            errors.append(
+                {
+                    "row_no": idx,
+                    "entity_key": record.get("product_external_id") or record.get("product_name"),
+                    "error_code": "product_import_error",
+                    "message": str(exc),
+                    "payload": record,
+                }
+            )
+            summary["errors"] += 1
+    summary["dry_run"] = dry_run
+    return {"summary": summary, "errors": errors}
+
+
+def import_customer_records(
+    db: sqlite3.Connection,
+    *,
+    records: List[Dict[str, Any]],
+    dry_run: bool,
+    fallback_phone: bool,
+) -> Dict[str, Any]:
+    summary = {"total": len(records), "created": 0, "updated": 0, "skipped": 0, "errors": 0}
+    errors: List[Dict[str, Any]] = []
+    for idx, record in enumerate(records, start=1):
+        try:
+            before = find_row_by_external_id(
+                db, "customers", record.get("external_id"), record.get("source_system")
+            )
+            fetch_or_create_customer_for_import(
+                db,
+                external_id=record.get("external_id"),
+                source_system=record.get("source_system"),
+                name=record.get("name"),
+                phone=record.get("phone"),
+                address=record.get("address"),
+                fallback_phone=fallback_phone,
+            )
+            summary["updated" if before is not None else "created"] += 1
+        except Exception as exc:  # noqa: BLE001
+            errors.append(
+                {
+                    "row_no": idx,
+                    "entity_key": record.get("external_id") or record.get("phone"),
+                    "error_code": "customer_import_error",
+                    "message": str(exc),
+                    "payload": record,
+                }
+            )
+            summary["errors"] += 1
+    summary["dry_run"] = dry_run
+    return {"summary": summary, "errors": errors}
+
+
+def map_imported_sale_status(status_code: Optional[str]) -> str:
+    normalized = (status_code or "").strip().lower()
+    if normalized in {"canceled", "cancelled"}:
+        return "canceled"
+    return "done"
+
+
+def import_sales_records(
+    db: sqlite3.Connection,
+    *,
+    headers: List[Dict[str, Any]],
+    lines_by_order: Dict[tuple[str, str], List[Dict[str, Any]]],
+    dry_run: bool,
+) -> Dict[str, Any]:
+    summary = {"total": len(headers), "created": 0, "updated": 0, "skipped": 0, "errors": 0}
+    errors: List[Dict[str, Any]] = []
+    import_category_id = fetch_or_create_hidden_import_category(db)
+    for idx, header in enumerate(headers, start=1):
+        try:
+            order_external_id = normalize_required_text(
+                header.get("order_external_id"), "Для продажи нужен order_external_id."
+            )
+            order_source_system = normalize_optional_text(header.get("source_system")) or DEFAULT_SOURCE_SYSTEM
+            customer_id = fetch_or_create_customer_for_import(
+                db,
+                external_id=header.get("customer_external_id"),
+                source_system=header.get("customer_source_system") or order_source_system,
+                name=header.get("customer_name"),
+                phone=header.get("customer_phone"),
+                address=header.get("customer_address"),
+                fallback_phone=True,
+            )
+            line_items = lines_by_order.get((order_external_id, order_source_system), [])
+            if not line_items:
+                raise ValueError("Для продажи не найдено ни одной строки товара.")
+            status_code = map_imported_sale_status(header.get("status"))
+            status_row = get_status_row_or_500(db, status_code)
+            existing_order = find_row_by_external_id(
+                db, "orders", order_external_id, order_source_system
+            )
+            line_payloads: List[tuple[int, int, int]] = []
+            total_price = 0
+            for line in line_items:
+                product_name = normalize_required_text(
+                    line.get("product_name"), "У строки продажи должно быть имя товара."
+                )
+                product_id, _ = fetch_or_create_product_for_import(
+                    db,
+                    category_id=import_category_id,
+                    external_id=line.get("product_external_id"),
+                    source_system=line.get("product_source_system") or order_source_system,
+                    name=product_name,
+                    description="Исторический импорт продаж",
+                    is_active=False,
+                    is_hidden=True,
+                )
+                variant_id, _ = fetch_or_create_product_variant_for_import(
+                    db,
+                    product_id=product_id,
+                    variant_external_id=line.get("variant_external_id"),
+                    variant_source_system=line.get("variant_source_system") or order_source_system,
+                    size_name=line.get("size_name"),
+                    size_amount=parse_optional_int(line.get("size_amount")),
+                    size_unit=line.get("size_unit"),
+                    price=parse_required_int(line.get("price"), "Для строки продажи требуется цена."),
+                    sku=None,
+                    barcode=None,
+                    is_hidden=True,
+                )
+                quantity = parse_required_int(line.get("quantity"), "Для строки продажи требуется quantity.")
+                price = parse_required_int(line.get("price"), "Для строки продажи требуется price.")
+                total_price += quantity * price
+                line_payloads.append((variant_id, quantity, price))
+
+            if existing_order is None:
+                cur = db.execute(
+                    """
+                    INSERT INTO orders(
+                        customer_id, status_id, created_at, comment, delivery_method, delivery_time,
+                        payment_method, cash_change_from, do_not_call, total_price, external_id,
+                        source_system, imported_at
+                    )
+                    VALUES (?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (
+                        customer_id,
+                        status_row["id"],
+                        header.get("created_at"),
+                        normalize_optional_text(header.get("comment")),
+                        normalize_optional_text(header.get("delivery_method")) or "pickup",
+                        normalize_optional_text(header.get("delivery_time")),
+                        normalize_optional_text(header.get("payment_method")),
+                        parse_optional_int(header.get("cash_change_from")),
+                        int(parse_bool_value(header.get("do_not_call"), default=False)),
+                        parse_optional_int(header.get("total_price")) or total_price,
+                        order_external_id,
+                        order_source_system,
+                    ),
+                )
+                order_id = cur.lastrowid
+                db.execute(
+                    """
+                    INSERT INTO order_status_history(order_id, status_id, changed_at, comment)
+                    VALUES (?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?)
+                    """,
+                    (
+                        order_id,
+                        status_row["id"],
+                        header.get("created_at"),
+                        "Imported historical sale",
+                    ),
+                )
+                created = True
+            else:
+                order_id = existing_order["id"]
+                db.execute(
+                    """
+                    UPDATE orders
+                    SET customer_id = ?, status_id = ?, comment = ?, delivery_method = ?, delivery_time = ?,
+                        payment_method = ?, cash_change_from = ?, do_not_call = ?, total_price = ?, imported_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        customer_id,
+                        status_row["id"],
+                        normalize_optional_text(header.get("comment")),
+                        normalize_optional_text(header.get("delivery_method")) or "pickup",
+                        normalize_optional_text(header.get("delivery_time")),
+                        normalize_optional_text(header.get("payment_method")),
+                        parse_optional_int(header.get("cash_change_from")),
+                        int(parse_bool_value(header.get("do_not_call"), default=False)),
+                        parse_optional_int(header.get("total_price")) or total_price,
+                        order_id,
+                    ),
+                )
+                db.execute("DELETE FROM order_items WHERE order_id = ?", (order_id,))
+                created = False
+            for variant_id, quantity, price in line_payloads:
+                db.execute(
+                    """
+                    INSERT INTO order_items(order_id, product_size_id, quantity, price)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (order_id, variant_id, quantity, price),
+                )
+            summary["created" if created else "updated"] += 1
+        except Exception as exc:  # noqa: BLE001
+            errors.append(
+                {
+                    "row_no": idx,
+                    "entity_key": header.get("order_external_id"),
+                    "error_code": "sale_import_error",
+                    "message": str(exc),
+                    "payload": header,
+                }
+            )
+            summary["errors"] += 1
+    summary["dry_run"] = dry_run
+    return {"summary": summary, "errors": errors}
 # --- Public endpoints --------------------------------------------------------
 
 @app.get("/settings")
@@ -3059,3 +4908,392 @@ def update_settings(
         )
     db.commit()
     return {"ok": True}
+
+
+@app.get("/admin/integrations/jobs", response_model=List[IntegrationJobOut])
+def list_integration_jobs(
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    rows = db.execute(
+        """
+        SELECT *
+        FROM integration_jobs
+        ORDER BY id DESC
+        LIMIT 100
+        """
+    ).fetchall()
+    return [serialize_integration_job_row(row, request) for row in rows]
+
+
+@app.get("/admin/integrations/jobs/{job_id}", response_model=IntegrationJobOut)
+def get_integration_job(
+    job_id: int,
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    row = db.execute("SELECT * FROM integration_jobs WHERE id = ?", (job_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Операция импорта/экспорта не найдена.")
+    return serialize_integration_job_row(row, request)
+
+
+@app.get("/admin/integrations/jobs/{job_id}/errors", response_model=List[IntegrationJobErrorOut])
+def list_integration_job_errors(
+    job_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    rows = db.execute(
+        """
+        SELECT *
+        FROM integration_job_errors
+        WHERE job_id = ?
+        ORDER BY id ASC
+        """,
+        (job_id,),
+    ).fetchall()
+    return [
+        IntegrationJobErrorOut(
+            id=row["id"],
+            row_no=row["row_no"],
+            entity_key=row["entity_key"],
+            error_code=row["error_code"],
+            message=row["message"],
+            payload=json.loads(row["payload_json"]) if row["payload_json"] else None,
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+        for row in rows
+    ]
+
+
+@app.get("/admin/integrations/jobs/{job_id}/artifact")
+def download_integration_job_artifact(
+    job_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    row = db.execute("SELECT artifact_path, artifact_filename FROM integration_jobs WHERE id = ?", (job_id,)).fetchone()
+    if row is None or not row["artifact_path"]:
+        raise HTTPException(status_code=404, detail="Файл результата не найден.")
+    path = Path(row["artifact_path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Файл результата не найден.")
+    return FileResponse(path, filename=row["artifact_filename"] or path.name)
+
+
+@app.get("/admin/integrations/jobs/{job_id}/errors/report")
+def download_integration_job_error_report(
+    job_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+    _: sqlite3.Row = Depends(require_admin),
+):
+    row = db.execute(
+        "SELECT error_report_path, error_report_filename FROM integration_jobs WHERE id = ?",
+        (job_id,),
+    ).fetchone()
+    if row is None or not row["error_report_path"]:
+        raise HTTPException(status_code=404, detail="Файл ошибок не найден.")
+    path = Path(row["error_report_path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Файл ошибок не найден.")
+    return FileResponse(path, filename=row["error_report_filename"] or path.name)
+
+
+@app.post("/admin/export/products", response_model=IntegrationJobOut)
+def export_products(
+    body: ExportProductsRequest,
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_admin),
+):
+    format_name = normalize_integration_format(body.format)
+    mode = normalize_product_exchange_mode(body.mode)
+    job_id = create_integration_job(
+        db,
+        direction="export",
+        entity_type="products",
+        format_name=format_name,
+        profile=f"products:{mode}",
+        requested_by=current_user["id"],
+    )
+    try:
+        if format_name == "csv":
+            artifact_bytes, filename, summary = build_products_csv_artifact(db, mode)
+        else:
+            artifact_bytes, filename, summary = build_products_1c_artifact(db, mode)
+        artifact_path = write_artifact_bytes(job_id, filename, artifact_bytes)
+        row = complete_integration_job(
+            db,
+            job_id,
+            summary=summary,
+            artifact_path=artifact_path,
+            artifact_filename=filename,
+        )
+        return serialize_integration_job_row(row, request)
+    except Exception as exc:  # noqa: BLE001
+        row = fail_integration_job(db, job_id, message=str(exc))
+        return serialize_integration_job_row(row, request)
+
+
+@app.post("/admin/export/customers", response_model=IntegrationJobOut)
+def export_customers(
+    body: ExportCustomersRequest,
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_admin),
+):
+    format_name = normalize_integration_format(body.format)
+    scope = normalize_customer_scope(body.scope)
+    job_id = create_integration_job(
+        db,
+        direction="export",
+        entity_type="customers",
+        format_name=format_name,
+        profile=f"customers:{scope}",
+        requested_by=current_user["id"],
+    )
+    try:
+        if format_name == "csv":
+            artifact_bytes, filename, summary = build_customers_csv_artifact(
+                db, scope, body.date_from, body.date_to
+            )
+        else:
+            artifact_bytes, filename, summary = build_customers_1c_artifact(
+                db, scope, body.date_from, body.date_to
+            )
+        artifact_path = write_artifact_bytes(job_id, filename, artifact_bytes)
+        row = complete_integration_job(
+            db,
+            job_id,
+            summary=summary,
+            artifact_path=artifact_path,
+            artifact_filename=filename,
+        )
+        return serialize_integration_job_row(row, request)
+    except Exception as exc:  # noqa: BLE001
+        row = fail_integration_job(db, job_id, message=str(exc))
+        return serialize_integration_job_row(row, request)
+
+
+@app.post("/admin/export/sales", response_model=IntegrationJobOut)
+def export_sales(
+    body: ExportSalesRequest,
+    request: Request,
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_admin),
+):
+    format_name = normalize_integration_format(body.format)
+    statuses = [status.strip().lower() for status in body.statuses if status.strip()]
+    job_id = create_integration_job(
+        db,
+        direction="export",
+        entity_type="sales",
+        format_name=format_name,
+        profile="sales:historical",
+        requested_by=current_user["id"],
+    )
+    try:
+        if format_name == "csv":
+            artifact_bytes, filename, summary = build_sales_csv_artifact(
+                db, body.finalized_only, body.date_from, body.date_to, statuses
+            )
+        else:
+            artifact_bytes, filename, summary = build_sales_1c_artifact(
+                db, body.finalized_only, body.date_from, body.date_to, statuses
+            )
+        artifact_path = write_artifact_bytes(job_id, filename, artifact_bytes)
+        row = complete_integration_job(
+            db,
+            job_id,
+            summary=summary,
+            artifact_path=artifact_path,
+            artifact_filename=filename,
+        )
+        return serialize_integration_job_row(row, request)
+    except Exception as exc:  # noqa: BLE001
+        row = fail_integration_job(db, job_id, message=str(exc))
+        return serialize_integration_job_row(row, request)
+
+
+@app.post("/admin/import/products", response_model=IntegrationJobOut)
+async def import_products(
+    request: Request,
+    file: UploadFile = File(...),
+    format_name: str = Form(..., alias="format"),
+    mode: str = Form("variants"),
+    dry_run: str = Form("true"),
+    allow_price_updates: str = Form("true"),
+    preserve_existing_sizes: str = Form("false"),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_admin),
+):
+    normalized_format = normalize_integration_format(format_name)
+    normalized_mode = normalize_product_exchange_mode(mode)
+    parsed_dry_run = parse_bool_form(dry_run, default=True)
+    job_id = create_integration_job(
+        db,
+        direction="import",
+        entity_type="products",
+        format_name=normalized_format,
+        profile=f"products:{normalized_mode}",
+        requested_by=current_user["id"],
+        source_filename=file.filename,
+    )
+    try:
+        content = await file.read()
+        records = extract_products_import_records(normalized_format, normalized_mode, content)
+        db.execute("SAVEPOINT integration_import")
+        result = import_products_records(
+            db,
+            records=records,
+            mode=normalized_mode,
+            dry_run=parsed_dry_run,
+            allow_price_updates=parse_bool_form(allow_price_updates, default=True),
+            preserve_existing_sizes=parse_bool_form(preserve_existing_sizes, default=False),
+        )
+        if parsed_dry_run or result["errors"]:
+            db.execute("ROLLBACK TO integration_import")
+        db.execute("RELEASE integration_import")
+        error_path = None
+        error_name = None
+        if result["errors"]:
+            store_job_errors(db, job_id, result["errors"])
+            error_name = f"products-import-errors-{now_stamp()}.csv"
+            error_path = write_artifact_bytes(job_id, error_name, build_error_report_bytes(result["errors"]))
+        row = complete_integration_job(
+            db,
+            job_id,
+            summary=result["summary"],
+            error_report_path=error_path,
+            error_report_filename=error_name,
+            status="failed" if result["summary"].get("errors") else "completed",
+        )
+        return serialize_integration_job_row(row, request)
+    except Exception as exc:  # noqa: BLE001
+        try:
+            db.execute("ROLLBACK TO integration_import")
+            db.execute("RELEASE integration_import")
+        except sqlite3.Error:
+            pass
+        row = fail_integration_job(db, job_id, message=str(exc))
+        return serialize_integration_job_row(row, request)
+
+
+@app.post("/admin/import/customers", response_model=IntegrationJobOut)
+async def import_customers(
+    request: Request,
+    file: UploadFile = File(...),
+    format_name: str = Form(..., alias="format"),
+    dry_run: str = Form("true"),
+    fallback_phone: str = Form("false"),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_admin),
+):
+    normalized_format = normalize_integration_format(format_name)
+    parsed_dry_run = parse_bool_form(dry_run, default=True)
+    job_id = create_integration_job(
+        db,
+        direction="import",
+        entity_type="customers",
+        format_name=normalized_format,
+        profile="customers:upsert",
+        requested_by=current_user["id"],
+        source_filename=file.filename,
+    )
+    try:
+        content = await file.read()
+        records = extract_customer_import_records(normalized_format, content)
+        db.execute("SAVEPOINT integration_import")
+        result = import_customer_records(
+            db,
+            records=records,
+            dry_run=parsed_dry_run,
+            fallback_phone=parse_bool_form(fallback_phone, default=False),
+        )
+        if parsed_dry_run or result["errors"]:
+            db.execute("ROLLBACK TO integration_import")
+        db.execute("RELEASE integration_import")
+        error_path = None
+        error_name = None
+        if result["errors"]:
+            store_job_errors(db, job_id, result["errors"])
+            error_name = f"customers-import-errors-{now_stamp()}.csv"
+            error_path = write_artifact_bytes(job_id, error_name, build_error_report_bytes(result["errors"]))
+        row = complete_integration_job(
+            db,
+            job_id,
+            summary=result["summary"],
+            error_report_path=error_path,
+            error_report_filename=error_name,
+            status="failed" if result["summary"].get("errors") else "completed",
+        )
+        return serialize_integration_job_row(row, request)
+    except Exception as exc:  # noqa: BLE001
+        try:
+            db.execute("ROLLBACK TO integration_import")
+            db.execute("RELEASE integration_import")
+        except sqlite3.Error:
+            pass
+        row = fail_integration_job(db, job_id, message=str(exc))
+        return serialize_integration_job_row(row, request)
+
+
+@app.post("/admin/import/sales", response_model=IntegrationJobOut)
+async def import_sales(
+    request: Request,
+    file: UploadFile = File(...),
+    format_name: str = Form(..., alias="format"),
+    dry_run: str = Form("true"),
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_admin),
+):
+    normalized_format = normalize_integration_format(format_name)
+    parsed_dry_run = parse_bool_form(dry_run, default=True)
+    job_id = create_integration_job(
+        db,
+        direction="import",
+        entity_type="sales",
+        format_name=normalized_format,
+        profile="sales:historical",
+        requested_by=current_user["id"],
+        source_filename=file.filename,
+    )
+    try:
+        content = await file.read()
+        headers, lines_by_order = extract_sales_import_records(normalized_format, content)
+        db.execute("SAVEPOINT integration_import")
+        result = import_sales_records(
+            db,
+            headers=headers,
+            lines_by_order=lines_by_order,
+            dry_run=parsed_dry_run,
+        )
+        if parsed_dry_run or result["errors"]:
+            db.execute("ROLLBACK TO integration_import")
+        db.execute("RELEASE integration_import")
+        error_path = None
+        error_name = None
+        if result["errors"]:
+            store_job_errors(db, job_id, result["errors"])
+            error_name = f"sales-import-errors-{now_stamp()}.csv"
+            error_path = write_artifact_bytes(job_id, error_name, build_error_report_bytes(result["errors"]))
+        row = complete_integration_job(
+            db,
+            job_id,
+            summary=result["summary"],
+            error_report_path=error_path,
+            error_report_filename=error_name,
+            status="failed" if result["summary"].get("errors") else "completed",
+        )
+        return serialize_integration_job_row(row, request)
+    except Exception as exc:  # noqa: BLE001
+        try:
+            db.execute("ROLLBACK TO integration_import")
+            db.execute("RELEASE integration_import")
+        except sqlite3.Error:
+            pass
+        row = fail_integration_job(db, job_id, message=str(exc))
+        return serialize_integration_job_row(row, request)

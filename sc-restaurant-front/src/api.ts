@@ -1,6 +1,8 @@
 import type {
   AdminCategory,
   AdminCourier,
+  IntegrationJob,
+  IntegrationJobError,
   AdminOrder,
   AdminProduct,
   AuthResponse,
@@ -86,6 +88,58 @@ export function setAuthToken(token: string | null) {
       localStorage.removeItem(legacyKey);
     }
   }
+}
+
+export function resolveApiUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  if (!path.startsWith("/")) return `${API_BASE}/${path}`;
+  return `${API_BASE}${path}`;
+}
+
+function getFilenameFromDisposition(value: string | null) {
+  if (!value) return null;
+  const utf8Match = value.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const plainMatch = value.match(/filename\s*=\s*"?([^";]+)"?/i);
+  return plainMatch?.[1] ?? null;
+}
+
+async function downloadWithAuth(path: string, fallbackFilename?: string) {
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const res = await fetch(resolveApiUrl(path), { headers });
+  if (res.status === 401) {
+    setAuthToken(null);
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    const err = new Error(text || `API error ${res.status}`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
+  }
+
+  const blob = await res.blob();
+  const filename =
+    getFilenameFromDisposition(res.headers.get("content-disposition")) ||
+    fallbackFilename ||
+    "download";
+  const objectUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(objectUrl);
 }
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -412,6 +466,109 @@ export const api = {
     return request(`/orders/${orderId}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status_code, comment }),
+    });
+  },
+
+  integrationJobs(): Promise<IntegrationJob[]> {
+    return request("/admin/integrations/jobs");
+  },
+
+  integrationJobErrors(jobId: number): Promise<IntegrationJobError[]> {
+    return request(`/admin/integrations/jobs/${jobId}/errors`);
+  },
+
+  downloadFile(path: string, fallbackFilename?: string): Promise<void> {
+    return downloadWithAuth(path, fallbackFilename);
+  },
+
+  exportProducts(payload: {
+    format: "csv" | "1c";
+    mode: "flat" | "variants";
+  }): Promise<IntegrationJob> {
+    return request("/admin/export/products", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  exportCustomers(payload: {
+    format: "csv" | "1c";
+    scope: "all" | "with_orders" | "period";
+    date_from?: string | null;
+    date_to?: string | null;
+  }): Promise<IntegrationJob> {
+    return request("/admin/export/customers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  exportSales(payload: {
+    format: "csv" | "1c";
+    finalized_only?: boolean;
+    date_from?: string | null;
+    date_to?: string | null;
+    statuses?: string[];
+  }): Promise<IntegrationJob> {
+    return request("/admin/export/sales", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  importProducts(payload: {
+    file: File;
+    format: "csv" | "1c";
+    mode: "flat" | "variants";
+    dry_run: boolean;
+    allow_price_updates: boolean;
+    preserve_existing_sizes: boolean;
+  }): Promise<IntegrationJob> {
+    const form = new FormData();
+    form.append("file", payload.file);
+    form.append("format", payload.format);
+    form.append("mode", payload.mode);
+    form.append("dry_run", String(payload.dry_run));
+    form.append("allow_price_updates", String(payload.allow_price_updates));
+    form.append("preserve_existing_sizes", String(payload.preserve_existing_sizes));
+    return request("/admin/import/products", {
+      method: "POST",
+      body: form,
+      headers: {},
+    });
+  },
+
+  importCustomers(payload: {
+    file: File;
+    format: "csv" | "1c";
+    dry_run: boolean;
+    fallback_phone: boolean;
+  }): Promise<IntegrationJob> {
+    const form = new FormData();
+    form.append("file", payload.file);
+    form.append("format", payload.format);
+    form.append("dry_run", String(payload.dry_run));
+    form.append("fallback_phone", String(payload.fallback_phone));
+    return request("/admin/import/customers", {
+      method: "POST",
+      body: form,
+      headers: {},
+    });
+  },
+
+  importSales(payload: {
+    file: File;
+    format: "csv" | "1c";
+    dry_run: boolean;
+  }): Promise<IntegrationJob> {
+    const form = new FormData();
+    form.append("file", payload.file);
+    form.append("format", payload.format);
+    form.append("dry_run", String(payload.dry_run));
+    return request("/admin/import/sales", {
+      method: "POST",
+      body: form,
+      headers: {},
     });
   },
 };
