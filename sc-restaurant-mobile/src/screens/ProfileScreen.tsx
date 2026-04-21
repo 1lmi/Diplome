@@ -65,6 +65,10 @@ export default function ProfileScreen() {
     queryKey: ["me-orders"],
     queryFn: mobileApi.getMyOrders,
     enabled: Boolean(user),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
   });
 
   const handleLogout = async () => {

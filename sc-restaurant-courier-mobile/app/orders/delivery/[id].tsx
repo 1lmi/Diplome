@@ -5,7 +5,8 @@ import React, { useEffect } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { courierApi } from '@/src/api/courier-api';
-import { ActionButton, AppScreen, Card, SectionTitle } from '@/src/components/ui';
+import { ActionButton, BaseAppScreen, Card, SectionTitle } from '@/src/components/ui';
+import { formatPrice } from '@/src/lib/format';
 import { useAuthStore } from '@/src/store/auth-store';
 import { colors, spacing } from '@/src/theme/tokens';
 
@@ -68,10 +69,42 @@ export default function CourierDeliveryScreen() {
   };
 
   return (
-    <AppScreen>
+    <BaseAppScreen
+      footer={
+        order ? (
+          <>
+            <View style={styles.footerRow}>
+              <View style={styles.footerButtonWrap}>
+                <ActionButton
+                  title="Позвонить"
+                  variant="secondary"
+                  onPress={() => void handleCall()}
+                  disabled={!order.customer_phone}
+                />
+              </View>
+              <View style={styles.footerButtonWrap}>
+                <ActionButton
+                  title="Открыть в картах"
+                  variant="secondary"
+                  onPress={() => void handleMaps()}
+                  disabled={!order.customer_address}
+                />
+              </View>
+            </View>
+
+            <ActionButton
+              title="Доставлено"
+              variant="danger"
+              onPress={handleComplete}
+              loading={completeMutation.isPending}
+            />
+          </>
+        ) : null
+      }
+    >
       <SectionTitle
         title={`Доставка №${orderId}`}
-        subtitle="После вручения нажмите «Доставлено» и подтвердите действие."
+        subtitle="Проверьте адрес и состав заказа. После вручения нажмите «Доставлено»."
       />
 
       {orderQuery.isLoading ? <Text style={styles.metaText}>Загружаем данные клиента...</Text> : null}
@@ -93,20 +126,38 @@ export default function CourierDeliveryScreen() {
             </View>
           </Card>
 
-          <View style={styles.actionsWrap}>
-            <ActionButton title="Позвонить" variant="secondary" onPress={() => void handleCall()} disabled={!order.customer_phone} />
-            <ActionButton title="Открыть в картах" variant="secondary" onPress={() => void handleMaps()} disabled={!order.customer_address} />
-          </View>
+          <Card>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>Состав заказа</Text>
+              <Text style={styles.sectionMeta}>{order.items.length} поз.</Text>
+            </View>
 
-          <ActionButton
-            title="Доставлено"
-            variant="danger"
-            onPress={handleComplete}
-            loading={completeMutation.isPending}
-          />
+            <View style={styles.itemsWrap}>
+              {order.items.map((item, index) => (
+                <View
+                  key={`${item.product_size_id}-${index}`}
+                  style={[styles.itemRow, index > 0 ? styles.itemRowBorder : null]}
+                >
+                  <View style={styles.itemMain}>
+                    <Text style={styles.itemTitle}>{item.product_name}</Text>
+                    {item.size_name ? <Text style={styles.itemMeta}>{item.size_name}</Text> : null}
+                  </View>
+                  <View style={styles.itemAmount}>
+                    <Text style={styles.itemMeta}>×{item.quantity}</Text>
+                    <Text style={styles.itemPrice}>{formatPrice(item.line_total)}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Итого</Text>
+              <Text style={styles.totalValue}>{formatPrice(order.total_price)}</Text>
+            </View>
+          </Card>
         </>
       ) : null}
-    </AppScreen>
+    </BaseAppScreen>
   );
 }
 
@@ -128,7 +179,85 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 22,
   },
-  actionsWrap: {
+  footerRow: {
+    flexDirection: 'row',
     gap: spacing.md,
+  },
+  footerButtonWrap: {
+    flex: 1,
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  sectionMeta: {
+    color: colors.muted,
+    fontSize: 13,
+  },
+  itemsWrap: {
+    gap: spacing.sm,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  itemRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+  },
+  itemMain: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  itemTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 21,
+  },
+  itemMeta: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  itemAmount: {
+    minWidth: 72,
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+  },
+  itemPrice: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+    marginTop: spacing.xs,
+  },
+  totalLabel: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  totalValue: {
+    color: colors.accentDark,
+    fontSize: 18,
+    fontWeight: '700',
   },
 });

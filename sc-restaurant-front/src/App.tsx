@@ -25,6 +25,7 @@ import {
   isCompletePhoneInput,
   normalizePhoneLogin,
 } from "./phone";
+import { isTerminalOrderStatus } from "./utils/orderStatus";
 import type {
   Category,
   MenuItem,
@@ -97,15 +98,21 @@ const AppContent: React.FC = () => {
 
   const showCatalogHeaderBottom = currentView === "menu";
 
-  const refreshMyOrders = async () => {
-    setOrdersLoading(true);
+  const refreshMyOrders = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setOrdersLoading(true);
+    }
     try {
       const orders = await api.getMyOrders();
       setMyOrders(orders);
     } catch {
-      setMyOrders([]);
+      if (!options?.silent) {
+        setMyOrders([]);
+      }
     } finally {
-      setOrdersLoading(false);
+      if (!options?.silent) {
+        setOrdersLoading(false);
+      }
     }
   };
 
@@ -149,6 +156,23 @@ const AppContent: React.FC = () => {
 
     void Promise.all([refreshMyOrders(), refreshMyAddresses()]);
   }, [user]);
+
+  useEffect(() => {
+    if (!user || currentView !== "profile") {
+      return;
+    }
+
+    const hasActiveOrders = myOrders.some((order) => !isTerminalOrderStatus(order.status));
+    if (!hasActiveOrders) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshMyOrders({ silent: true });
+    }, 15_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [currentView, myOrders, user]);
 
   useEffect(() => {
     if (!categories.length) return;

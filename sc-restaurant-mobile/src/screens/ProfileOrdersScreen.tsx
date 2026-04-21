@@ -20,6 +20,10 @@ export default function ProfileOrdersScreen() {
     queryKey: ["me-orders"],
     queryFn: mobileApi.getMyOrders,
     enabled: Boolean(user),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
   });
 
   if (!user) {

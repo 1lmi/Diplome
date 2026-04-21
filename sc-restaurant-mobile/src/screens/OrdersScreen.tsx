@@ -30,6 +30,10 @@ export default function OrdersScreen() {
     queryKey: ["me-orders"],
     queryFn: mobileApi.getMyOrders,
     enabled: Boolean(user),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
   });
 
   const [orderId, setOrderId] = useState("");

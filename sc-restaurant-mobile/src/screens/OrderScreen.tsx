@@ -12,7 +12,11 @@ import { Screen } from "@/src/components/ui/Screen";
 import { StatusPill } from "@/src/components/ui/StatusPill";
 import { SurfacePanel } from "@/src/components/ui/SurfacePanel";
 import { formatDateTime, formatPrice, getDisplayImage } from "@/src/lib/format";
-import { buildOrderProgress, getActiveHistoryEntry } from "@/src/lib/order-progress";
+import {
+  buildOrderProgress,
+  getActiveHistoryEntry,
+  isTerminalOrderStatus,
+} from "@/src/lib/order-progress";
 import { useAuthStore } from "@/src/store/auth-store";
 import { useTrackingStore } from "@/src/store/tracking-store";
 import { colors, radii, spacing, typography } from "@/src/theme/tokens";
@@ -75,6 +79,13 @@ export default function OrderScreen() {
     queryKey: ["order", orderId, phone || "auth"],
     queryFn: () => mobileApi.getOrder(orderId, phone),
     enabled: Number.isFinite(orderId) && orderId > 0,
+    refetchInterval: (query) =>
+      isTerminalOrderStatus((query.state.data as { status?: string | null } | undefined)?.status)
+        ? false
+        : 10_000,
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
   });
 
   const order = orderQuery.data;

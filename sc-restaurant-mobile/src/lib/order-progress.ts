@@ -12,6 +12,7 @@ export interface OrderProgressStep {
 const DELIVERY_FLOW = ["new", "cooking", "ready", "on_way", "done"];
 const PICKUP_FLOW = ["new", "cooking", "ready", "done"];
 const CANCELED_CODES = new Set(["canceled", "cancelled"]);
+const TERMINAL_STATUSES = new Set(["done", "canceled", "cancelled"]);
 
 const LABELS: Record<string, { label: string; caption: string }> = {
   new: { label: "Новый", caption: "Заказ принят и ждёт приготовления" },
@@ -24,6 +25,10 @@ const LABELS: Record<string, { label: string; caption: string }> = {
 
 function normalizeStatus(status?: string | null) {
   return (status || "").trim().toLowerCase();
+}
+
+export function isTerminalOrderStatus(status?: string | null) {
+  return TERMINAL_STATUSES.has(normalizeStatus(status));
 }
 
 export function buildOrderProgress(order: Order): OrderProgressStep[] {

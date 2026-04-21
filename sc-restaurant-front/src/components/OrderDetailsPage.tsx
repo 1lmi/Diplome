@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../authContext";
 import { getOrderTracking } from "../orderTracking";
+import { isTerminalOrderStatus } from "../utils/orderStatus";
 import type { Order } from "../types";
 
 type ProgressTone = "completed" | "current" | "future" | "danger";
@@ -192,11 +193,14 @@ const OrderDetailsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const parsedId = useMemo(() => Number(orderId), [orderId]);
+  const hasLoadedOrderRef = React.useRef(false);
 
-  const loadOrder = useCallback(async () => {
-    setOrder(null);
-    setError(null);
-    setNotFound(false);
+  const loadOrder = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setOrder(null);
+      setError(null);
+      setNotFound(false);
+    }
 
     if (!Number.isFinite(parsedId) || parsedId <= 0) {
       setNotFound(true);
@@ -209,26 +213,51 @@ const OrderDetailsPage: React.FC = () => {
       return;
     }
 
-    setLoadingOrder(true);
+    if (!options?.silent) {
+      setLoadingOrder(true);
+    }
     try {
       const data = await api.getOrder(parsedId, tracking?.phone);
       setOrder(data);
+      setError(null);
+      setNotFound(false);
     } catch (caughtError: unknown) {
       const status = getHistoryErrorStatus(caughtError);
       if (status === 401 || status === 403 || status === 404) {
         setNotFound(true);
       } else {
-        setError(getHistoryErrorMessage(caughtError));
+        if (!options?.silent || !hasLoadedOrderRef.current) {
+          setError(getHistoryErrorMessage(caughtError));
+        }
       }
     } finally {
-      setLoadingOrder(false);
+      if (!options?.silent) {
+        setLoadingOrder(false);
+      }
     }
   }, [parsedId, user]);
 
   useEffect(() => {
     if (loading) return;
+    hasLoadedOrderRef.current = false;
     void loadOrder();
   }, [loading, loadOrder]);
+
+  useEffect(() => {
+    hasLoadedOrderRef.current = Boolean(order);
+  }, [order]);
+
+  useEffect(() => {
+    if (loading || !order || isTerminalOrderStatus(order.status)) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadOrder({ silent: true });
+    }, 10_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [loadOrder, loading, order]);
 
   if (loading || loadingOrder) {
     return <div className="panel">Загружаем заказ...</div>;

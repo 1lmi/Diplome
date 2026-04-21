@@ -15,6 +15,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii, spacing } from '@/src/theme/tokens';
 
 export function AppScreen({ children }: { children: React.ReactNode }) {
+  return <BaseAppScreen>{children}</BaseAppScreen>;
+}
+
+export function BaseAppScreen({
+  children,
+  footer,
+}: {
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'right', 'bottom', 'left']}>
       <KeyboardAvoidingView
@@ -22,12 +32,14 @@ export function AppScreen({ children }: { children: React.ReactNode }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
+          style={styles.scroll}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {children}
         </ScrollView>
+        {footer ? <View style={styles.footer}>{footer}</View> : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -120,6 +132,9 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.lg,
   },
+  scroll: {
+    flex: 1,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
@@ -196,5 +211,14 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 20,
+  },
+  footer: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+    gap: spacing.md,
   },
 });

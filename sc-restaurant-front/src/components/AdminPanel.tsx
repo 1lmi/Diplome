@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api } from "../api";
 import type {
   AdminCategory,
@@ -61,6 +61,7 @@ interface ProductUpdateDraft {
 
 export const AdminPanel: React.FC<Props> = ({ statuses }) => {
   const { pushToast } = useToast();
+  const location = useLocation();
   const [menu, setMenu] = useState<AdminCategory[]>([]);
   const [couriers, setCouriers] = useState<AdminCourier[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -85,6 +86,18 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
   useEffect(() => {
     refreshAll();
   }, []);
+
+  useEffect(() => {
+    if (location.pathname !== "/admin/orders/current") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshOrders({ silent: true });
+    }, 10_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [location.pathname]);
 
   const patchProductInMenu = (product: AdminProduct) => {
     setMenu((prev) =>
@@ -141,6 +154,28 @@ export const AdminPanel: React.FC<Props> = ({ statuses }) => {
       setError(e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshOrders = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
+
+    try {
+      const ordersData = await api.adminOrders();
+      setOrders(ordersData);
+      if (!options?.silent) {
+        setError(null);
+      }
+    } catch (e: any) {
+      if (!options?.silent) {
+        setError(e.message);
+      }
+    } finally {
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   };
 
