@@ -1,5 +1,5 @@
-import type { AuthResponse, CourierBoard, Order, User } from '@/src/api/types';
-import { request } from '@/src/api/client';
+import type { AuthResponse, CourierBoard, Order, User } from './types';
+import { request } from './client';
 
 export const courierApi = {
   login(login: string, password: string) {

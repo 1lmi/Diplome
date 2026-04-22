@@ -3,11 +3,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { courierApi } from '@/src/api/courier-api';
-import { ActionButton, AppScreen, Card, SectionTitle } from '@/src/components/ui';
-import { formatPrice } from '@/src/lib/format';
-import { useAuthStore } from '@/src/store/auth-store';
-import { colors, radii, spacing } from '@/src/theme/tokens';
+import { courierApi } from '../../../src/api/courier-api';
+import { ActionButton, AppScreen, Card, SectionTitle } from '../../../src/components/ui';
+import { formatPrice } from '../../../src/lib/format';
+import { useAuthStore } from '../../../src/store/auth-store';
+import { colors, radii, spacing } from '../../../src/theme/tokens';
 
 export default function CourierChecklistScreen() {
   const params = useLocalSearchParams<{ id: string }>();

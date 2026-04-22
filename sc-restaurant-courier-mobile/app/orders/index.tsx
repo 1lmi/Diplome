@@ -3,12 +3,12 @@ import { router } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { courierApi } from '@/src/api/courier-api';
-import type { Order } from '@/src/api/types';
-import { ActionButton, AppScreen, Card, SectionTitle } from '@/src/components/ui';
-import { formatPrice, formatReadyAge } from '@/src/lib/format';
-import { useAuthStore } from '@/src/store/auth-store';
-import { colors, radii, spacing } from '@/src/theme/tokens';
+import { courierApi } from '../../src/api/courier-api';
+import type { Order } from '../../src/api/types';
+import { ActionButton, AppScreen, Card, SectionTitle } from '../../src/components/ui';
+import { formatPrice, formatReadyAge } from '../../src/lib/format';
+import { useAuthStore } from '../../src/store/auth-store';
+import { colors, radii, spacing } from '../../src/theme/tokens';
 
 function OrderCard({
   order,

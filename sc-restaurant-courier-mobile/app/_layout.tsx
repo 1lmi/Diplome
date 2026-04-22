@@ -4,9 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { AppProviders } from '@/src/providers/AppProviders';
-import { useAuthStore } from '@/src/store/auth-store';
-import { colors } from '@/src/theme/tokens';
+import { AppProviders } from '../src/providers/AppProviders';
+import { useAuthStore } from '../src/store/auth-store';
+import { colors } from '../src/theme/tokens';
 
 void SplashScreen.preventAutoHideAsync();
 

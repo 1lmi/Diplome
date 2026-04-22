@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { colors } from '@/src/theme/tokens';
+import { colors } from '../theme/tokens';
 
 void SystemUI.setBackgroundColorAsync(colors.bg);
 

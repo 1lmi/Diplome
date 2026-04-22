@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, radii, spacing } from '@/src/theme/tokens';
+import { colors, radii, spacing } from '../theme/tokens';
 
 export function AppScreen({ children }: { children: React.ReactNode }) {
   return <BaseAppScreen>{children}</BaseAppScreen>;

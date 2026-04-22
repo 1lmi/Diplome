@@ -3,11 +3,11 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { courierApi } from '@/src/api/courier-api';
-import { ActionButton, AppScreen, Card, Field, SectionTitle } from '@/src/components/ui';
-import { formatPhoneInput, isCompletePhoneInput, normalizePhoneValue } from '@/src/lib/phone';
-import { useAuthStore } from '@/src/store/auth-store';
-import { colors, spacing } from '@/src/theme/tokens';
+import { courierApi } from '../../src/api/courier-api';
+import { ActionButton, AppScreen, Card, Field, SectionTitle } from '../../src/components/ui';
+import { formatPhoneInput, isCompletePhoneInput, normalizePhoneValue } from '../../src/lib/phone';
+import { useAuthStore } from '../../src/store/auth-store';
+import { colors, spacing } from '../../src/theme/tokens';
 
 export default function CourierSignInScreen() {
   const completeAuth = useAuthStore((state) => state.completeAuth);

@@ -1,9 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 
-import { setApiToken } from '@/src/api/client';
-import { courierApi } from '@/src/api/courier-api';
-import type { AuthResponse, User } from '@/src/api/types';
+import { setApiToken } from '../api/client';
+import { courierApi } from '../api/courier-api';
+import type { AuthResponse, User } from '../api/types';
 
 const TOKEN_KEY = 'sc-courier-mobile-auth-token';
 
