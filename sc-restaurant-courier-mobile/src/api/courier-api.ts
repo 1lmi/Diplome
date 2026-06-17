@@ -1,4 +1,4 @@
-import type { AuthResponse, CourierBoard, Order, User } from './types';
+import type { AuthResponse, CourierBoard, CourierStats, Order, User } from './types';
 import { request } from './client';
 
 export const courierApi = {
@@ -19,6 +19,10 @@ export const courierApi = {
 
   getBoard() {
     return request<CourierBoard>('/courier/orders');
+  },
+
+  getStats() {
+    return request<CourierStats>('/courier/stats');
   },
 
   getOrder(orderId: number) {

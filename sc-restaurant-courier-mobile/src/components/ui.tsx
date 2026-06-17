@@ -1,3 +1,5 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -10,20 +12,35 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, radii, spacing } from '../theme/tokens';
 
-export function AppScreen({ children }: { children: React.ReactNode }) {
-  return <BaseAppScreen>{children}</BaseAppScreen>;
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+function pressFeedback() {
+  void Haptics.selectionAsync().catch(() => undefined);
+}
+
+export function AppScreen({
+  children,
+  contentStyle,
+}: {
+  children: React.ReactNode;
+  contentStyle?: StyleProp<ViewStyle>;
+}) {
+  return <BaseAppScreen contentStyle={contentStyle}>{children}</BaseAppScreen>;
 }
 
 export function BaseAppScreen({
   children,
   footer,
+  contentStyle,
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
+  contentStyle?: StyleProp<ViewStyle>;
 }) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'right', 'bottom', 'left']}>
@@ -33,7 +50,7 @@ export function BaseAppScreen({
       >
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, contentStyle]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -45,8 +62,14 @@ export function BaseAppScreen({
   );
 }
 
-export function Card({ children }: { children: React.ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+export function Card({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return <View style={[styles.card, style]}>{children}</View>;
 }
 
 export function Field({
@@ -73,40 +96,84 @@ export function ActionButton({
   title,
   onPress,
   variant = 'primary',
+  icon,
   disabled,
   loading,
 }: {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'danger';
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  icon?: IconName;
   disabled?: boolean;
   loading?: boolean;
 }) {
   const isDisabled = disabled || loading;
+  const iconColor =
+    variant === 'secondary' || variant === 'ghost' ? colors.accentDark : '#fff';
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        if (isDisabled) return;
+        pressFeedback();
+        onPress();
+      }}
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.button,
         variant === 'secondary' ? styles.buttonSecondary : null,
         variant === 'danger' ? styles.buttonDanger : null,
+        variant === 'ghost' ? styles.buttonGhost : null,
         isDisabled ? styles.buttonDisabled : null,
         pressed && !isDisabled ? styles.buttonPressed : null,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'secondary' ? colors.text : '#fff'} />
+        <ActivityIndicator color={iconColor} size="small" />
       ) : (
-        <Text
-          style={[
-            styles.buttonText,
-            variant === 'secondary' ? styles.buttonTextSecondary : null,
-          ]}
-        >
-          {title}
-        </Text>
+        <View style={styles.buttonInner}>
+          {icon ? <Ionicons name={icon} size={17} color={iconColor} /> : null}
+          <Text
+            style={[
+              styles.buttonText,
+              variant === 'secondary' || variant === 'ghost' ? styles.buttonTextSecondary : null,
+            ]}
+          >
+            {title}
+          </Text>
+        </View>
       )}
+    </Pressable>
+  );
+}
+
+export function IconButton({
+  icon,
+  label,
+  onPress,
+  disabled,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={() => {
+        if (disabled) return;
+        pressFeedback();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.iconButton,
+        disabled ? styles.buttonDisabled : null,
+        pressed && !disabled ? styles.buttonPressed : null,
+      ]}
+    >
+      <Ionicons name={icon} size={20} color={colors.text} />
     </Pressable>
   );
 }
@@ -129,7 +196,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
     gap: spacing.lg,
   },
   scroll: {
@@ -140,8 +209,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.lg,
+    padding: spacing.md,
     gap: spacing.md,
+    elevation: 1,
   },
   field: {
     gap: spacing.xs,
@@ -172,38 +242,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   button: {
-    minHeight: 48,
+    minHeight: 44,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     backgroundColor: colors.accent,
   },
   buttonSecondary: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: '#ffd5b8',
   },
   buttonDanger: {
     backgroundColor: colors.danger,
+  },
+  buttonGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   buttonDisabled: {
     opacity: 0.55,
   },
   buttonPressed: {
-    transform: [{ scale: 0.985 }],
+    transform: [{ scale: 0.98 }],
+  },
+  buttonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
   buttonText: {
     color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
+    fontWeight: '600',
+    fontSize: 14,
   },
   buttonTextSecondary: {
-    color: colors.text,
+    color: colors.accentDark,
+  },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   sectionTitle: {
     gap: spacing.xs,
   },
   sectionHeading: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.text,
   },
@@ -213,12 +306,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   footer: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.surface,
     gap: spacing.md,
   },
 });

@@ -1,3 +1,6 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
 const DEFAULT_REMOTE_API_BASE = 'https://sc-delivery.ru/api';
 const rawApiBase = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 
@@ -5,8 +8,40 @@ function normalizeApiBase(value: string) {
   return value.replace(/\/+$/, '');
 }
 
+function getExpoHost() {
+  const expoConfigHost = Constants.expoConfig?.hostUri;
+  if (expoConfigHost) return expoConfigHost;
+
+  const manifest = Constants.manifest2 as
+    | { extra?: { expoClient?: { hostUri?: string } } }
+    | null
+    | undefined;
+  return manifest?.extra?.expoClient?.hostUri || '';
+}
+
+function normalizeDevHost(host: string) {
+  const normalized = host.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+
+  if (Platform.OS === 'android' && (normalized === 'localhost' || normalized === '127.0.0.1')) {
+    return '10.0.2.2';
+  }
+
+  return normalized || 'localhost';
+}
+
+function resolveDevelopmentApiBase() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname) {
+    return `http://${window.location.hostname}:8000`;
+  }
+
+  return `http://${normalizeDevHost(getExpoHost())}:8000`;
+}
+
 function resolveApiBase() {
   if (!rawApiBase) {
+    if (__DEV__) {
+      return resolveDevelopmentApiBase();
+    }
     return DEFAULT_REMOTE_API_BASE;
   }
   return rawApiBase;

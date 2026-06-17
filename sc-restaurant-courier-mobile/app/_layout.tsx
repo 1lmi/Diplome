@@ -31,13 +31,13 @@ function RootNavigator() {
       <Stack
         screenOptions={{
           headerShown: false,
-          animation: 'simple_push',
+          animation: 'fade',
           contentStyle: { backgroundColor: colors.bg },
         }}
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="auth/sign-in" options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="orders/index" />
+        <Stack.Screen name="(tabs)" />
         <Stack.Screen name="orders/checklist/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="orders/delivery/[id]" options={{ animation: 'slide_from_right' }} />
       </Stack>

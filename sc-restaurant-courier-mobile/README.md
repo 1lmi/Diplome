@@ -10,25 +10,26 @@
 npm install
 ```
 
-2. Укажите API:
+2. Укажите API, если нужен явный override:
 
 ```bash
 copy .env.example .env
 ```
 
-В `.env` задайте `EXPO_PUBLIC_API_BASE_URL`:
+В dev-режиме приложение само выбирает локальный backend на `:8000` по host Expo.
+В `.env` задайте `EXPO_PUBLIC_API_BASE_URL`, только если нужно переопределить API:
 
 - production server: `https://sc-delivery.ru/api`
 - Android emulator for local backend: `http://10.0.2.2:8000`
 - device in one Wi-Fi with your PC: `http://<IP_компьютера>:8000`
 
-3. Запуск:
+3. Запуск локально:
 
 ```bash
 npm run start:lan
 ```
 
-или сразу из корня репозитория через `start-project.bat`.
+или сразу из корня репозитория через `start-site-and-courier.command`.
 
 ## Проверки
 

@@ -1067,6 +1067,22 @@ class CourierBoardOut(BaseModel):
     my_active: Optional[OrderOut] = None
 
 
+class CourierStatsPoint(BaseModel):
+    date: str
+    label: str
+    delivered_count: int
+    total_amount: int
+
+
+class CourierStatsOut(BaseModel):
+    today_delivered: int
+    today_amount: int
+    week_delivered: int
+    week_amount: int
+    avg_delivery_minutes: Optional[int] = None
+    points: List[CourierStatsPoint]
+
+
 class IntegrationJobOut(BaseModel):
     id: int
     direction: str
@@ -4295,6 +4311,82 @@ def courier_orders_board(
     my_active = fetch_order(db, my_active_id, request=request)[1] if my_active_id else None
 
     return CourierBoardOut(cooking=cooking_orders, ready=ready_orders, my_active=my_active)
+
+
+@app.get("/courier/stats", response_model=CourierStatsOut)
+def courier_stats(
+    db: sqlite3.Connection = Depends(get_db),
+    current_user: sqlite3.Row = Depends(require_courier),
+):
+    today = datetime.now().date()
+    start_day = today - timedelta(days=6)
+    completed_statuses = ("done", "delivered", "completed", "finished")
+    placeholders = ",".join(["?"] * len(completed_statuses))
+
+    daily_rows = db.execute(
+        f"""
+        SELECT DATE(o.delivered_at) AS delivered_day,
+               COUNT(o.id) AS delivered_count,
+               COALESCE(SUM(o.total_price), 0) AS total_amount
+        FROM orders o
+        JOIN order_statuses os ON os.id = o.status_id
+        WHERE o.courier_id = ?
+          AND os.code IN ({placeholders})
+          AND o.delivered_at IS NOT NULL
+          AND DATE(o.delivered_at) BETWEEN ? AND ?
+        GROUP BY DATE(o.delivered_at)
+        """,
+        (current_user["id"], *completed_statuses, start_day.isoformat(), today.isoformat()),
+    ).fetchall()
+
+    by_day = {
+        row["delivered_day"]: {
+            "delivered_count": int(row["delivered_count"] or 0),
+            "total_amount": int(row["total_amount"] or 0),
+        }
+        for row in daily_rows
+    }
+
+    points: List[CourierStatsPoint] = []
+    for offset in range(7):
+        day = start_day + timedelta(days=offset)
+        key = day.isoformat()
+        values = by_day.get(key, {"delivered_count": 0, "total_amount": 0})
+        points.append(
+            CourierStatsPoint(
+                date=key,
+                label=day.strftime("%d.%m"),
+                delivered_count=values["delivered_count"],
+                total_amount=values["total_amount"],
+            )
+        )
+
+    avg_row = db.execute(
+        f"""
+        SELECT AVG((julianday(o.delivered_at) - julianday(o.started_delivery_at)) * 24 * 60)
+            AS avg_minutes
+        FROM orders o
+        JOIN order_statuses os ON os.id = o.status_id
+        WHERE o.courier_id = ?
+          AND os.code IN ({placeholders})
+          AND o.started_delivery_at IS NOT NULL
+          AND o.delivered_at IS NOT NULL
+          AND julianday(o.delivered_at) >= julianday(o.started_delivery_at)
+          AND DATE(o.delivered_at) BETWEEN ? AND ?
+        """,
+        (current_user["id"], *completed_statuses, start_day.isoformat(), today.isoformat()),
+    ).fetchone()
+    avg_minutes = avg_row["avg_minutes"] if avg_row else None
+
+    today_point = points[-1]
+    return CourierStatsOut(
+        today_delivered=today_point.delivered_count,
+        today_amount=today_point.total_amount,
+        week_delivered=sum(point.delivered_count for point in points),
+        week_amount=sum(point.total_amount for point in points),
+        avg_delivery_minutes=round(avg_minutes) if avg_minutes is not None else None,
+        points=points,
+    )
 
 
 @app.get("/courier/orders/{order_id}", response_model=OrderOut)

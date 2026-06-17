@@ -74,3 +74,19 @@ export interface CourierBoard {
   ready: Order[];
   my_active?: Order | null;
 }
+
+export interface CourierStatsPoint {
+  date: string;
+  label: string;
+  delivered_count: number;
+  total_amount: number;
+}
+
+export interface CourierStats {
+  today_delivered: number;
+  today_amount: number;
+  week_delivered: number;
+  week_amount: number;
+  avg_delivery_minutes: number | null;
+  points: CourierStatsPoint[];
+}

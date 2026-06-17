@@ -1,0 +1,261 @@
+06-17 11:59:50.551 W/PreStartAppFeature( 2024): PreStartAppFeature: ru.scdelivery.courier
+06-17 11:59:50.553 E/TranDynamicBarAnimControllerImpl( 2024): TranDynamicBarAnimControllerImpl setSimplifyAnimByLauncherType pkgName:ru.scdelivery.courier
+06-17 11:59:50.553 E/TranDynamicBarAnimControllerImpl( 2024): end setSimplifyAnimByLauncherType mSimplifyAnimOpenPkgName:ru.scdelivery.courier simplifyAnimByLauncherType:0
+06-17 11:59:50.554 I/ActivityTaskManager( 2024): agaresFW preload processName=ru.scdelivery.courier for ComponentInfo{ru.scdelivery.courier/ru.scdelivery.courier.MainActivity}
+06-17 11:59:50.556 I/PowerHalWrapper( 2024): amsBoostProcessCreate package:ru.scdelivery.courier 
+06-17 11:59:50.560 W/ActivityManager( 2024): startProcessLocked, app = ProcessRecord{52d335c 0:ru.scdelivery.courier/u0a335}
+06-17 11:59:50.561 I/ActivityManager( 2024): Start proc 662:ru.scdelivery.courier/u0a335 for activity {ru.scdelivery.courier/ru.scdelivery.courier.MainActivity}
+06-17 11:59:50.609 I/LauncherPreAnalytics( 2801): postAthenaEvent tid = 9461 eventName = launcher_icon_click bundle = Bundle[{is_folder=0, pkg=ru.scdelivery.courier, grid=4x6, time=1781679590609, position=3-5, page_num=2, location=desktop}]
+06-17 11:59:50.612 E/TranDynamicBarAnimControllerImpl( 2024): TranDynamicBarAnimControllerImpl setSimplifyAnimByLauncherType pkgName:ru.scdelivery.courier
+06-17 11:59:50.612 E/TranDynamicBarAnimControllerImpl( 2024): end setSimplifyAnimByLauncherType mSimplifyAnimOpenPkgName:ru.scdelivery.courier simplifyAnimByLauncherType:1
+06-17 11:59:50.619 I/ActivityTaskManager( 2024): needHookReparentToDefaultDisplay: sourceRecord = ActivityRecord{4270a77 u0 com.transsion.hilauncher/com.android.launcher3.uioverrides.QuickstepLauncher t5},r = ActivityRecord{2588387 u0 ru.scdelivery.courier/.MainActivity t-1}, tda = null
+06-17 11:59:50.624 I/BufferQueueDebug( 1416): [ActivityRecord{2588387 u0 ru.scdelivery.courier/.MainActivity t231}#2483](this:0xb400006f2e5da988,id:-1,api:0,p:-1,c:-1) BufferQueue core=(1416:/system/bin/surfaceflinger)
+06-17 11:59:50.629 I/ScenesManager( 5042): handlerTaskChange new TaskId ru.scdelivery.courier231 old TaskId 
+06-17 11:59:50.629 I/SmartPanelService( 5042): onTaskCreated mCreateTaskId = ru.scdelivery.courier231
+06-17 11:59:50.638 W/ActivityTaskManager( 2024): Add starting :ActivityRecord{2588387 u0 ru.scdelivery.courier/.MainActivity t231} startingData=SplashScreenStartingData{d6c83ae waitForSyncTransactionCommit=false removeAfterTransaction= 0}
+06-17 11:59:50.639 I/PowerHalWrapper( 2024): amsBoostNotify pid:2801,activity:com.android.launcher3.uioverrides.QuickstepLauncher, package:com.transsion.hilauncher, mProcessCreatePackru.scdelivery.courier 
+06-17 11:59:50.643 I/PowerHalWrapper( 2024): <amsBoostResume> last:com.transsion.hilauncher, next:ru.scdelivery.courierhasATProcess:false 
+06-17 11:59:50.646 I/ActivityTaskManager( 2024): START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10200000 pkg=ru.scdelivery.courier cmp=ru.scdelivery.courier/.MainActivity bnds=[798,1711][1056,2016] (has extras)} with LAUNCH_SINGLE_TASK from uid 10168 (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+06-17 11:59:50.646 I/ActivityTaskManager( 2024): Add pending draw ActivityRecord{2588387 u0 ru.scdelivery.courier/.MainActivity t231}
+06-17 11:59:50.646 I/SmartPanelService( 5042): activityCheck pkgName: ru.scdelivery.courier, className: ru.scdelivery.courier.MainActivity isResume=false isDrawn = false
+06-17 11:59:50.659 I/TranSCSourceConnectManagerImpl( 2024): hookDisplayResumedActivityChanged displayId: 0 packageName: ru.scdelivery.courier
+06-17 11:59:50.659 I/PowerHalWrapper( 2024): amsBoostNotify pid:662,activity:ru.scdelivery.courier.MainActivity, package:ru.scdelivery.courier, mProcessCreatePackru.scdelivery.courier 
+06-17 11:59:50.659 I/ScnModule( 2024): [GameDetection] packname: ru.scdelivery.courier, apkSize: 75861739. 
+06-17 11:59:50.659 I/mtkpower_client( 2024): [PowerHal_Wrap_notifyAppState] ru.scdelivery.courier/ru.scdelivery.courier.MainActivity pid=662 activityId:39355271 state:1
+06-17 11:59:50.660 I/mtkpower_client( 2024): [Legacy][PowerHal_Wrap_notifyAppState] ru.scdelivery.courier/ru.scdelivery.courier.MainActivity pid=662 state:39355271
+06-17 11:59:50.660 I/Usf/appStateManager( 2024): handleUpdateTaskOverLap uid: 10335    packageName:ru.scdelivery.courier remove
+06-17 11:59:50.660 I/libPowerHal( 1356): [perfNotifyAppState] pack:ru.scdelivery.courier, act:ru.scdelivery.courier.MainActivity, state:1, pid:662, uid:10335, fps:-1
+06-17 11:59:50.660 I/libPowerHal( 1356): [perfNotifyAppState] foreground:ru.scdelivery.courier, pid:662, uid:10335
+06-17 11:59:50.661 I/UxUtility( 1356): notifyForegroundApp pack:ru.scdelivery.courier, uid:10335
+06-17 11:59:50.661 I/mtkpower@impl( 1356): [notifyAppState] pc:1, com.transsion.hilauncher => ru.scdelivery.courier
+06-17 11:59:50.662 I/System.out( 2024): [scale_ufs_gear] pakname is not antutu: ru.scdelivery.courier, file is not exist: false
+06-17 11:59:50.666 I/TranTp/TranTpSwitchManagerImpl( 2024): Set [ru.scdelivery.courier] is tp rate as default.
+06-17 11:59:50.670 I/TopTaskTracker( 2801): onTaskMovedToFront: (moved taskInfo to front) taskId=231, baseIntent=Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10200000 pkg=ru.scdelivery.courier cmp=ru.scdelivery.courier/.MainActivity }
+06-17 11:59:50.675 I/BufferQueueDebug( 1416): [67e2140 Splash Screen ru.scdelivery.courier#2485](this:0xb400006f2e7f7a68,id:-1,api:0,p:-1,c:-1) BufferQueue core=(1416:/system/bin/surfaceflinger)
+06-17 11:59:50.679 I/SmartPanelService( 5042): activityCheck pkgName: ru.scdelivery.courier, className: ru.scdelivery.courier.MainActivity isResume=false isDrawn = false
+06-17 11:59:50.685 I/Transition( 2024): updateFlagsFromDynamicIslandToWindow pkgName = ru.scdelivery.courier flagsArr[0] = 0
+06-17 11:59:50.685 I/Transition( 2024): updateFlagsSimplifyAnimByLauncher pkgName = ru.scdelivery.courier flagsArr[0] = 268435456 mSimplifyAnimLaunchBounds: Rect(846, 1757 - 1008, 1919)
+06-17 11:59:50.689 I/BufferQueueDebug( 1416): [92d52b4 ActivityRecordInputSink ru.scdelivery.courier/.MainActivity#2487](this:0xb400006f2e808bc8,id:-1,api:0,p:-1,c:-1) BufferQueue core=(1416:/system/bin/surfaceflinger)
+06-17 11:59:50.691 I/ActivityTaskManager( 2024): this = Task{2b73edd #231 type=standard A=10335:ru.scdelivery.courier} is in Transition
+06-17 11:59:50.694 I/SmartPanelService( 5042): activityCheck pkgName: ru.scdelivery.courier, className: ru.scdelivery.courier.MainActivity isResume=true isDrawn = false
+06-17 11:59:50.698 I/BufferQueueDebug( 1416): [Splash Screen ru.scdelivery.courier#2488](this:0xb400006f2e863dc8,id:-1,api:0,p:-1,c:-1) BufferQueue core=(1416:/system/bin/surfaceflinger)
+06-17 11:59:50.701 I/SimpleEventAdapt( 4067): onActivityEvent get ru.scdelivery.courier, ru.scdelivery.courier.MainActivity,true
+06-17 11:59:50.701 I/SimpleEventAdapt( 4067): onAppForegroundEvent get ru.scdelivery.courier, true
+06-17 11:59:50.703 I/Kolun_AI( 4067): SystemEventSubscribe: onPublishData {"type":"activity_event","time":1781679590701,"data":"{\"className\":\"ru.scdelivery.courier.MainActivity\",\"isResumed\":true,\"packageName\":\"ru.scdelivery.courier\"}","provider":"dc","dc_version":2030380000,"data_version":1,"user_id":0}
+06-17 11:59:50.705 I/Kolun_AI( 4067): SystemEventSubscribe: onPublishData {"type":"app_foreground","time":1781679590702,"data":"{\"isForeground\":true,\"packageName\":\"ru.scdelivery.courier\"}","provider":"dc","dc_version":2030380000,"data_version":1,"user_id":0}
+06-17 11:59:50.705 I/Kolun_AI( 4067): SystemEventSubscribeheh:SimpleEventBus post event AppForegroundEvent{mPackageName='ru.scdelivery.courier', mIsForeground=true} 1781679590702
+06-17 11:59:50.705 I/Kolun_AI( 4067): SceneIdentify:onBusEvent AppForegroundEvent   ru.scdelivery.courier, true, SceneIdentify
+06-17 11:59:50.705 I/Kolun_AI( 4067): SceneIdentify:checkShortVideo ru.scdelivery.courier true 
+06-17 11:59:50.705 I/Kolun_AI( 4067): SceneIdentify:checkGameIn  ru.scdelivery.courier, 
+06-17 11:59:50.705 I/Kolun_AI( 4067): SceneIdentify:checkSocialIn  ru.scdelivery.courier, 
+06-17 11:59:50.705 I/Kolun_AI( 4067): TipsSceneService:event ru.scdelivery.courier
+06-17 11:59:50.706 I/Kolun_AI( 4067): AppPredictManager:onBusEvent ru.scdelivery.courier true
+06-17 11:59:50.705 I/StatusBarModePerDisplayRepository( 2809): isInFullscreenMode:false ru.scdelivery.courier
+06-17 11:59:50.713 W/SoLoader(  662): Recording new base apk path: /data/app/~~I1jSHV_lFNlgZ9-oGno7Kw==/ru.scdelivery.courier-7I3kHyVvJyLaNLnxfKEt6g==/base.apk
+06-17 11:59:50.714 I/SoLoader(  662): Preparing SO source: DirectApkSoSource[root = [/data/app/~~I1jSHV_lFNlgZ9-oGno7Kw==/ru.scdelivery.courier-7I3kHyVvJyLaNLnxfKEt6g==/base.apk!/lib/arm64-v8a]]
+06-17 11:59:50.716 I/SoLoader(  662): Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/app/~~I1jSHV_lFNlgZ9-oGno7Kw==/ru.scdelivery.courier-7I3kHyVvJyLaNLnxfKEt6g==/lib/arm64 flags = 0]]
+06-17 11:59:50.811 I/ScenesManager( 5042): handlerTaskChange new TaskId ru.scdelivery.courier231 old TaskId ru.scdelivery.courier231
+06-17 11:59:50.829 I/ScenesManager( 5042): put createTaskId ru.scdelivery.courier231
+06-17 11:59:50.834 I/THubApi ( 5042): isTheMainScreen classname: ru.scdelivery.courier.MainActivity  pkg:ru.scdelivery.courier
+06-17 11:59:50.836 I/ScenesManager( 5042): ScenesInfo(isInSplitScreenMode=false, screenMode=0, oldTopPackage=, oldTopClass=, oldRelPackage=, oldRelClass=, topPackage=ru.scdelivery.courier, topClass=ru.scdelivery.courier.MainActivity, relPackage=ru.scdelivery.courier, relClass=ru.scdelivery.courier.MainActivity, taskId=231, userId=0, isTwinApp=false, isActivityChange=true, isResume=false, killPackages=[], isPersonalizedFlipScreen=false, timeStamp=1781679590836)
+06-17 11:59:50.836 I/GameSceneManager( 5042): handlerActivityStart isResume = false  pkgName = ru.scdelivery.courier
+06-17 11:59:50.837 I/VideoSceneManager( 5042): handlerVideoStart isResume = false  currentPackage =   pkgName = ru.scdelivery.courier
+06-17 11:59:50.859 I/BufferQueueDebug( 1416): [9e8a982 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity#2492](this:0xb400006f2e82ae88,id:-1,api:0,p:-1,c:-1) BufferQueue core=(1416:/system/bin/surfaceflinger)
+06-17 11:59:50.862 I/TranThermalBacklightCtrl( 2024): cur package [ru.scdelivery.courier] is in TemperatureControlWhitelist
+06-17 11:59:50.866 I/BufferQueueDebug( 1416): [ru.scdelivery.courier/ru.scdelivery.courier.MainActivity#2493](this:0xb400006f2e7d57a8,id:-1,api:0,p:-1,c:-1) BufferQueue core=(1416:/system/bin/surfaceflinger)
+06-17 11:59:50.870 W/WindowManager( 2024): Changing focus from null to Window{9e8a982 u0 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity} displayId=0 Callers=com.android.server.wm.RootWindowContainer.updateFocusedWindowLocked:528 com.android.server.wm.WindowManagerService.updateFocusedWindowLocked:6849 com.android.server.wm.WindowManagerService.relayoutWindowInner:2856 com.android.server.wm.WindowManagerService.relayoutWindow:2515 
+06-17 11:59:50.875 I/WindowManager( 2024): Relayout Window{9e8a982 u0 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity}: oldVis=4 newVis=0 focusMayChange = true requestedWidth = 1080 requestedHeight = 2460 outFrames = ClientWindowFrames{frame=[0,0][1080,2460] display=[0,0][1080,2460] parentFrame=[0,0][0,0]} outSurfaceControl = Surface(name=ru.scdelivery.courier/ru.scdelivery.courier.MainActivity)/@0x90de70b
+06-17 11:59:50.875 I/StatusBarModePerDisplayRepository( 2809): isInFullscreenMode:false ru.scdelivery.courier
+06-17 11:59:50.894 I/ExpoModulesCore(  662): ✅ AppContext was initialized
+06-17 11:59:51.025 I/ExpoModulesCore(  662): ✅ JSI interop was installed
+06-17 11:59:51.026 I/ExpoModulesCore(  662): ✅ Constants were exported
+06-17 11:59:51.062 I/ReactNativeJS(  662): Running "main"
+06-17 11:59:51.668 I/TranWifiSmartAssistantController( 2024): top app: ru.scdelivery.courier in white list: false ,Landscape screen: false
+06-17 11:59:53.642 E/FeatureFlagsImplExport(  662): android.os.flagging.AconfigStorageReadException: ERROR_PACKAGE_NOT_FOUND: package com.android.libcore cannot be found on the device
+06-17 11:59:53.841 W/ReactNativeJS(  662): '[Layout children]: No route named "orders" exists in nested children:', [ 'profile', 'orders/index' ]
+06-17 11:59:53.858 I/PowerHalWrapper( 2024): amsBoostNotify pid:2801,activity:com.android.launcher3.uioverrides.QuickstepLauncher, package:com.transsion.hilauncher, mProcessCreatePackru.scdelivery.courier 
+06-17 11:59:53.872 I/_T_AppBehavior( 2024): APP_START_OCCURRED (pid:662, packageName:ru.scdelivery.courier, transitionType:8, launchedActivityName:ru.scdelivery.courier.MainActivity, callerPackage:com.transsion.hilauncher, currentTransitionDelayMs:72, startingWindowDelayMs:109, bindApplicationDelayMs:-1, windowsDrawnDelayMs:3251,compilationReason:1, compilationFilter:8 )
+06-17 11:59:53.876 I/ActivityTaskManager( 2024): Displayed ru.scdelivery.courier/.MainActivity for user 0: +3s251ms
+06-17 11:59:53.876 I/SmartPanelService( 5042): onWindowsDrawn pkgName: ru.scdelivery.courier, className: ru.scdelivery.courier.MainActivity launchState=2 windowsDrawnDelayMs =3251
+06-17 11:59:53.877 I/TranSuccCrashMgr( 2024): Post key event: type=0, event=wm_activity_launch_time0,ru.scdelivery.courier/.MainActivity,3251, ext=null
+06-17 11:59:53.881 W/ReactNativeJS(  662): '[Layout children]: No route named "orders" exists in nested children:', [ 'profile', 'orders/index' ]
+06-17 11:59:53.885 I/THubApi ( 5042): isTheMainScreen classname: ru.scdelivery.courier.MainActivity  pkg:ru.scdelivery.courier
+06-17 11:59:53.893 I/BufferQueueDebug( 1416): [Surface(name=67e2140 Splash Screen ru.scdelivery.courier)/@0x626bc03 - animation-leash of starting_reveal#2496](this:0xb400006f2e83bfe8,id:-1,api:0,p:-1,c:-1) BufferQueue core=(1416:/system/bin/surfaceflinger)
+06-17 11:59:53.913 E/ReactNativeJS(  662): { [Error: Couldn't find a screen named 'orders' to use as 'initialRouteName'.]
+06-17 11:59:53.913 E/ReactNativeJS(  662):   componentStack: '\n    at BottomTabNavigator (address at index.android.bundle:1:946023)\n    at anonymous (address at index.android.bundle:1:932738)\n    at CourierTabsLayout (<anonymous>)\n    at Suspense (<anonymous>)\n    at Route (address at index.android.bundle:1:933815)\n    at BaseRoute (address at index.android.bundle:1:940701)\n    at StaticContainer (address at index.android.bundle:1:905117)\n    at EnsureSingleNavigator (address at index.android.bundle:1:851138)\n    at SceneView (address at index.android.bundle:1:903151)\n    at NavigationProvider (address at index.android.bundle:1:881633)\n    at RNSScreenContentWrapper (<anonymous>)\n    at ScreenContentWrapper (<anonymous>)\n    at DebugContainer (<anonymous>)\n    at RNSScreen (<anonymous>)\n    at Animated(Anonymous) (address at index.android.bundle:1:628990)\n    at Suspender (address at index.android.bundle:1:1015675)\n    at Suspense (<anonymous>)\n    at Freeze (address at index.android.bundle:1:1015736)\n    at DelayedFreeze (address at index.android.bundle:1:1015317)\n    at InnerScreen (address at index.android.bundle:1:1013034)\n    at anonymous (address at index.android.bundle:1:1014716)\n    at ScreenStackItem (address at index.android.bundle:1:1025354)\n    at NavigationProvider (address at index.android.bundle:1:881633)\n    at SceneView (address at index.android.bundle:1:1048748)\n    at RNSScreenStack (<anonymous>)\n    at anonymous (address at index.android.bundle:1:1024433)\n    at ScreenStack (address at index.android.bundle:1:1023623)\n    at RCTView (<anonymous>)\n    at View (address at index.android.bundle:1:475670)\n    at FrameSizeProvider (address at index.android.bundle:1:986517)\n    at SafeAreaProviderCompat (address at index.android.bundle:1:997944)\n    at NativeStackView (address at index.android.bundle:1:1047313)\n    at PreventRemoveProvider (address at index.android.bundle:1:883929)\n    at NavigationStateListenerProvider (address at index.android.bundle:1:910433)\n    at NavigationContent (address at index.android.bundle:1:900382)\n    at anonymous (address at index.android.bundle:1:900285)\n    at NativeStackNavigator (address at index.android.bundle:1:1043607)\n    at anonymous (address at index.android.bundle:1:932738)\n    at anonymous (address at index.android.bundle:1:823601)\n    at RootNavigator (address at index.android.bundle:1:1617313)\n    at QueryClientProvider (address at index.android.bundle:1:1227086)\n    at RNCSafeAreaProvider (<anonymous>)\n    at SafeAreaProvider (address at index.android.bundle:1:983046)\n    at RNGestureHandlerRootView (<anonymous>)\n    at GestureHandlerRootView (address at index.android.bundle:1:1632491)\n    at AppProviders (address at index.android.bundle:1:1620289)\n    at RootLayout (<anonymous>)\n    at Suspense (<anonymous>)\n    at Route (address at index.android.bundle:1:933815)\n    at BaseRoute (address at index.android.bundle:1:940701)\n    at StaticContainer (address at index.android.bundle:1:905117)\n    at EnsureSingleNavigator (address at index.android.bundle:1:851138)\n    at SceneView (address at index.android.bundle:1:903151)\n    at NavigationProvider (address at index.android.bundle:1:881633)\n    at PreventRemoveProvider (address at index.android.bundle:1:883929)\n    at NavigationStateListenerProvider (address at index.android.bundle:1:910433)\n    at NavigationContent (address at index.android.bundle:1:900382)\n    at anonymous (address at index.android.bundle:1:900285)\n    at Content (address at index.android.bundle:1:1145893)\n    at RNCSafeAreaProvider (<anonymous>)\n    at SafeAreaProvider (address at index.android.bundle:1:983046)\n    at LinkPreviewContextProvider (address at index.android.bundle:1:1057028)\n    at anonymous (address at index.android.bundle:1:1144790)\n    at ThemeProvider (address at index.android.bundle:1:853294)\n    at EnsureSingleNavigator (address at index.android.bundle:1:851138)\n    at BaseNavigationContainer (address at index.android.bundle:1:82990
+06-17 11:59:53.913 E/ReactNativeJS(  662):   isComponentError: true }
+06-17 11:59:53.915 I/ImeTracker( 2024): ru.scdelivery.courier:91cc0820: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+06-17 11:59:53.915 I/ImeTracker( 2024): ru.scdelivery.courier:91cc0820: onCancelled at PHASE_SERVER_SHOULD_HIDE
+06-17 11:59:53.917 I/input_debug( 2024): package: ru.scdelivery.courier mNeedShowSafeInput: false inputType: 0 methodMap: true isKeyguardShowing: false enable: 0 isSplitScreen: false
+06-17 11:59:53.935 I/WindowManager( 2024):   onAnimationFinished on win=Window{67e2140 u0 Splash Screen ru.scdelivery.courier}
+06-17 11:59:53.955 W/unknown:BridgelessReact(  662):     at ExpoRoot (address at index.android.bundle:1:1144662)
+06-17 11:59:53.955 E/AndroidRuntime(  662): FATAL EXCEPTION: mqt_v_native
+06-17 11:59:53.955 E/AndroidRuntime(  662): Process: ru.scdelivery.courier, PID: 662
+06-17 11:59:53.955 E/AndroidRuntime(  662): com.facebook.react.common.JavascriptException: Error: Couldn't find a screen named 'orders' to use as 'initialRouteName'.
+06-17 11:59:53.955 E/AndroidRuntime(  662): 
+06-17 11:59:53.955 E/AndroidRuntime(  662): This error is located at:
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at BottomTabNavigator (address at index.android.bundle:1:946023)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at anonymous (address at index.android.bundle:1:932738)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at CourierTabsLayout (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Suspense (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Route (address at index.android.bundle:1:933815)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at BaseRoute (address at index.android.bundle:1:940701)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at StaticContainer (address at index.android.bundle:1:905117)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at EnsureSingleNavigator (address at index.android.bundle:1:851138)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at SceneView (address at index.android.bundle:1:903151)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NavigationProvider (address at index.android.bundle:1:881633)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RNSScreenContentWrapper (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at ScreenContentWrapper (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at DebugContainer (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RNSScreen (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Animated(Anonymous) (address at index.android.bundle:1:628990)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Suspender (address at index.android.bundle:1:1015675)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Suspense (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Freeze (address at index.android.bundle:1:1015736)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at DelayedFreeze (address at index.android.bundle:1:1015317)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at InnerScreen (address at index.android.bundle:1:1013034)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at anonymous (address at index.android.bundle:1:1014716)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at ScreenStackItem (address at index.android.bundle:1:1025354)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NavigationProvider (address at index.android.bundle:1:881633)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at SceneView (address at index.android.bundle:1:1048748)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RNSScreenStack (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at anonymous (address at index.android.bundle:1:1024433)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at ScreenStack (address at index.android.bundle:1:1023623)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RCTView (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at View (address at index.android.bundle:1:475670)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at FrameSizeProvider (address at index.android.bundle:1:986517)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at SafeAreaProviderCompat (address at index.android.bundle:1:997944)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NativeStackView (address at index.android.bundle:1:1047313)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at PreventRemoveProvider (address at index.android.bundle:1:883929)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NavigationStateListenerProvider (address at index.android.bundle:1:910433)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NavigationContent (address at index.android.bundle:1:900382)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at anonymous (address at index.android.bundle:1:900285)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NativeStackNavigator (address at index.android.bundle:1:1043607)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at anonymous (address at index.android.bundle:1:932738)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at anonymous (address at index.android.bundle:1:823601)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RootNavigator (address at index.android.bundle:1:1617313)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at QueryClientProvider (address at index.android.bundle:1:1227086)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RNCSafeAreaProvider (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at SafeAreaProvider (address at index.android.bundle:1:983046)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RNGestureHandlerRootView (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at GestureHandlerRootView (address at index.android.bundle:1:1632491)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at AppProviders (address at index.android.bundle:1:1620289)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RootLayout (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Suspense (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Route (address at index.android.bundle:1:933815)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at BaseRoute (address at index.android.bundle:1:940701)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at StaticContainer (address at index.android.bundle:1:905117)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at EnsureSingleNavigator (address at index.android.bundle:1:851138)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at SceneView (address at index.android.bundle:1:903151)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NavigationProvider (address at index.android.bundle:1:881633)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at PreventRemoveProvider (address at index.android.bundle:1:883929)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NavigationStateListenerProvider (address at index.android.bundle:1:910433)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NavigationContent (address at index.android.bundle:1:900382)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at anonymous (address at index.android.bundle:1:900285)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at Content (address at index.android.bundle:1:1145893)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RNCSafeAreaProvider (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at SafeAreaProvider (address at index.android.bundle:1:983046)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at LinkPreviewContextProvider (address at index.android.bundle:1:1057028)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at anonymous (address at index.android.bundle:1:1144790)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at ThemeProvider (address at index.android.bundle:1:853294)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at EnsureSingleNavigator (address at index.android.bundle:1:851138)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at BaseNavigationContainer (address at index.android.bundle:1:829906)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at NavigationContainerInner (address at index.android.bundle:1:1147753)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at ContextNavigator (address at index.android.bundle:1:1145019)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at ExpoRoot (address at index.android.bundle:1:1144662)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at App (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at RCTView (<anonymous>)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at View (address at index.android.bundle:1:475670)
+06-17 11:59:53.955 E/AndroidRuntime(  662):     at AppContainer (address at index.android.bundle:1:474998), stack:
+06-17 11:59:53.955 E/AndroidRuntime(  662): anonymous@1:894420
+06-17 11:59:53.955 E/AndroidRuntime(  662): useLazyValue@1:908814
+06-17 11:59:53.955 E/AndroidRuntime(  662): useNavigationBuilder@1:892056
+06-17 11:59:53.955 E/AndroidRuntime(  662): BottomTabNavigator@1:946171
+06-17 11:59:53.955 E/AndroidRuntime(  662): renderWithHooks@1:234640
+06-17 11:59:53.955 E/AndroidRuntime(  662): updateFunctionComponent@1:253400
+06-17 11:59:53.955 E/AndroidRuntime(  662): beginWork@1:261235
+06-17 11:59:53.955 E/AndroidRuntime(  662): performUnitOfWork@1:279884
+06-17 11:59:53.955 E/AndroidRuntime(  662): workLoopSync@1:278892
+06-17 11:59:53.955 E/AndroidRuntime(  662): renderRootSync@1:278724
+06-17 11:59:53.955 E/AndroidRuntime(  662): performWorkOnRoot@1:276370
+06-17 11:59:53.955 E/AndroidRuntime(  662): performSyncWorkOnRoot@1:230232
+06-17 11:59:53.955 E/AndroidRuntime(  662): flushSyncWorkAcrossRoots_impl@1:229123
+06-17 11:59:53.955 E/AndroidRuntime(  662): processRootScheduleInMicrotask@1:229483
+06-17 11:59:53.955 E/AndroidRuntime(  662): anonymous@1:230327
+06-17 11:59:53.955 E/AndroidRuntime(  662): 
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at com.facebook.react.modules.core.ExceptionsManagerModule.reportException(ExceptionsManagerModule.kt:52)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at com.facebook.jni.NativeRunnable.run(Native Method)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at android.os.Handler.handleCallback(Handler.java:959)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at android.os.Handler.dispatchMessage(Handler.java:100)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at com.facebook.react.bridge.queue.MessageQueueThreadHandler.dispatchMessage(MessageQueueThreadHandler.kt:21)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at android.os.Looper.loopOnce(Looper.java:311)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at android.os.Looper.loop(Looper.java:408)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.startNewBackgroundThread$lambda$1(MessageQueueThreadImpl.kt:175)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.$r8$lambda$ldnZnqelhYFctGaUKkOKYj5rxo4(MessageQueueThreadImpl.kt:0)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+06-17 11:59:53.955 E/AndroidRuntime(  662): 	at java.lang.Thread.run(Thread.java:1572)
+06-17 11:59:53.956 W/InputManager-JNI( 2024): Input channel object '67e2140 Splash Screen ru.scdelivery.courier (client)' was disposed without first being removed with the input manager!
+06-17 11:59:53.957 I/Usf/appStateManager( 2024): updateAppCrash, uid=10335, pkg=ru.scdelivery.courier, crash=true, reason=app-crash,crash
+06-17 11:59:53.961 I/StatusBarModePerDisplayRepository( 2809): isInFullscreenMode:false ru.scdelivery.courier
+06-17 11:59:53.965 I/TranSuccCrashMgr( 2024): handleApplicationJavaCrash: processName=ru.scdelivery.courier
+06-17 11:59:53.979 I/SurfaceFlinger( 1416): onHandleDestroyed: name=Splash Screen ru.scdelivery.courier#2488, layerId=2488, parentId=0
+06-17 11:59:53.979 I/SurfaceFlinger( 1416): onHandleDestroyed: name=67e2140 Splash Screen ru.scdelivery.courier#2485, layerId=2485, parentId=0
+06-17 11:59:53.995 I/BufferQueueDebug( 1416): [67e2140 Splash Screen ru.scdelivery.courier#2485](this:0xb400006f2e7f7a68,id:-1,api:0,p:-1,c:1416) onDestructor()
+06-17 11:59:53.996 I/BufferQueueDebug( 1416): [Splash Screen ru.scdelivery.courier#2488](this:0xb400006f2e863dc8,id:-1,api:0,p:-1,c:1416) onDestructor()
+06-17 11:59:54.082 I/THubApi ( 5042): isTheMainScreen classname: ru.scdelivery.courier.MainActivity  pkg:ru.scdelivery.courier
+06-17 11:59:54.112 I/TranSuccCrashMgr( 2024): cacheCrashInfo [pkgName = ru.scdelivery.courier, procName = ru.scdelivery.courier, subject = null, hash = 1f2bd86572657d7a1585fa0a78333a4a, type = application_crash, <Ignore>cache_enable = false, forceCache = false, stackTrace = com.facebook.react.common.JavascriptException: Error: Couldn't find a screen named 'orders' to use as 'initialRouteName'.
+06-17 11:59:54.112 I/TranSuccCrashMgr( 2024):     at ExpoRoot (address at index.android.bundle:1:1144662)
+06-17 11:59:54.114 I/ScnModule( 2024): [GameDetection] packname: ru.scdelivery.courier, apkSize: 75861739. 
+06-17 11:59:54.114 I/mtkpower_client( 2024): [PowerHal_Wrap_notifyAppState] ru.scdelivery.courier/ru.scdelivery.courier pid=662 activityId:662 state:3
+06-17 11:59:54.114 I/mtkpower_client( 2024): [Legacy][PowerHal_Wrap_notifyAppState] ru.scdelivery.courier/ru.scdelivery.courier pid=662 state:662
+06-17 11:59:54.115 I/libPowerHal( 1356): [perfNotifyAppState] pack:ru.scdelivery.courier, act:ru.scdelivery.courier, state:3, pid:662, uid:10335, fps:-1
+06-17 11:59:54.115 I/libPowerHal( 1356): [perfNotifyAppState] pack:ru.scdelivery.courier, pid:662, STATE_DEAD
+06-17 11:59:54.123 I/TABE.TranAppRecoveryManager( 2024): ActivityRecord{2588387 u0 ru.scdelivery.courier/.MainActivity t231} unsupported recovery
+06-17 11:59:54.125 I/TABE.AppAprController( 9581): AppAprEntity{mPkgName='ru.scdelivery.courier', mPkgVer='1.0.0', mPkgInstaller='pkg_inst', mExpType='JE', mExpSummary='com.facebook.react.common.JavascriptException Error Couldn t find screen named orders to use as initialRouteName .[Ad:17;As:48;Be:8,52;Br:3;Ct:5;De:21;Dr:15;Er:10,54;Fe:20;Fr:32;Gw:47;In:22;Nr:12,25,36,39,56,58;Nt:37,59;Nw:34;Pr:35,57;Qr:43;Re:7,51;Rk:27;Rn:16;Rr:13,42,44;Rt:49;Rw:30,46;Se:6,19,50;Sk:29;Sm:24;Sp:33;Sr:9,14,18,45,53;Sw:11,26,55;Vw:31;as:4,23,28,38,40,41;]', mExpCount=1, mExpTime='2026-06-17 11:59:54', mIsContExp=false, mIsOpenExp=false, mIsBack=false, mTestType='official', mIsNativeProcess='false', mExpFilePath='', mSessionId='a04ea91e92773efea211371ca8c8f2e7', mTotalExpCount='1'}
+06-17 11:59:54.125 W/ActivityTaskManager( 2024):   Force finishing activity ru.scdelivery.courier/.MainActivity
+06-17 11:59:54.128 I/PowerHalWrapper( 2024): amsBoostNotify pid:662,activity:ru.scdelivery.courier.MainActivity, package:ru.scdelivery.courier, mProcessCreatePackru.scdelivery.courier 
+06-17 11:59:54.128 I/ScnModule( 2024): [GameDetection] packname: ru.scdelivery.courier, apkSize: 75861739. 
+06-17 11:59:54.129 I/mtkpower_client( 2024): [PowerHal_Wrap_notifyAppState] ru.scdelivery.courier/ru.scdelivery.courier.MainActivity pid=662 activityId:39355271 state:0
+06-17 11:59:54.129 I/mtkpower_client( 2024): [Legacy][PowerHal_Wrap_notifyAppState] ru.scdelivery.courier/ru.scdelivery.courier.MainActivity pid=662 state:39355271
+06-17 11:59:54.131 I/libPowerHal( 1356): [perfNotifyAppState] pack:ru.scdelivery.courier, act:ru.scdelivery.courier.MainActivity, state:0, pid:662, uid:10335, fps:-1
+06-17 11:59:54.165 W/WindowManager( 2024): Changing focus from Window{9e8a982 u0 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity} to null displayId=0 Callers=com.android.server.wm.RootWindowContainer.updateFocusedWindowLocked:528 com.android.server.wm.WindowManagerService.updateFocusedWindowLocked:6849 com.android.server.wm.WindowManagerService.relayoutWindowInner:2856 com.android.server.wm.WindowManagerService.relayoutWindow:2515 
+06-17 11:59:54.189 I/TABE    ( 9581): NOT trigger : User version NOT TOP or Internal App:ru.scdelivery.courier
+06-17 11:59:54.191 I/TABE.CrashHandler( 9581): Exception Info{Name='SC Courier', Pkg='ru.scdelivery.courier', EType='crash', ProcessType='data_app', EClassName='com.facebook.react.common.JavascriptException', EMessage='Error: Couldn't find a screen named 'orders' to use as 'initialRouteName'.
+06-17 11:59:54.207 I/SurfaceFlinger( 1416): onHandleDestroyed: name=Surface(name=67e2140 Splash Screen ru.scdelivery.courier)/@0x626bc03 - animation-leash of starting_reveal#2496, layerId=2496, parentId=0
+06-17 11:59:54.207 I/WindowManager( 2024): WIN DEATH: Window{9e8a982 u0 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity}
+06-17 11:59:54.208 W/InputManager-JNI( 2024): Input channel object '9e8a982 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity (client)' was disposed without first being removed with the input manager!
+06-17 11:59:54.208 I/WindowManager( 2024):   isAnimating=false  okToAnimate=true  win=Window{9e8a982 u0 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity}
+06-17 11:59:54.209 I/BufferQueueDebug( 1416): [Surface(name=67e2140 Splash Screen ru.scdelivery.courier)/@0x626bc03 - animation-leash of starting_reveal#2496](this:0xb400006f2e83bfe8,id:-1,api:0,p:-1,c:1416) onDestructor()
+06-17 11:59:54.209 I/ImeTracker( 2024): ru.scdelivery.courier:e6b52c: onRequestHide at ORIGIN_SERVER reason HIDE_REMOVE_CLIENT fromUser false
+06-17 11:59:54.210 I/ImeTracker( 2024): ru.scdelivery.courier:e6b52c: onCancelled at PHASE_SERVER_SHOULD_HIDE
+06-17 11:59:54.214 I/StatusBarModePerDisplayRepository( 2809): isInFullscreenMode:false ru.scdelivery.courier
+06-17 11:59:54.233 I/ActivityManager( 2024): Process ru.scdelivery.courier (pid 662) has died: fg  TOP 
+06-17 11:59:54.235 I/Usf/appStateManager( 2024): updateAppCrash, uid=10335, pkg=ru.scdelivery.courier, crash=false, reason=procDied
+06-17 11:59:54.244 I/ScnModule( 2024): [GameDetection] packname: ru.scdelivery.courier, apkSize: 75861739. 
+06-17 11:59:54.244 I/mtkpower_client( 2024): [PowerHal_Wrap_notifyAppState] ru.scdelivery.courier/ru.scdelivery.courier pid=662 activityId:662 state:3
+06-17 11:59:54.244 I/mtkpower_client( 2024): [Legacy][PowerHal_Wrap_notifyAppState] ru.scdelivery.courier/ru.scdelivery.courier pid=662 state:662
+06-17 11:59:54.245 I/libPowerHal( 1356): [perfNotifyAppState] pack:ru.scdelivery.courier, act:ru.scdelivery.courier, state:3, pid:662, uid:10335, fps:-1
+06-17 11:59:54.245 I/libPowerHal( 1356): [perfNotifyAppState] pack:ru.scdelivery.courier, pid:662, STATE_DEAD
+06-17 11:59:54.254 I/PowerHalWrapper( 2024): amsBoostNotify pid:2801,activity:com.android.launcher3.uioverrides.QuickstepLauncher, package:com.transsion.hilauncher, mProcessCreatePackru.scdelivery.courier 
+06-17 11:59:54.255 I/mtkpower@impl( 1356): [notifyAppState] pc:0, ru.scdelivery.courier => com.transsion.hilauncher
+06-17 11:59:54.274 I/SimpleEventAdapt( 4067): onAppForegroundEvent get ru.scdelivery.courier, false
+06-17 11:59:54.286 I/Kolun_AI( 4067): SystemEventSubscribe: onPublishData {"type":"app_foreground","time":1781679594276,"data":"{\"isForeground\":false,\"packageName\":\"ru.scdelivery.courier\"}","provider":"dc","dc_version":2030380000,"data_version":1,"user_id":0}
+06-17 11:59:54.286 I/Kolun_AI( 4067): SystemEventSubscribeheh:SimpleEventBus post event AppForegroundEvent{mPackageName='ru.scdelivery.courier', mIsForeground=false} 1781679594276
+06-17 11:59:54.287 I/Kolun_AI( 4067): SceneIdentify:onBusEvent AppForegroundEvent   ru.scdelivery.courier, false, SceneIdentify
+06-17 11:59:54.287 I/Kolun_AI( 4067): SceneIdentify:checkShortVideo ru.scdelivery.courier false 
+06-17 11:59:54.287 I/Kolun_AI( 4067): SceneIdentify:checkGameOut  ru.scdelivery.courier, 
+06-17 11:59:54.287 I/Kolun_AI( 4067): SceneIdentify:checkSocialOut  ru.scdelivery.courier, 
+06-17 11:59:54.287 I/Kolun_AI( 4067): AppPredictManager:onBusEvent ru.scdelivery.courier false
+06-17 11:59:54.288 I/Kolun_AI( 4067): AIM_AppRecManager:new appEvent AppEvent{pkg=ru.scdelivery.courier startTime=2026-06-17 11:59:50.706 duration=3581}
+06-17 11:59:54.288 I/Kolun_AI( 4067): AIM_AppServiceManager:updateLastOneHourApps: 39 ru.scdelivery.courier
+06-17 11:59:54.430 I/TranSucc.CrashlyticsWork(10209): handle Crash: procName = ru.scdelivery.courier, pkgName = ru.scdelivery.courier, BIHash = 799c418d92baae2cdd280025a14cd2aa, DB-hash = 1f2bd86572657d7a1585fa0a78333a4a, crash_type = crash, inc_count = 1 , appVersionName = 1.0.0, db_size = 1, visible = fg, stack = 'com.facebook.react.common.JavascriptException: Error: Couldn't find a screen named 'orders' to use a...'(Length=5789)
+06-17 11:59:54.689 W/WindowManager( 2024): Exception thrown during dispatchAppVisibility Window{9e8a982 u0 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity EXITING}
+06-17 11:59:54.692 I/SurfaceFlinger( 1416): onHandleDestroyed: name=92d52b4 ActivityRecordInputSink ru.scdelivery.courier/.MainActivity#2487, layerId=2487, parentId=0
+06-17 11:59:54.706 I/SurfaceFlinger( 1416): onHandleDestroyed: name=ActivityRecord{2588387 u0 ru.scdelivery.courier/.MainActivity t231}#2483, layerId=2483, parentId=0
+06-17 11:59:54.706 I/SurfaceFlinger( 1416): onHandleDestroyed: name=9e8a982 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity#2492, layerId=2492, parentId=0
+06-17 11:59:54.706 I/SurfaceFlinger( 1416): onHandleDestroyed: name=ru.scdelivery.courier/ru.scdelivery.courier.MainActivity#2493, layerId=2493, parentId=0
+06-17 11:59:54.722 I/BufferQueueDebug( 1416): [92d52b4 ActivityRecordInputSink ru.scdelivery.courier/.MainActivity#2487](this:0xb400006f2e808bc8,id:-1,api:0,p:-1,c:1416) onDestructor()
+06-17 11:59:54.722 I/BufferQueueDebug( 1416): [ActivityRecord{2588387 u0 ru.scdelivery.courier/.MainActivity t231}#2483](this:0xb400006f2e5da988,id:-1,api:0,p:-1,c:1416) onDestructor()
+06-17 11:59:54.723 I/BufferQueueDebug( 1416): [ru.scdelivery.courier/ru.scdelivery.courier.MainActivity#2493](this:0xb400006f2e7d57a8,id:-1,api:0,p:-1,c:1416) onDestructor()
+06-17 11:59:54.723 I/BufferQueueDebug( 1416): [9e8a982 ru.scdelivery.courier/ru.scdelivery.courier.MainActivity#2492](this:0xb400006f2e82ae88,id:-1,api:0,p:-1,c:1416) onDestructor()
+06-17 12:00:00.310 I/adbd    ( 1508): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-v' 'time''

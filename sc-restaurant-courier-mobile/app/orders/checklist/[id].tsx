@@ -40,13 +40,14 @@ export default function CourierChecklistScreen() {
   }, [orderQuery.error, clearSession]);
 
   useEffect(() => {
-    if (!orderQuery.data) return;
+    const order = orderQuery.data;
+    if (!order) return;
     const next: Record<string, boolean> = {};
-    orderQuery.data.items.forEach((item, index) => {
+    order.items.forEach((item, index) => {
       next[`${item.product_size_id}-${index}`] = false;
     });
     setChecked(next);
-  }, [orderQuery.data?.id]);
+  }, [orderQuery.data]);
 
   const startMutation = useMutation({
     mutationFn: () => courierApi.startDelivery(orderId),
