@@ -26,6 +26,7 @@ const formatPrice = (value: number) => `${value.toLocaleString("ru-RU")} ₽`;
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString("ru-RU", {
+    timeZone: "Asia/Yekaterinburg",
     day: "numeric",
     month: "long",
     hour: "2-digit",

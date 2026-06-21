@@ -1,6 +1,8 @@
 import { resolveAssetUrl } from "@/src/api/client";
 import { normalizePhoneValue } from "@/src/lib/phone";
 
+const BUSINESS_TIME_ZONE = "Asia/Yekaterinburg";
+
 export function formatPrice(value: number) {
   return `${new Intl.NumberFormat("ru-RU").format(value)} ₽`;
 }
@@ -9,6 +11,7 @@ export function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: BUSINESS_TIME_ZONE,
     day: "numeric",
     month: "long",
     hour: "2-digit",
@@ -20,6 +23,7 @@ export function formatShortDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: BUSINESS_TIME_ZONE,
     day: "numeric",
     month: "short",
   }).format(date);

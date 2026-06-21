@@ -35,7 +35,7 @@ function resolveApiBase() {
     return `${window.location.protocol}//${window.location.hostname}:8000`;
   }
 
-  return "";
+  return "/api";
 }
 
 export const API_BASE = resolveApiBase();

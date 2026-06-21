@@ -1,5 +1,32 @@
 import type { AdminOrder } from "../../types";
 
+export const BUSINESS_TIME_ZONE = "Asia/Yekaterinburg";
+
+const businessDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: BUSINESS_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  hourCycle: "h23",
+});
+
+const getBusinessDateParts = (date: Date) => {
+  const parts = Object.fromEntries(
+    businessDateFormatter
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: Number(parts.hour),
+  };
+};
+
 export const terminalStatuses = new Set([
   "done",
   "delivered",
@@ -23,15 +50,40 @@ const statusLabels: Record<string, string> = {
 
 export const isTerminalStatus = (status: string) => terminalStatuses.has(status.toLowerCase());
 
-export const isSameDay = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
+export const dayKey = (date: Date) => {
+  const { year, month, day } = getBusinessDateParts(date);
+  return `${year}-${month}-${day}`;
+};
 
-export const dayKey = (date: Date) => date.toISOString().slice(0, 10);
+export const isSameDay = (a: Date, b: Date) => dayKey(a) === dayKey(b);
+
+export const businessHour = (date: Date) => getBusinessDateParts(date).hour;
+
+export const businessWeekday = (date: Date) =>
+  new Date(`${dayKey(date)}T00:00:00Z`).getUTCDay();
+
+export const shiftBusinessDayKey = (key: string, days: number) => {
+  const date = new Date(`${key}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
+export const formatBusinessDayKey = (key: string) =>
+  new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "UTC",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(new Date(`${key}T00:00:00Z`));
+
+export const startOfBusinessDay = (date = new Date()) =>
+  new Date(`${dayKey(date)}T00:00:00+05:00`);
 
 export const formatTime = (value: string) =>
-  new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  new Date(value).toLocaleTimeString([], {
+    timeZone: BUSINESS_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 export const getEffectiveDeliveryKind = (
   order: Pick<AdminOrder, "delivery_method" | "customer_address">

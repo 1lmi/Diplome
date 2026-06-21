@@ -154,7 +154,12 @@ export default function OrdersScreen() {
   }
 
   return (
-    <Screen>
+    <Screen
+      refreshing={ordersQuery.isRefetching}
+      onRefresh={() => {
+        void ordersQuery.refetch();
+      }}
+    >
       <PageHeader subtitle="Ваши актуальные и завершённые заказы" title="Заказы" />
 
       {ordersQuery.isLoading ? (

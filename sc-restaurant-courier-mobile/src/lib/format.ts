@@ -1,8 +1,11 @@
 export const formatPrice = (value: number) => `${value.toLocaleString('ru-RU')} ₽`;
 
+const BUSINESS_TIME_ZONE = 'Asia/Yekaterinburg';
+
 export const formatDateTime = (value?: string | null) => {
   if (!value) return '—';
   return new Date(value).toLocaleString('ru-RU', {
+    timeZone: BUSINESS_TIME_ZONE,
     day: 'numeric',
     month: 'short',
     hour: '2-digit',

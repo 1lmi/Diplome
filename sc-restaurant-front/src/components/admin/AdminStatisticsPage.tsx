@@ -15,7 +15,16 @@ import {
   YAxis,
 } from "recharts";
 import type { AdminOrder, StatusOption } from "../../types";
-import { dayKey, isSameDay, terminalStatuses } from "./utils";
+import {
+  businessHour,
+  businessWeekday,
+  dayKey,
+  formatBusinessDayKey,
+  isSameDay,
+  shiftBusinessDayKey,
+  startOfBusinessDay,
+  terminalStatuses,
+} from "./utils";
 
 interface Props {
   orders: AdminOrder[];
@@ -77,6 +86,9 @@ const weekDayLabel = (index: number) => {
   return labels[index] ?? "—";
 };
 
+const completeStatuses = new Set(["done", "delivered", "completed", "finished"]);
+const cancelStatuses = new Set(["cancelled", "canceled"]);
+
 const AdminStatisticsPage: React.FC<Props> = ({ orders, statuses, onRefresh }) => {
   const [popularRange, setPopularRange] = useState<"day" | "week" | "all">("week");
 
@@ -119,7 +131,7 @@ const AdminStatisticsPage: React.FC<Props> = ({ orders, statuses, onRefresh }) =
     }));
 
     todayOrders.forEach((order) => {
-      const hour = new Date(order.created_at).getHours();
+      const hour = businessHour(new Date(order.created_at));
       buckets[hour].value += 1;
       buckets[hour].revenue += order.total_price;
     });
@@ -128,7 +140,7 @@ const AdminStatisticsPage: React.FC<Props> = ({ orders, statuses, onRefresh }) =
   }, [todayOrders]);
 
   const last14Days = useMemo(() => {
-    const now = new Date();
+    const todayKey = dayKey(new Date());
     const map: Record<string, { revenue: number; orders: number }> = {};
 
     orders.forEach((order) => {
@@ -140,10 +152,8 @@ const AdminStatisticsPage: React.FC<Props> = ({ orders, statuses, onRefresh }) =
 
     const result: { label: string; revenue: number; orders: number }[] = [];
     for (let offset = 13; offset >= 0; offset -= 1) {
-      const day = new Date(now);
-      day.setDate(now.getDate() - offset);
-      const key = dayKey(day);
-      const label = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(day);
+      const key = shiftBusinessDayKey(todayKey, -offset);
+      const label = formatBusinessDayKey(key);
       result.push({
         label,
         revenue: map[key]?.revenue ?? 0,
@@ -162,7 +172,7 @@ const AdminStatisticsPage: React.FC<Props> = ({ orders, statuses, onRefresh }) =
     }));
 
     orders.forEach((order) => {
-      const day = new Date(order.created_at).getDay();
+      const day = businessWeekday(new Date(order.created_at));
       buckets[day].orders += 1;
       buckets[day].revenue += order.total_price;
     });
@@ -186,11 +196,10 @@ const AdminStatisticsPage: React.FC<Props> = ({ orders, statuses, onRefresh }) =
   }, [orders, statuses]);
 
   const popularItems = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = startOfBusinessDay();
 
     const weekStart = new Date(todayStart);
-    weekStart.setDate(todayStart.getDate() - 6);
+    weekStart.setUTCDate(todayStart.getUTCDate() - 6);
 
     const dayMap = new Map<string, number>();
     const weekMap = new Map<string, number>();
@@ -228,9 +237,6 @@ const AdminStatisticsPage: React.FC<Props> = ({ orders, statuses, onRefresh }) =
   }, [orders]);
 
   const popularList = popularItems[popularRange];
-
-  const completeStatuses = new Set(["done", "delivered", "completed", "finished"]);
-  const cancelStatuses = new Set(["cancelled", "canceled"]);
 
   const completedCount = useMemo(
     () => orders.filter((order) => completeStatuses.has(order.status.toLowerCase())).length,

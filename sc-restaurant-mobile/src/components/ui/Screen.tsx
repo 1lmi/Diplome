@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import React from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors, spacing } from "@/src/theme/tokens";
@@ -10,19 +17,34 @@ export function Screen({
   scroll = true,
   padded = true,
   keyboard = false,
+  refreshing = false,
+  onRefresh,
 }: {
   children: ReactNode;
   scroll?: boolean;
   padded?: boolean;
   keyboard?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }) {
+  const refreshControl = onRefresh ? (
+    <RefreshControl
+      colors={[colors.accent]}
+      progressBackgroundColor={colors.surface}
+      refreshing={refreshing}
+      tintColor={colors.accent}
+      onRefresh={onRefresh}
+    />
+  ) : undefined;
+
   const content = scroll ? (
     <ScrollView
-      alwaysBounceVertical={false}
-      bounces={false}
+      alwaysBounceVertical={Boolean(onRefresh)}
+      bounces={Boolean(onRefresh)}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={[styles.content, padded ? styles.padded : null]}
-      overScrollMode="never"
+      overScrollMode={onRefresh ? "always" : "never"}
+      refreshControl={refreshControl}
       showsVerticalScrollIndicator={false}
     >
       {children}

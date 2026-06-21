@@ -40,7 +40,12 @@ export default function ProfileOrdersScreen() {
   }
 
   return (
-    <Screen>
+    <Screen
+      refreshing={ordersQuery.isRefetching}
+      onRefresh={() => {
+        void ordersQuery.refetch();
+      }}
+    >
       <PageHeader showBack subtitle="Актуальные и завершённые заказы" title="Все заказы" />
 
       {ordersQuery.isLoading ? (

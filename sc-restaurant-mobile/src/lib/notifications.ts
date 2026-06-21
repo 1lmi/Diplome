@@ -9,10 +9,10 @@ const LEGACY_PUSH_TOKEN_KEYS = ["meatpoint-mobile-push-token"];
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: false,
-    shouldShowList: false,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { api } from "../../api";
 import type { IntegrationJob, IntegrationJobError } from "../../types";
 import { useToast } from "../../ui/ToastProvider";
+import { BUSINESS_TIME_ZONE } from "./utils";
 
 interface Props {
   jobs: IntegrationJob[];
@@ -419,7 +420,7 @@ const AdminImportsExportsPage: React.FC<Props> = ({ jobs, onRefresh }) => {
                       <span className={`ie-badge ie-badge--${getStatusTone(job.status)}`}>{getLabel(job.status)}</span>
                     </div>
                     <div className="ie-history__meta">
-                      {getLabel(job.format)} · {job.profile} · {new Date(job.created_at).toLocaleString("ru-RU")}
+                      {getLabel(job.format)} · {job.profile} · {new Date(job.created_at).toLocaleString("ru-RU", { timeZone: BUSINESS_TIME_ZONE })}
                     </div>
                     {job.source_filename ? <div className="ie-history__meta">{job.source_filename}</div> : null}
                     {!!summaryEntries(job.summary).length && (

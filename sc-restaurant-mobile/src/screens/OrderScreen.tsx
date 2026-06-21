@@ -1,9 +1,11 @@
+import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
+import type { Order, SettingsMap } from "@/src/api/types";
 import { mobileApi } from "@/src/api/mobile-api";
 import { EmptyState } from "@/src/components/ui/EmptyState";
 import { OrderProgress } from "@/src/components/ui/OrderProgress";
@@ -20,6 +22,70 @@ import {
 import { useAuthStore } from "@/src/store/auth-store";
 import { useTrackingStore } from "@/src/store/tracking-store";
 import { colors, radii, spacing, typography } from "@/src/theme/tokens";
+
+function normalizeOrderStatus(status?: string | null) {
+  return (status || "").trim().toLowerCase();
+}
+
+function getNextStep(order: Order) {
+  const status = normalizeOrderStatus(order.status);
+  const pickup = order.delivery_method === "pickup";
+
+  if (status === "canceled" || status === "cancelled") {
+    return {
+      title: "Заказ отменён",
+      text: "Если это неожиданно, лучше связаться с рестораном и уточнить детали.",
+    };
+  }
+
+  if (status === "done" || status === "completed" || status === "finished") {
+    return {
+      title: "Заказ завершён",
+      text: pickup ? "Заказ выдан. История останется в профиле." : "Доставка завершена. История останется в профиле.",
+    };
+  }
+
+  if (status === "cooking") {
+    return {
+      title: "Кухня готовит заказ",
+      text: pickup
+        ? "Когда всё будет готово, статус сменится на «Готов». "
+        : "Когда заказ соберут, его передадут курьеру.",
+    };
+  }
+
+  if (status === "ready") {
+    return {
+      title: pickup ? "Можно забирать" : "Заказ готов",
+      text: pickup
+        ? "Покажите номер заказа сотруднику при получении."
+        : "Заказ ждёт передачи курьеру.",
+    };
+  }
+
+  if (status === "on_way") {
+    return {
+      title: "Курьер в пути",
+      text: "Держите телефон рядом, если ресторану или курьеру понадобится уточнение.",
+    };
+  }
+
+  return {
+    title: "Заказ принят",
+    text: pickup
+      ? "Ресторан скоро начнёт готовить заказ к выдаче."
+      : "Ресторан скоро начнёт готовить заказ к доставке.",
+  };
+}
+
+function getContactPhone(settings?: SettingsMap | null) {
+  return settings?.contact_phone?.trim() || "";
+}
+
+function buildTelUrl(phone: string) {
+  const normalized = phone.replace(/[^\d+]/g, "");
+  return normalized ? `tel:${normalized}` : "";
+}
 
 function SectionBadge({
   label,
@@ -87,8 +153,18 @@ export default function OrderScreen() {
     refetchOnMount: true,
     refetchOnReconnect: true,
   });
+  const settingsQuery = useQuery({
+    queryKey: ["settings"],
+    queryFn: mobileApi.getSettings,
+    staleTime: 5 * 60_000,
+  });
 
   const order = orderQuery.data;
+  const orderRefreshing = orderQuery.isRefetching || settingsQuery.isRefetching;
+
+  const refreshOrder = async () => {
+    await Promise.all([orderQuery.refetch(), settingsQuery.refetch()]);
+  };
 
   const progress = useMemo(
     () => (order ? buildOrderProgress(order) : []),
@@ -107,7 +183,12 @@ export default function OrderScreen() {
 
   if (orderQuery.isLoading) {
     return (
-      <Screen>
+      <Screen
+        refreshing={orderRefreshing}
+        onRefresh={() => {
+          void refreshOrder();
+        }}
+      >
         <PageHeader
           showBack
           subtitle="Подгружаем детали заказа"
@@ -124,7 +205,12 @@ export default function OrderScreen() {
 
   if (!order) {
     return (
-      <Screen>
+      <Screen
+        refreshing={orderRefreshing}
+        onRefresh={() => {
+          void refreshOrder();
+        }}
+      >
         <PageHeader
           showBack
           subtitle="Заказ недоступен"
@@ -146,9 +232,17 @@ export default function OrderScreen() {
     activeHistory?.comment ||
     order.comment ||
     "Мы обновим этот экран, как только статус изменится.";
+  const nextStep = getNextStep(order);
+  const contactPhone = getContactPhone(settingsQuery.data);
+  const contactPhoneUrl = buildTelUrl(contactPhone);
 
   return (
-    <Screen>
+    <Screen
+      refreshing={orderRefreshing}
+      onRefresh={() => {
+        void refreshOrder();
+      }}
+    >
       <PageHeader
         showBack
         subtitle={formatDateTime(order.created_at)}
@@ -191,6 +285,37 @@ export default function OrderScreen() {
           <View style={styles.statusCard}>
             <Text style={styles.statusTitle}>{activeHistory?.status_name || order.status_name}</Text>
             <Text style={styles.statusText}>{activeStatusText}</Text>
+          </View>
+          <View style={styles.nextStepCard}>
+            <View style={styles.nextStepIcon}>
+              <Feather color={colors.accent} name="activity" size={17} />
+            </View>
+            <View style={styles.nextStepCopy}>
+              <Text style={styles.nextStepTitle}>{nextStep.title}</Text>
+              <Text style={styles.nextStepText}>{nextStep.text}</Text>
+            </View>
+          </View>
+          <View style={styles.orderActions}>
+            <Pressable
+              onPress={() => {
+                void refreshOrder();
+              }}
+              style={({ pressed }) => [styles.actionButton, pressed ? styles.actionButtonPressed : null]}
+            >
+              <Feather color={colors.text} name="refresh-cw" size={15} />
+              <Text style={styles.actionButtonText}>Обновить</Text>
+            </Pressable>
+            {contactPhoneUrl ? (
+              <Pressable
+                onPress={() => {
+                  void Linking.openURL(contactPhoneUrl);
+                }}
+                style={({ pressed }) => [styles.actionButton, pressed ? styles.actionButtonPressed : null]}
+              >
+                <Feather color={colors.text} name="phone" size={15} />
+                <Text style={styles.actionButtonText}>Позвонить</Text>
+              </Pressable>
+            ) : null}
           </View>
         </SurfacePanel>
       </View>
@@ -247,7 +372,12 @@ export default function OrderScreen() {
               <DetailCard label="Адрес" value={order.customer_address || "—"} />
             ) : null}
             <DetailCard label="Оплата" value={paymentLabel} />
+            {order.cash_change_from ? (
+              <DetailCard label="Сдача с" value={formatPrice(order.cash_change_from)} />
+            ) : null}
+            {order.do_not_call ? <DetailCard label="Связь" value="Не звонить" /> : null}
             {order.delivery_time ? <DetailCard label="Когда" value={order.delivery_time} /> : null}
+            {order.comment ? <DetailCard label="Комментарий" value={order.comment} /> : null}
           </View>
         </SurfacePanel>
       </View>
@@ -348,6 +478,63 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: typography.bodySm,
     lineHeight: 20,
+  },
+  nextStepCard: {
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: "rgba(230, 122, 46, 0.22)",
+    padding: spacing.md,
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  nextStepIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  nextStepCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  nextStepTitle: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.semibold,
+  },
+  nextStepText: {
+    color: colors.muted,
+    fontSize: typography.caption,
+    lineHeight: 18,
+  },
+  orderActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  actionButton: {
+    minHeight: 38,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  actionButtonPressed: {
+    opacity: 0.9,
+  },
+  actionButtonText: {
+    color: colors.text,
+    fontSize: typography.bodySm,
+    fontWeight: typography.medium,
   },
   itemsStack: {
     borderRadius: radii.lg,

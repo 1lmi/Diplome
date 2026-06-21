@@ -24,7 +24,7 @@ export function SurfacePanel({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     padding: spacing.lg,
     gap: spacing.md,
     borderWidth: 1,

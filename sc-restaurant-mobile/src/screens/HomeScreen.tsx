@@ -1,11 +1,12 @@
-﻿import { Feather } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,13 +30,6 @@ import { useToast } from "@/src/providers/ToastProvider";
 import { useAuthStore } from "@/src/store/auth-store";
 import { getCartCount, getCartTotal, useCartStore } from "@/src/store/cart-store";
 import { colors, motion, radii, shadows, spacing, typography } from "@/src/theme/tokens";
-
-interface MenuSection {
-  key: string;
-  categoryId: string;
-  title: string;
-  products: ProductDisplay[];
-}
 
 function chunkProducts(products: ProductDisplay[], chunkSize = 2) {
   const rows: ProductDisplay[][] = [];
@@ -145,6 +139,16 @@ export default function HomeScreen() {
       : menuQuery.error instanceof Error
         ? menuQuery.error.message
         : null;
+  const catalogRefreshing =
+    categoriesQuery.isRefetching || menuQuery.isRefetching || addressesQuery.isRefetching;
+
+  const refreshCatalog = async () => {
+    const refreshes: Promise<unknown>[] = [categoriesQuery.refetch(), menuQuery.refetch()];
+    if (user) {
+      refreshes.push(addressesQuery.refetch());
+    }
+    await Promise.all(refreshes);
+  };
 
   const registerSectionOffset =
     (categoryId: string) =>
@@ -211,16 +215,16 @@ export default function HomeScreen() {
     }, attempt === 0 ? 520 : 140);
   };
 
-  const scrollCategoryIntoView = (categoryId: string, animated = false) => {
+  const scrollCategoryIntoView = useCallback((categoryId: string, animated = false) => {
     const chip = chipOffsets.current[categoryId];
     const viewportWidth = chipsViewportWidth.current;
     if (!chip || !viewportWidth) return;
 
     const targetX = Math.max(chip.x + chip.width / 2 - viewportWidth / 2, 0);
     chipsRef.current?.scrollTo({ x: targetX, animated });
-  };
+  }, []);
 
-  const moveCategoryIndicator = (categoryId: string, animated = true) => {
+  const moveCategoryIndicator = useCallback((categoryId: string, animated = true) => {
     const chip = chipOffsets.current[categoryId];
     if (!chip) return;
 
@@ -249,7 +253,7 @@ export default function HomeScreen() {
         useNativeDriver: false,
       }),
     ]).start();
-  };
+  }, [categoryIndicatorOpacity, categoryIndicatorWidth, categoryIndicatorX]);
 
   const jumpToSection = (categoryId: string) => {
     const offset = sectionOffsets.current[categoryId];
@@ -329,7 +333,7 @@ export default function HomeScreen() {
     if (!selectedCategory) return;
     moveCategoryIndicator(selectedCategory);
     scrollCategoryIntoView(selectedCategory, true);
-  }, [selectedCategory]);
+  }, [moveCategoryIndicator, scrollCategoryIntoView, selectedCategory]);
 
   const openPicker = () => {
     setTempMethod(deliveryMethod);
@@ -599,15 +603,29 @@ export default function HomeScreen() {
           <ScrollView
             ref={scrollRef}
             style={styles.catalogScroll}
-          contentContainerStyle={[
-            styles.listContent,
-            cartCount > 0 ? styles.listContentWithCart : null,
-          ]}
-          onScrollBeginDrag={() => {
-            clearPendingCategoryJump();
-          }}
-          keyboardShouldPersistTaps="handled"
-          onScroll={handleScroll}
+            alwaysBounceVertical
+            bounces
+            contentContainerStyle={[
+              styles.listContent,
+              cartCount > 0 ? styles.listContentWithCart : null,
+            ]}
+            keyboardShouldPersistTaps="handled"
+            onScroll={handleScroll}
+            onScrollBeginDrag={() => {
+              clearPendingCategoryJump();
+            }}
+            overScrollMode="always"
+            refreshControl={
+              <RefreshControl
+                colors={[colors.accent]}
+                progressBackgroundColor={colors.surface}
+                refreshing={catalogRefreshing}
+                tintColor={colors.accent}
+                onRefresh={() => {
+                  void refreshCatalog();
+                }}
+              />
+            }
             removeClippedSubviews={false}
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
@@ -1154,4 +1172,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-

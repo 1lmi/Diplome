@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 import type { AdminCourier } from "../../types";
+import { BUSINESS_TIME_ZONE } from "./utils";
 
 interface Props {
   couriers: AdminCourier[];
@@ -39,6 +40,7 @@ type DraftMap = Record<
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
   return new Date(value).toLocaleString("ru-RU", {
+    timeZone: BUSINESS_TIME_ZONE,
     day: "numeric",
     month: "short",
     hour: "2-digit",

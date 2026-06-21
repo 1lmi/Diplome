@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { AdminOrder, StatusOption } from "../../types";
 import {
+  BUSINESS_TIME_ZONE,
   canCancel,
   formatTime,
   getCurrentLane,
@@ -48,6 +49,7 @@ const formatOrderAge = (value: string) => {
     return `${Math.floor(diffMinutes / 60)} ч назад`;
   }
   return `${new Date(value).toLocaleDateString("ru-RU", {
+    timeZone: BUSINESS_TIME_ZONE,
     day: "numeric",
     month: "short",
   })} · ${formatTime(value)}`;
@@ -63,6 +65,7 @@ const formatReadyAge = (value?: string | null) => {
 
 const formatFullDateTime = (value: string) =>
   new Date(value).toLocaleString("ru-RU", {
+    timeZone: BUSINESS_TIME_ZONE,
     day: "numeric",
     month: "long",
     hour: "2-digit",
@@ -110,7 +113,6 @@ const AdminOrdersPage: React.FC<Props> = ({
   const [pendingAction, setPendingAction] = useState<PendingOrderAction>(null);
   const [submittingOrderId, setSubmittingOrderId] = useState<number | null>(null);
 
-  const now = new Date();
   const isHistoryView = mode === "history";
 
   const availableStatuses = useMemo(() => {
@@ -121,6 +123,7 @@ const AdminOrdersPage: React.FC<Props> = ({
   }, [statuses]);
 
   const filteredOrders = useMemo(() => {
+    const now = new Date();
     return orders
       .filter((order) => {
         const isTerminal = isTerminalStatus(order.status);
@@ -140,7 +143,7 @@ const AdminOrdersPage: React.FC<Props> = ({
         const timeB = new Date(b.created_at).getTime();
         return isHistoryView ? timeB - timeA : timeA - timeB;
       });
-  }, [orders, isHistoryView, statusFilter, onlyToday, query, now]);
+  }, [orders, isHistoryView, statusFilter, onlyToday, query]);
 
   const groupedCurrentOrders = useMemo(() => {
     const lanes: Record<CurrentOrderLane, AdminOrder[]> = {

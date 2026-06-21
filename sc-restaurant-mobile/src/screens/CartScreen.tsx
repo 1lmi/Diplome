@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import React, { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { EmptyState } from "@/src/components/ui/EmptyState";
 import { MeatButton } from "@/src/components/ui/MeatButton";
@@ -33,7 +33,12 @@ export default function CartScreen() {
 
   if (!items.length) {
     return (
-      <Screen>
+      <Screen
+        refreshing={menuQuery.isRefetching}
+        onRefresh={() => {
+          void menuQuery.refetch();
+        }}
+      >
         <PageHeader showBack subtitle="Добавьте пару позиций из меню" title="Корзина" />
         <EmptyState
           description="Когда выберете блюда из меню, они появятся здесь вместе с суммой заказа."
@@ -59,10 +64,21 @@ export default function CartScreen() {
         </View>
 
         <ScrollView
-          alwaysBounceVertical={false}
-          bounces={false}
+          alwaysBounceVertical
+          bounces
           contentContainerStyle={styles.content}
-          overScrollMode="never"
+          overScrollMode="always"
+          refreshControl={
+            <RefreshControl
+              colors={[colors.accent]}
+              progressBackgroundColor={colors.surface}
+              refreshing={menuQuery.isRefetching}
+              tintColor={colors.accent}
+              onRefresh={() => {
+                void menuQuery.refetch();
+              }}
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.sectionWrap}>

@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Modal,
@@ -35,7 +35,7 @@ function SizeSlider({
   value,
   onChange,
 }: {
-  options: Array<{ label: string; value: string }>;
+  options: { label: string; value: string }[];
   value: string;
   onChange(value: string): void;
 }) {
@@ -45,7 +45,7 @@ function SizeSlider({
   const measurements = useRef<Record<string, { x: number; width: number }>>({});
   const ready = useRef(false);
 
-  const moveThumb = (nextValue: string, animated = true) => {
+  const moveThumb = useCallback((nextValue: string, animated = true) => {
     const next = measurements.current[nextValue];
     if (!next) return;
 
@@ -74,7 +74,7 @@ function SizeSlider({
         useNativeDriver: false,
       }),
     ]).start();
-  };
+  }, [thumbOpacity, thumbWidth, thumbX]);
 
   const handleLayout =
     (optionValue: string) =>
@@ -91,7 +91,7 @@ function SizeSlider({
 
   useEffect(() => {
     moveThumb(value);
-  }, [value]);
+  }, [moveThumb, value]);
 
   return (
     <View style={styles.sizeSlider}>

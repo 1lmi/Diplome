@@ -11,12 +11,13 @@ import re
 import secrets
 import sqlite3
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from xml.etree import ElementTree as ET
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,6 +34,8 @@ TOKEN_TTL_DAYS = 30
 DEFAULT_IMAGE_NAME = "default.png"
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 DEFAULT_SOURCE_SYSTEM = "sc-restaurant"
+BUSINESS_TIME_ZONE = ZoneInfo("Asia/Yekaterinburg")
+SQLITE_BUSINESS_TIME_MODIFIER = "+5 hours"
 
 mimetypes.add_type("image/avif", ".avif")
 
@@ -79,6 +82,15 @@ def build_image_url(image_path: str, request: Optional[Request] = None) -> str:
         return f"/static/{filename}"
     base = str(request.base_url).rstrip("/")
     return f"{base}/static/{filename}"
+
+
+def parse_database_datetime(value: str) -> datetime:
+    """Return UTC timestamps from SQLite as timezone-aware business time."""
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(BUSINESS_TIME_ZONE)
 
 
 ADMIN_PHONE = "+79374702232"
@@ -1258,8 +1270,8 @@ def serialize_courier_profile(row: sqlite3.Row) -> CourierProfileOut:
         phone=normalize_optional_text(row["phone"]),
         is_active=bool(row["is_active"]),
         notes=normalize_optional_text(row["notes"]),
-        created_at=datetime.fromisoformat(row["created_at"]),
-        updated_at=datetime.fromisoformat(row["updated_at"]),
+        created_at=parse_database_datetime(row["created_at"]),
+        updated_at=parse_database_datetime(row["updated_at"]),
     )
 
 
@@ -1293,7 +1305,7 @@ def serialize_user_address(row: sqlite3.Row) -> UserAddressOut:
         label=normalize_optional_text(row["label"]),
         address=(row["address"] or "").strip(),
         is_default=bool(row["is_default"]),
-        created_at=datetime.fromisoformat(row["created_at"]),
+        created_at=parse_database_datetime(row["created_at"]),
     )
 
 
@@ -1741,7 +1753,7 @@ def fetch_order(
                 OrderHistoryItem(
                     status=h["code"],
                     status_name=h["name"],
-                    changed_at=datetime.fromisoformat(h["changed_at"]),
+                    changed_at=parse_database_datetime(h["changed_at"]),
                     comment=h["comment"],
                 )
             )
@@ -1750,7 +1762,7 @@ def fetch_order(
         id=row["id"],
         status=row["status"],
         status_name=row["status_name"],
-        created_at=datetime.fromisoformat(row["created_at"]),
+        created_at=parse_database_datetime(row["created_at"]),
         comment=row["comment"],
         total_price=row["total_price"],
         customer_name=row["customer_name"],
@@ -1764,12 +1776,12 @@ def fetch_order(
         courier_id=row["courier_id"],
         courier_name=row["courier_name"],
         courier_phone=row["courier_phone"],
-        ready_at=datetime.fromisoformat(row["ready_at"]) if row["ready_at"] else None,
-        claimed_at=datetime.fromisoformat(row["claimed_at"]) if row["claimed_at"] else None,
-        started_delivery_at=datetime.fromisoformat(row["started_delivery_at"])
+        ready_at=parse_database_datetime(row["ready_at"]) if row["ready_at"] else None,
+        claimed_at=parse_database_datetime(row["claimed_at"]) if row["claimed_at"] else None,
+        started_delivery_at=parse_database_datetime(row["started_delivery_at"])
         if row["started_delivery_at"]
         else None,
-        delivered_at=datetime.fromisoformat(row["delivered_at"]) if row["delivered_at"] else None,
+        delivered_at=parse_database_datetime(row["delivered_at"]) if row["delivered_at"] else None,
         items=items,
         history=history,
     )
@@ -1899,9 +1911,9 @@ def serialize_integration_job_row(
         profile=row["profile"],
         status=row["status"],
         requested_by=row["requested_by"],
-        created_at=datetime.fromisoformat(row["created_at"]),
-        started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
-        finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+        created_at=parse_database_datetime(row["created_at"]),
+        started_at=parse_database_datetime(row["started_at"]) if row["started_at"] else None,
+        finished_at=parse_database_datetime(row["finished_at"]) if row["finished_at"] else None,
         source_filename=row["source_filename"],
         artifact_filename=row["artifact_filename"],
         error_report_filename=row["error_report_filename"],
@@ -4033,8 +4045,8 @@ def serialize_admin_courier(row: sqlite3.Row) -> AdminCourierOut:
         phone=normalize_optional_text(row["phone"]),
         is_active=bool(row["is_active"]),
         notes=normalize_optional_text(row["notes"]),
-        created_at=datetime.fromisoformat(row["created_at"]),
-        updated_at=datetime.fromisoformat(row["updated_at"]),
+        created_at=parse_database_datetime(row["created_at"]),
+        updated_at=parse_database_datetime(row["updated_at"]),
         active_order_id=row["active_order_id"],
         active_order_status=row["active_order_status"],
         active_order_status_name=row["active_order_status_name"],
@@ -4318,14 +4330,14 @@ def courier_stats(
     db: sqlite3.Connection = Depends(get_db),
     current_user: sqlite3.Row = Depends(require_courier),
 ):
-    today = datetime.now().date()
+    today = datetime.now(BUSINESS_TIME_ZONE).date()
     start_day = today - timedelta(days=6)
     completed_statuses = ("done", "delivered", "completed", "finished")
     placeholders = ",".join(["?"] * len(completed_statuses))
 
     daily_rows = db.execute(
         f"""
-        SELECT DATE(o.delivered_at) AS delivered_day,
+        SELECT DATE(o.delivered_at, ?) AS delivered_day,
                COUNT(o.id) AS delivered_count,
                COALESCE(SUM(o.total_price), 0) AS total_amount
         FROM orders o
@@ -4333,10 +4345,18 @@ def courier_stats(
         WHERE o.courier_id = ?
           AND os.code IN ({placeholders})
           AND o.delivered_at IS NOT NULL
-          AND DATE(o.delivered_at) BETWEEN ? AND ?
-        GROUP BY DATE(o.delivered_at)
+          AND DATE(o.delivered_at, ?) BETWEEN ? AND ?
+        GROUP BY DATE(o.delivered_at, ?)
         """,
-        (current_user["id"], *completed_statuses, start_day.isoformat(), today.isoformat()),
+        (
+            SQLITE_BUSINESS_TIME_MODIFIER,
+            current_user["id"],
+            *completed_statuses,
+            SQLITE_BUSINESS_TIME_MODIFIER,
+            start_day.isoformat(),
+            today.isoformat(),
+            SQLITE_BUSINESS_TIME_MODIFIER,
+        ),
     ).fetchall()
 
     by_day = {
@@ -4372,9 +4392,15 @@ def courier_stats(
           AND o.started_delivery_at IS NOT NULL
           AND o.delivered_at IS NOT NULL
           AND julianday(o.delivered_at) >= julianday(o.started_delivery_at)
-          AND DATE(o.delivered_at) BETWEEN ? AND ?
+          AND DATE(o.delivered_at, ?) BETWEEN ? AND ?
         """,
-        (current_user["id"], *completed_statuses, start_day.isoformat(), today.isoformat()),
+        (
+            current_user["id"],
+            *completed_statuses,
+            SQLITE_BUSINESS_TIME_MODIFIER,
+            start_day.isoformat(),
+            today.isoformat(),
+        ),
     ).fetchone()
     avg_minutes = avg_row["avg_minutes"] if avg_row else None
 
@@ -5055,7 +5081,7 @@ def list_integration_job_errors(
             error_code=row["error_code"],
             message=row["message"],
             payload=json.loads(row["payload_json"]) if row["payload_json"] else None,
-            created_at=datetime.fromisoformat(row["created_at"]),
+            created_at=parse_database_datetime(row["created_at"]),
         )
         for row in rows
     ]

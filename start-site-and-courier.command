@@ -3,11 +3,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FRONTEND_DIR="$ROOT_DIR/sc-restaurant-front"
+CLIENT_DIR="$ROOT_DIR/sc-restaurant-mobile"
 COURIER_DIR="$ROOT_DIR/sc-restaurant-courier-mobile"
 VENV_DIR="$ROOT_DIR/.venv"
 PYTHON_EXE="$VENV_DIR/bin/python3"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+CLIENT_EXPO_PORT="${CLIENT_EXPO_PORT:-8081}"
+COURIER_EXPO_PORT="${COURIER_EXPO_PORT:-8082}"
+CLIENT_API_BASE_URL="${CLIENT_API_BASE_URL:-}"
 COURIER_API_BASE_URL="${COURIER_API_BASE_URL:-}"
 
 fail() {
@@ -94,21 +98,37 @@ require_cmd osascript
 ensure_python_venv
 ensure_backend_deps
 ensure_node_deps "$FRONTEND_DIR"
+ensure_node_deps "$CLIENT_DIR"
 ensure_node_deps "$COURIER_DIR"
 
-if [[ -n "$COURIER_API_BASE_URL" ]]; then
-  EFFECTIVE_COURIER_API_BASE_URL="${COURIER_API_BASE_URL%/}"
-else
+if [[ "$CLIENT_EXPO_PORT" == "$COURIER_EXPO_PORT" ]]; then
+  fail "CLIENT_EXPO_PORT and COURIER_EXPO_PORT must be different."
+fi
+
+if [[ -z "$CLIENT_API_BASE_URL" || -z "$COURIER_API_BASE_URL" ]]; then
   LAN_IP="$(detect_lan_ip)"
   if [[ -z "$LAN_IP" ]]; then
     LAN_IP="127.0.0.1"
   fi
-  EFFECTIVE_COURIER_API_BASE_URL="http://$LAN_IP:$BACKEND_PORT"
+  DEFAULT_LOCAL_API_BASE_URL="http://$LAN_IP:$BACKEND_PORT"
+fi
+
+if [[ -n "$CLIENT_API_BASE_URL" ]]; then
+  EFFECTIVE_CLIENT_API_BASE_URL="${CLIENT_API_BASE_URL%/}"
+else
+  EFFECTIVE_CLIENT_API_BASE_URL="$DEFAULT_LOCAL_API_BASE_URL"
+fi
+
+if [[ -n "$COURIER_API_BASE_URL" ]]; then
+  EFFECTIVE_COURIER_API_BASE_URL="${COURIER_API_BASE_URL%/}"
+else
+  EFFECTIVE_COURIER_API_BASE_URL="$DEFAULT_LOCAL_API_BASE_URL"
 fi
 
 BACKEND_COMMAND="cd $(printf '%q' "$ROOT_DIR") && PYTHONPYCACHEPREFIX=/tmp/pycache $(printf '%q' "$PYTHON_EXE") -m uvicorn main:app --reload --host 0.0.0.0 --port $BACKEND_PORT"
 FRONTEND_COMMAND="cd $(printf '%q' "$FRONTEND_DIR") && npm run dev -- --host 0.0.0.0 --port $FRONTEND_PORT"
-COURIER_COMMAND="cd $(printf '%q' "$COURIER_DIR") && EXPO_PUBLIC_API_BASE_URL=$(printf '%q' "$EFFECTIVE_COURIER_API_BASE_URL") npm run start:lan"
+CLIENT_COMMAND="cd $(printf '%q' "$CLIENT_DIR") && EXPO_PUBLIC_API_BASE_URL=$(printf '%q' "$EFFECTIVE_CLIENT_API_BASE_URL") npm run start:lan -- --port $CLIENT_EXPO_PORT"
+COURIER_COMMAND="cd $(printf '%q' "$COURIER_DIR") && EXPO_PUBLIC_API_BASE_URL=$(printf '%q' "$EFFECTIVE_COURIER_API_BASE_URL") npm run start:lan -- --port $COURIER_EXPO_PORT"
 
 echo "Starting backend in a new Terminal window..."
 launch_terminal_window "$BACKEND_COMMAND"
@@ -120,6 +140,11 @@ launch_terminal_window "$FRONTEND_COMMAND"
 
 sleep 1
 
+echo "Starting client Expo app in a new Terminal window..."
+launch_terminal_window "$CLIENT_COMMAND"
+
+sleep 1
+
 echo "Starting courier Expo app in a new Terminal window..."
 launch_terminal_window "$COURIER_COMMAND"
 
@@ -128,13 +153,19 @@ cat <<INFO
 Launch started.
 Backend:  http://127.0.0.1:$BACKEND_PORT/docs
 Website:  http://127.0.0.1:$FRONTEND_PORT
+Client API: $EFFECTIVE_CLIENT_API_BASE_URL
 Courier API: $EFFECTIVE_COURIER_API_BASE_URL
+Client Expo: Metro port $CLIENT_EXPO_PORT
+Courier Expo: Metro port $COURIER_EXPO_PORT
 
 Notes:
-- Open the courier app in Expo Go from the Terminal window that started Expo.
-- The phone must be on the same Wi‑Fi network as this Mac.
+- Open the client and courier apps in Expo Go from their respective Terminal windows.
+- The phone must be on the same Wi-Fi network as this Mac.
 - If you want a different backend port, run:
     BACKEND_PORT=8010 ./start-site-and-courier.command
 - If LAN IP detection is wrong, run:
+    CLIENT_API_BASE_URL=http://192.168.1.50:8000 ./start-site-and-courier.command
     COURIER_API_BASE_URL=http://192.168.1.50:8000 ./start-site-and-courier.command
+- If a Metro port is already occupied, run:
+    CLIENT_EXPO_PORT=8083 COURIER_EXPO_PORT=8084 ./start-site-and-courier.command
 INFO
